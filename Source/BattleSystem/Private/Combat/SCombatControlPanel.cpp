@@ -31,7 +31,7 @@ void SCombatControlPanel::Construct(const FArguments& InArgs)
 
 	const UCombatSettings* Settings = GetDefault<UCombatSettings>();
 	const FString DefaultSetupName = Settings->DefaultSetup.ToSoftObjectPath().GetAssetName();
-	for (const FString& Name : UCombatSubsystem::GetAllSetupNames())
+	for (const FString& Name : UCombatSubsystem::GetAllSourceNames())
 	{
 		SetupOptions.Add(MakeShared<FString>(Name));
 		if (Name == DefaultSetupName || !SelectedSetup)
@@ -86,9 +86,10 @@ void SCombatControlPanel::Construct(const FArguments& InArgs)
 				+ SHorizontalBox::Slot().AutoWidth().VAlign(VAlign_Center)[ MakeLabel(INVTEXT("Setup")) ]
 				+ SHorizontalBox::Slot().FillWidth(1.f)
 				[
-					SNew(SComboBox<TSharedPtr<FString>>)
+					SAssignNew(SetupCombo, SComboBox<TSharedPtr<FString>>)
 					.OptionsSource(&SetupOptions)
 					.InitiallySelectedItem(SelectedSetup)
+					.OnComboBoxOpening_Lambda([this]() { RefreshSetupOptions(); })
 					.OnGenerateWidget_Lambda([](TSharedPtr<FString> Item)
 					{
 						return SNew(STextBlock).Text(FText::FromString(*Item));
@@ -293,12 +294,32 @@ TSharedRef<SWidget> SCombatControlPanel::MakeLabel(const FText& Label)
 FReply SCombatControlPanel::OnStartClicked()
 {
 	UCombatSubsystem* CombatSubsystem = Subsystem.Get();
-	UCombatSetup* Setup = SelectedSetup ? UCombatSubsystem::FindSetup(*SelectedSetup) : nullptr;
-	if (CombatSubsystem && Setup)
+	FCombatFightSource Source;
+	if (CombatSubsystem && SelectedSetup && UCombatSubsystem::ResolveSource(*SelectedSetup, Source))
 	{
-		CombatSubsystem->StartFight(FCString::Atoi(*SeedText.ToString()), Setup);
+		CombatSubsystem->StartFightFromSource(FCString::Atoi(*SeedText.ToString()), Source, CombatSubsystem->GetCurrentSimSettings());
 	}
 	return FReply::Handled();
+}
+
+void SCombatControlPanel::RefreshSetupOptions()
+{
+	const FString Previous = SelectedSetup ? *SelectedSetup : FString();
+	SetupOptions.Reset();
+	SelectedSetup.Reset();
+	for (const FString& Name : UCombatSubsystem::GetAllSourceNames())
+	{
+		SetupOptions.Add(MakeShared<FString>(Name));
+		if (Name == Previous || !SelectedSetup)
+		{
+			SelectedSetup = SetupOptions.Last();
+		}
+	}
+	if (SetupCombo)
+	{
+		SetupCombo->RefreshOptions();
+		SetupCombo->SetSelectedItem(SelectedSetup);
+	}
 }
 
 FReply SCombatControlPanel::OnStopClicked()
@@ -396,11 +417,11 @@ FReply SCombatControlPanel::OnPlayReplayClicked()
 FReply SCombatControlPanel::OnBatchClicked(int32 Count)
 {
 	UCombatSubsystem* CombatSubsystem = Subsystem.Get();
-	UCombatSetup* Setup = SelectedSetup ? UCombatSubsystem::FindSetup(*SelectedSetup) : nullptr;
-	if (CombatSubsystem && Setup)
+	FCombatFightSource Source;
+	if (CombatSubsystem && SelectedSetup && UCombatSubsystem::ResolveSource(*SelectedSetup, Source))
 	{
 		// Seeds start at the seed field; the screen freezes while the batch runs.
-		CombatSubsystem->RunBatch(Setup, Count, FCString::Atoi(*SeedText.ToString()), bBatchCsv, Message);
+		CombatSubsystem->RunBatch(Source, Count, FCString::Atoi(*SeedText.ToString()), bBatchCsv, Message);
 	}
 	return FReply::Handled();
 }

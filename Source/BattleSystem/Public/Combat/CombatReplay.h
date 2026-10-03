@@ -3,6 +3,7 @@
 #pragma once
 
 #include "CoreMinimal.h"
+#include "Combat/CombatLevel.h"
 #include "Combat/CombatTypes.h"
 #include "CombatReplay.generated.h"
 
@@ -44,16 +45,19 @@ struct BATTLESYSTEM_API FCombatReplay
 {
 	GENERATED_BODY()
 
-	/** 1 = no commands; 2 = with the command log and checkpoints. */
-	UPROPERTY() int32 FormatVersion = 2;
+	/** 1 = no commands; 2 = with the command log and checkpoints; 3 = can hold a level. */
+	UPROPERTY() int32 FormatVersion = 3;
 	UPROPERTY() FString SavedAt;
 	/** Engine build; a replay is only guaranteed identical on the same build. */
 	UPROPERTY() FString BuildVersion;
 	UPROPERTY() FString MapName;
 	/** CRC32 (hex) of the arena grid; a different value means the arena changed. */
 	UPROPERTY() FString GridChecksum;
-	/** Object path of the UCombatSetup. */
+	/** Object path of the UCombatSetup (fights from a setup asset). */
 	UPROPERTY() FString SetupPath;
+	/** Fights from a level: a full copy of the level, so the replay stays identical when the level file changes. */
+	UPROPERTY() bool bHasLevel = false;
+	UPROPERTY() FCombatLevel Level;
 	UPROPERTY() int32 Seed = 0;
 	UPROPERTY() FCombatSimSettings Settings;
 

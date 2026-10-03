@@ -88,6 +88,21 @@ Code: `Source/BattleSystem/{Public,Private}/Combat/`. Layers: grid ← simulatio
   9. Checksum: CRC32 over the tick and each unit's position, HP, target, attack cooldowns, windup attack, first-attack delay, windup, alive flag, target reason, threat entries and effects, plus each projectile's ID, position and target, and each pending area's ID, remaining ticks, center and direction.
 - Events (`GetEvents()`) are valid until the next `Step()`.
 
+### Levels (`FCombatLevel`, `CombatLevel.h`)
+
+- A level (made with the LevelDesigner) is readable JSON in `<Project>/Levels/<Name>.json` and goes into git.
+  - Fields: `Width` and `Height` (5–40), `CellSize` (100), `Rows` (one string per Y, one character per cell: `.` open, `#` wall = blocked + blocks sight, `h` hedge = blocks sight, `~` water = blocked), and `Units` (`Type` = definition asset name, `Team`, `Cell`).
+  - `Normalize` clamps the size and pads or cuts the rows; unknown characters count as open. `Resize` removes cells and units outside the new size.
+- `CombatLevels::BuildConfig` makes a simulation config: the grid from the rows, and units through a resolver (type → definition). Units of an unknown type or on an unwalkable cell are skipped with a warning; hedge cells are fine.
+- `FCombatFightSource` (subsystem) is a setup asset (on the arena's own grid) or a level. `BuildSimConfigFromSource`, `StartFightFromSource`, `RunBatchInWorld` and replays all take it.
+- Arena (`ACombatGrid::ApplyLevel`):
+  - It resizes the floor and redraws the debug cells for the level.
+  - It fills three instanced meshes with blocks: walls grey and 2 m tall, hedges green and 1.2 m, water blue and flat.
+  - It hides the placed `ACombatObstacle`s. `GetGridData()` stays the arena's own grid (for setups).
+  - `ClearLevel` restores everything when a setup fight starts.
+  - The subsystem fits the view camera (keeping its rotation) above the shown grid with a 12% margin, using its FOV and the viewport aspect, and puts the camera back for setups.
+- `Levels/Demo.json` is Arena-01's wall plus `DA_Setup_Taunt`'s units, with a hedge and water added. It gives the same fight as that setup (`0x7CE33AAB`).
+
 ### Player commands (`FCombatCommand`, `CombatTypes.h`)
 
 - A command is `Tick`, `UnitId`, `Type`, and either `TargetCell` (for `Move`) or `AbilityIndex` (for `Ability`). With the setup, seed and settings, the command log determines the fight.
@@ -120,7 +135,7 @@ Code: `Source/BattleSystem/{Public,Private}/Combat/`. Layers: grid ← simulatio
   - Cues: on a `Hit` of a non-area attack, the cue table entry for its `ImpactCue` plays at the hit unit. `UCombatCueTable` (`DA_CueTable`, set in settings `CueTable`) holds entries of cue tag, Niagara system, sound and debug color; everything is optional.
   - `Combat.ShowRanges` (console variable, also the panel's "Taunt range" button): a circle around every unit with an area attack, with radius `Range` + the unit's radius. An enemy whose edge is inside the circle is hit.
 - Replays (`FCombatReplay`, JSON through `FJsonObjectConverter`, in `Saved/Replays/<timestamp>_<setup>_<seed>.json`):
-  - `SaveReplay` (only after the fight is over) stores the build version, map, grid checksum (`FCombatGridData::ComputeChecksum`), setup path, seed, the `FCombatSimSettings` used, and the recorded ticks, outcome and final checksum. Format version 2 also stores the command log, the command delay, and the checkpoints (version 1 files still load, with no commands).
+  - `SaveReplay` (only after the fight is over) stores the build version, map, grid checksum (`FCombatGridData::ComputeChecksum`), setup path, seed, the `FCombatSimSettings` used, and the recorded ticks, outcome and final checksum. Format version 2 also stores the command log, the command delay, and the checkpoints (version 1 files still load, with no commands). Version 3 can hold a full copy of the level (`bHasLevel`, `Level`); such a replay does not depend on the level file and skips the grid check.
   - `PlayReplay` starts the fight with the replay's settings and commands (not the current ones) and warns about another build, map or grid. Player input is ignored while it plays.
   - When the fight ends, `ReportResult` compares ticks, checksum and checkpoints and sets `GetReplayVerdict()` ("identical", or "DIFFERENT" with the first differing checkpoint tick).
   - The float settings survive JSON bit for bit (tested).
@@ -130,6 +145,7 @@ Code: `Source/BattleSystem/{Public,Private}/Combat/`. Layers: grid ← simulatio
   - `ToSummary` gives win rates, duration avg/min/max, and averages per unit. `WriteCsv` writes `<base>_fights.csv` and `<base>_units.csv` to `Saved/CombatBatch/`.
   - `RunBatchInWorld` builds the config once from the world's arena; batch fights are exactly the single runs of those seeds (tested).
   - 1000 fights of `DA_Setup_AoE` (8 units) take ~3.4 s headless.
+- Console commands: `Start`, `Simulate` and `Batch` take `level=<name>` instead of a setup (for Batch the start seed then follows the count). The panel's setup dropdown lists the setups and `Level: <name>` (refreshed when opened).
 - Console commands: `Combat.Start`, `Combat.Simulate` (headless; uses the grid of the current world if there is one, and the subsystem's taunt override if there is a subsystem), `Combat.Stop`, `Combat.Batch <count> [setup] [startseed] [csv]`, `Combat.SaveReplay`, `Combat.Replay <file>`, and the player commands `Combat.Move <unit> <x> <y>` and `Combat.Ability <unit> [index]` (until the unit list in the HUD exists). Simulate and Batch accept `script=<name>`. Setups are found by asset name through the Asset Registry, or by object path.
 
 ### Presentation (`ACombatUnitActor`)
@@ -194,6 +210,6 @@ Code: `Source/BattleSystem/{Public,Private}/Combat/`. Layers: grid ← simulatio
 
 ### Tests
 
-`Private/Combat/Tests/CombatSimulationTests.cpp` (`BattleSystem.Combat.*`) builds its own stats in code: GridData, Determinism (per-step checksums), SeedChangesFight, StrongerTeamWins, SimultaneousHits (two-phase damage → Draw), TimeLimit, LineWalkable, DistanceMap, TargetNearestByWalking, PathAroundWall (never in a blocked cell), Separation, LineOfSight, ArcherWalksAroundWall, ArcherPrefersVisibleTarget, BestAttackPerSituation, ProjectileEndsWhenTargetDies, AStarPath, EffectStacking, ThreatRedirectsTarget, ThreatDecay (half-life and linear), TargetHysteresis, TauntPullsEnemy, AoECircleAtTarget, AoECone, AoETelegraph, AoEAllyAura, EffectModifiers, ReplayRoundTrip, BatchStatistics, CommandMove, CommandMoveOverridesTaunt, CommandPlayerAbility, CommandRejected, CommandsReplayIdentically (live commands vs the same log known in advance: identical every step).
+`Private/Combat/Tests/CombatSimulationTests.cpp` (`BattleSystem.Combat.*`) builds its own stats in code: GridData, Determinism (per-step checksums), SeedChangesFight, StrongerTeamWins, SimultaneousHits (two-phase damage → Draw), TimeLimit, LineWalkable, DistanceMap, TargetNearestByWalking, PathAroundWall (never in a blocked cell), Separation, LineOfSight, ArcherWalksAroundWall, ArcherPrefersVisibleTarget, BestAttackPerSituation, ProjectileEndsWhenTargetDies, AStarPath, EffectStacking, ThreatRedirectsTarget, ThreatDecay (half-life and linear), TargetHysteresis, TauntPullsEnemy, AoECircleAtTarget, AoECone, AoETelegraph, AoEAllyAura, EffectModifiers, ReplayRoundTrip, BatchStatistics, LevelFormat, LevelToConfig, ReplayWithLevel, CommandMove, CommandMoveOverridesTaunt, CommandPlayerAbility, CommandRejected, CommandsReplayIdentically (live commands vs the same log known in advance: identical every step).
 
 Performance: `Combat.Simulate` takes ~3.5 ms with `DA_Setup_Test` (5 units, 331 ticks, in Arena-01 with the wall) and with `DA_Setup_Mixed` (6 units). Phase 1 took 0.07 ms; the difference is the distance maps and line checks.

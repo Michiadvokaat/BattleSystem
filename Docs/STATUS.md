@@ -14,6 +14,7 @@ _Last updated: 2026-10-03_
 
 ## Open work
 
+- LevelDesigner: part A is done (the level format, levels in the arena, replays, `level=`; 37/37 tests). Part B: the designer menu at the bottom left (edit mode, size, wall/hedge/water/unit tools, mouse painting, new/load/save).
 - Balance (from the batch): team 0 wins `DA_Setup_AoE` 86.5% and `DA_Setup_Mixed` 99.7%; the Brutes win `DA_Setup_Test` and `DA_Setup_Taunt`.
 - Phase 6 (only if needed): finer navigation grid and clearance for unit sizes.
 - Optional: link VFX/sound in `DA_CueTable`.

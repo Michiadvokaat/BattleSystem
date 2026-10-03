@@ -4,6 +4,7 @@
 
 #include "CoreMinimal.h"
 #include "Subsystems/WorldSubsystem.h"
+#include "Combat/CombatLevel.h"
 #include "Combat/CombatReplay.h"
 #include "Combat/CombatSimulation.h"
 #include "Combat/CombatUnitActor.h"
@@ -17,6 +18,17 @@ class UCombatSetup;
 class UCombatUnitDefinition;
 
 BATTLESYSTEM_API DECLARE_LOG_CATEGORY_EXTERN(LogCombat, Log, All);
+
+/** What a fight is built from: a setup asset on the arena's own grid, or a level from the LevelDesigner. */
+struct FCombatFightSource
+{
+	const UCombatSetup* Setup = nullptr;
+	TOptional<FCombatLevel> Level;
+
+	bool IsValid() const { return Setup != nullptr || Level.IsSet(); }
+	/** "DA_Setup_Test" or "Level: Name". */
+	FString GetName() const;
+};
 
 /**
  * Thin layer between the world and FCombatSimulation: builds a fight from the level's ACombatGrid and a
@@ -37,6 +49,9 @@ public:
 	bool StartFight(int32 Seed, const UCombatSetup* Setup);
 	bool StartFightWithSettings(int32 Seed, const UCombatSetup* Setup, const FCombatSimSettings& Settings,
 		TConstArrayView<FCombatCommand> Commands = {});
+	/** Starts a fight from a setup or a level. A level is shown in the arena (grid, blocks) and the camera fits it. */
+	bool StartFightFromSource(int32 Seed, const FCombatFightSource& Source, const FCombatSimSettings& Settings,
+		TConstArrayView<FCombatCommand> Commands = {});
 
 	/**
 	 * A player command for a unit of the player's team. It runs CommandDelayTicks after the current tick
@@ -56,11 +71,11 @@ public:
 	const FString& GetReplayVerdict() const { return ReplayVerdict; }
 
 	/** Runs Count fights headless (seeds StartSeed...) in this world's arena, with the current settings. */
-	bool RunBatch(const UCombatSetup* Setup, int32 Count, int32 StartSeed, bool bWriteCsv, FString& OutSummary);
+	bool RunBatch(const FCombatFightSource& Source, int32 Count, int32 StartSeed, bool bWriteCsv, FString& OutSummary);
 	const FString& GetLastBatchSummary() const { return LastBatchSummary; }
 
 	/** Shared by RunBatch and the Combat.Batch command. Logs and returns the summary. */
-	static bool RunBatchInWorld(UWorld* World, const UCombatSetup& Setup, int32 Count, int32 StartSeed,
+	static bool RunBatchInWorld(UWorld* World, const FCombatFightSource& Source, int32 Count, int32 StartSeed,
 		const FCombatSimSettings& Settings, bool bWriteCsv, FString& OutSummary, TConstArrayView<FCombatCommand> Commands = {});
 	void StopFight();
 
@@ -119,6 +134,17 @@ public:
 	static bool BuildSimConfig(UWorld* World, int32 Seed, const UCombatSetup& Setup, const FCombatSimSettings& Settings,
 		FCombatSimConfig& OutConfig, FVector& OutGridOrigin, TArray<const UCombatUnitDefinition*>* OutDefinitions = nullptr);
 
+	/** BuildSimConfig for a setup or a level (a level brings its own grid; the arena only gives the origin). */
+	static bool BuildSimConfigFromSource(UWorld* World, int32 Seed, const FCombatFightSource& Source, const FCombatSimSettings& Settings,
+		FCombatSimConfig& OutConfig, FVector& OutGridOrigin, TArray<const UCombatUnitDefinition*>* OutDefinitions = nullptr);
+
+	/** Setup asset names, then "Level: <name>" for every saved level. */
+	static TArray<FString> GetAllSourceNames();
+	/** A name from GetAllSourceNames (or a setup name/path) to a fight source; levels are loaded from disk. */
+	static bool ResolveSource(const FString& Name, FCombatFightSource& OutSource);
+	/** Finds a unit definition by asset name or object path. */
+	static const UCombatUnitDefinition* FindUnitDefinition(const FString& NameOrPath);
+
 	/** Finds a setup by asset name or object path. An empty string gives the default setup from UCombatSettings. */
 	static UCombatSetup* FindSetup(const FString& NameOrPath);
 	/** Finds a command script by asset name or object path. */
@@ -147,6 +173,11 @@ private:
 	void ReportResult();
 	/** After each step: record a checkpoint, or compare it while a replay plays. */
 	void UpdateCheckpoints();
+	/** Shows the source's grid in the arena: a level (blocks, resized floor, fitted camera) or the arena's own. */
+	void ShowSourceInArena(const FCombatFightSource& Source);
+	/** Moves the view camera straight above the shown grid, high enough to see all of it. */
+	void FitCameraToShownGrid();
+	void RestoreCamera();
 	FVector SimToWorld(const FVector2D& Local) const { return GridOrigin + FVector(Local.X, Local.Y, 0.0); }
 
 	TUniquePtr<FCombatSimulation> Simulation;
@@ -176,6 +207,12 @@ private:
 	int32 CurrentSeed = 0;
 	FString CurrentSetupName;
 	FString CurrentSetupPath;
+	/** Set when the current fight comes from a level (copied into replays). */
+	TOptional<FCombatLevel> CurrentLevel;
+
+	/** The view camera as placed in the arena, before it was fitted to a level. */
+	TWeakObjectPtr<AActor> FittedCamera;
+	TOptional<FTransform> OriginalCameraTransform;
 	FCombatSimSettings CurrentSettings;
 
 	bool bIsReplay = false;

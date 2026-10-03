@@ -202,3 +202,5 @@ Elke fase levert iets op dat je kunt spelen en testen. Nieuwe C++-klassen vereis
 | Spelersinvoer | Commando's per unit (verplaatsen naar cel, spelersvaardigheid) met vaste vertraging (3 ticks), in een commando-log dat in de replay staat | Directe ingrepen in de simulatie |
 | Verplaatsen vs. taunt | Het commando van de speler wint | Taunt wint |
 | Spelersvaardigheden | Per unit-type in de Data Asset, zonder cooldown | Vaste vaardigheid voor iedere unit |
+| Levels (LevelDesigner) | JSON in Levels/ (in git): grid, muur/heg/water, units; vervangt grid + opstelling van de arena | Data Assets |
+| Replay en level | Volledige kopie van het level in de replay | Verwijzing + checksum |

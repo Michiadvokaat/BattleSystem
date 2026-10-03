@@ -5,8 +5,11 @@
 #include "CoreMinimal.h"
 #include "GameFramework/Actor.h"
 #include "Combat/CombatGridData.h"
+#include "Combat/CombatLevel.h"
 #include "CombatGrid.generated.h"
 
+class UInstancedStaticMeshComponent;
+class UMaterialInterface;
 class UStaticMeshComponent;
 
 /**
@@ -35,8 +38,19 @@ public:
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Grid|Debug")
 	bool bDrawDebugCells = true;
 
-	/** The grid with obstacle flags, built on first use. */
+	/** The arena's own grid with obstacle flags, built on first use (also while a level is shown). */
 	const FCombatGridData& GetGridData();
+
+	/**
+	 * Shows a level (LevelDesigner) instead of the arena's own size and obstacles: the floor resizes, walls,
+	 * hedges and water get blocks, and the placed obstacles are hidden. Fights from a level use the level's grid.
+	 */
+	void ApplyLevel(const FCombatLevel& Level);
+	/** Back to the arena's own size and obstacles. */
+	void ClearLevel();
+	bool HasLevel() const { return bHasLevel; }
+	/** Grid shown right now: the level's, or the arena's own. */
+	const FCombatGridData& GetShownGridData();
 
 	FIntPoint WorldToCell(const FVector& World) const;
 	/** World position of the center of a cell, at the grid's height. */
@@ -56,10 +70,38 @@ protected:
 
 private:
 	void BuildCells();
-	void DrawDebugCells() const;
+	/** Resizes the floor to a grid and redraws the debug cells for it. */
+	void ShowGrid(const FCombatGridData& Data);
+	void DrawDebugCells(const FCombatGridData& Data) const;
+	void SetObstaclesHidden(bool bHideObstacles);
 
 	UPROPERTY(VisibleAnywhere, Category = "Grid")
 	TObjectPtr<UStaticMeshComponent> FloorMesh;
+
+	/** Level blocks: one instance per wall, hedge or water cell. */
+	UPROPERTY(VisibleAnywhere, Category = "Grid")
+	TObjectPtr<UInstancedStaticMeshComponent> WallBlocks;
+
+	UPROPERTY(VisibleAnywhere, Category = "Grid")
+	TObjectPtr<UInstancedStaticMeshComponent> HedgeBlocks;
+
+	UPROPERTY(VisibleAnywhere, Category = "Grid")
+	TObjectPtr<UInstancedStaticMeshComponent> WaterBlocks;
+
+	UPROPERTY(EditDefaultsOnly, Category = "Grid|Level")
+	TObjectPtr<UMaterialInterface> BlockMaterialBase;
+
+	UPROPERTY(EditDefaultsOnly, Category = "Grid|Level")
+	FLinearColor WallColor = FLinearColor(0.3f, 0.3f, 0.32f);
+
+	UPROPERTY(EditDefaultsOnly, Category = "Grid|Level")
+	FLinearColor HedgeColor = FLinearColor(0.1f, 0.45f, 0.12f);
+
+	UPROPERTY(EditDefaultsOnly, Category = "Grid|Level")
+	FLinearColor WaterColor = FLinearColor(0.08f, 0.3f, 0.85f);
+
+	bool bHasLevel = false;
+	FCombatGridData LevelGridData;
 
 	FCombatGridData GridData;
 	bool bCellsBuilt = false;

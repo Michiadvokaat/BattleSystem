@@ -2,10 +2,13 @@
 
 #include "Misc/AutomationTest.h"
 #include "Combat/CombatBatch.h"
+#include "Combat/CombatLevel.h"
 #include "Combat/CombatPathfinding.h"
 #include "Combat/CombatReplay.h"
 #include "Combat/CombatSimulation.h"
 #include "Combat/CombatTags.h"
+#include "Combat/CombatUnitDefinition.h"
+#include "UObject/Package.h"
 
 #if WITH_DEV_AUTOMATION_TESTS
 
@@ -1340,6 +1343,133 @@ bool FCombatCommandReplayTest::RunTest(const FString& Parameters)
 		bSameCommands = A.Tick == B.Tick && A.UnitId == B.UnitId && A.Type == B.Type && A.TargetCell == B.TargetCell && A.AbilityIndex == B.AbilityIndex;
 	}
 	TestTrue(TEXT("Commands survive JSON"), bSameCommands);
+	return true;
+}
+
+namespace CombatTests
+{
+	static FCombatLevelUnit MakeLevelUnit(const FString& Type, int32 Team, FIntPoint Cell)
+	{
+		FCombatLevelUnit Unit;
+		Unit.Type = Type;
+		Unit.Team = Team;
+		Unit.Cell = Cell;
+		return Unit;
+	}
+
+	/** A level with every cell kind and three units, for the level tests. */
+	static FCombatLevel MakeTestLevel()
+	{
+		FCombatLevel Level = FCombatLevel::MakeEmpty(TEXT("Test"), 12, 8);
+		Level.SetCell(FIntPoint(5, 1), FCombatLevel::Wall);
+		Level.SetCell(FIntPoint(5, 2), FCombatLevel::Hedge);
+		Level.SetCell(FIntPoint(5, 3), FCombatLevel::Water);
+		Level.Units.Add(MakeLevelUnit(TEXT("Fighter"), 0, FIntPoint(1, 1)));
+		Level.Units.Add(MakeLevelUnit(TEXT("Fighter"), 1, FIntPoint(10, 6)));
+		Level.Units.Add(MakeLevelUnit(TEXT("Fighter"), 1, FIntPoint(5, 2)));	// on the hedge: allowed
+		return Level;
+	}
+
+	/** A melee definition made in code (not a project asset), for building configs from levels. */
+	static const UCombatUnitDefinition* MakeTestDefinition()
+	{
+		UCombatUnitDefinition* Definition = NewObject<UCombatUnitDefinition>(GetTransientPackage());
+		FCombatAttackDefinition& Melee = Definition->Attacks.AddDefaulted_GetRef();
+		Melee.Type = CombatTags::Attack_Melee;
+		return Definition;
+	}
+}
+
+IMPLEMENT_SIMPLE_AUTOMATION_TEST(FCombatLevelFormatTest, "BattleSystem.Combat.LevelFormat",
+	EAutomationTestFlags::EditorContext | EAutomationTestFlags::ProductFilter)
+
+bool FCombatLevelFormatTest::RunTest(const FString& Parameters)
+{
+	FCombatLevel Level = CombatTests::MakeTestLevel();
+
+	FCombatGridData Grid;
+	Level.ToGridData(Grid);
+	TestEqual(TEXT("Grid size"), Grid.Width * 100 + Grid.Height, 12 * 100 + 8);
+	TestTrue(TEXT("Wall blocks walking and sight"), !Grid.IsWalkable(FIntPoint(5, 1)) && Grid.BlocksSight(FIntPoint(5, 1)));
+	TestTrue(TEXT("Hedge blocks sight only"), Grid.IsWalkable(FIntPoint(5, 2)) && Grid.BlocksSight(FIntPoint(5, 2)));
+	TestTrue(TEXT("Water blocks walking only"), !Grid.IsWalkable(FIntPoint(5, 3)) && !Grid.BlocksSight(FIntPoint(5, 3)));
+	TestTrue(TEXT("Open cells are open"), Grid.IsWalkable(FIntPoint(0, 0)) && !Grid.BlocksSight(FIntPoint(0, 0)));
+
+	FString Json;
+	TestTrue(TEXT("Writes JSON"), CombatLevels::ToJson(Level, Json));
+	FCombatLevel Loaded;
+	TestTrue(TEXT("Reads JSON"), CombatLevels::FromJson(Json, Loaded));
+	TestTrue(TEXT("Rows survive"), Loaded.Rows == Level.Rows);
+	TestEqual(TEXT("Units survive"), Loaded.Units.Num(), 3);
+	TestTrue(TEXT("Unit cell survives"), Loaded.Units.Num() == 3 && Loaded.Units[1].Cell == FIntPoint(10, 6) && Loaded.Units[1].Team == 1);
+
+	Level.Resize(8, 8);
+	TestEqual(TEXT("Shrinking removes units outside"), Level.Units.Num(), 2);
+	TestEqual(TEXT("Rows are cut to the new width"), Level.Rows[0].Len(), 8);
+	Level.Resize(2, 100);
+	TestTrue(TEXT("Size is clamped"), Level.Width == FCombatLevel::MinSize && Level.Height == FCombatLevel::MaxSize);
+	return true;
+}
+
+IMPLEMENT_SIMPLE_AUTOMATION_TEST(FCombatLevelConfigTest, "BattleSystem.Combat.LevelToConfig",
+	EAutomationTestFlags::EditorContext | EAutomationTestFlags::ProductFilter)
+
+bool FCombatLevelConfigTest::RunTest(const FString& Parameters)
+{
+	const UCombatUnitDefinition* Fighter = CombatTests::MakeTestDefinition();
+	FCombatLevel Level = CombatTests::MakeTestLevel();
+	Level.Units.Add(CombatTests::MakeLevelUnit(TEXT("Fighter"), 1, FIntPoint(5, 1)));		// on the wall: skipped
+	Level.Units.Add(CombatTests::MakeLevelUnit(TEXT("Unknown"), 1, FIntPoint(9, 1)));		// unknown type: skipped
+	auto Resolve = [Fighter](const FString& Type) { return Type == TEXT("Fighter") ? Fighter : nullptr; };
+
+	FCombatSimConfig Config;
+	TArray<const UCombatUnitDefinition*> Definitions;
+	TestTrue(TEXT("Builds"), CombatLevels::BuildConfig(Level, 20, Resolve, Config, &Definitions));
+	TestEqual(TEXT("Three valid units"), Config.Units.Num(), 3);
+	TestEqual(TEXT("A definition per unit"), Definitions.Num(), 3);
+	TestTrue(TEXT("The grid comes from the level"), Config.Grid.Width == 12 && !Config.Grid.IsWalkable(FIntPoint(5, 1)));
+
+	// A fight from a level is deterministic like any other.
+	Config.Seed = 5;
+	FCombatSimulation First(Config);
+	First.RunToEnd();
+	FCombatSimulation Second(Config);
+	Second.RunToEnd();
+	TestTrue(TEXT("Same level and seed, same checksum"), First.GetChecksum() == Second.GetChecksum());
+	return true;
+}
+
+IMPLEMENT_SIMPLE_AUTOMATION_TEST(FCombatLevelReplayTest, "BattleSystem.Combat.ReplayWithLevel",
+	EAutomationTestFlags::EditorContext | EAutomationTestFlags::ProductFilter)
+
+bool FCombatLevelReplayTest::RunTest(const FString& Parameters)
+{
+	// The replay holds a full copy of the level, so the fight can be rebuilt from the replay alone.
+	FCombatReplay Replay;
+	Replay.bHasLevel = true;
+	Replay.Level = CombatTests::MakeTestLevel();
+	Replay.Seed = 9;
+
+	FString Json;
+	CombatReplay::ToJson(Replay, Json);
+	FCombatReplay Loaded;
+	TestTrue(TEXT("Reads JSON"), CombatReplay::FromJson(Json, Loaded));
+	TestTrue(TEXT("Has the level"), Loaded.bHasLevel);
+	TestTrue(TEXT("Same rows"), Loaded.Level.Rows == Replay.Level.Rows);
+	TestEqual(TEXT("Same units"), Loaded.Level.Units.Num(), Replay.Level.Units.Num());
+
+	const UCombatUnitDefinition* Fighter = CombatTests::MakeTestDefinition();
+	auto Resolve = [Fighter](const FString& Type) { return Type == TEXT("Fighter") ? Fighter : nullptr; };
+	auto RunLevel = [&Resolve](const FCombatLevel& Level, int32 Seed)
+	{
+		FCombatSimConfig Config;
+		CombatLevels::BuildConfig(Level, 20, Resolve, Config);
+		Config.Seed = Seed;
+		FCombatSimulation Simulation(Config);
+		Simulation.RunToEnd();
+		return Simulation.GetChecksum();
+	};
+	TestTrue(TEXT("Same fight from the replay's copy"), RunLevel(Loaded.Level, Loaded.Seed) == RunLevel(Replay.Level, Replay.Seed));
 	return true;
 }
 

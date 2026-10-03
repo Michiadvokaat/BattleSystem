@@ -71,3 +71,9 @@ Dated history: decisions, bugs, rejected approaches. Newest entries at the botto
   - Console commands `Combat.Move` and `Combat.Ability` for testing until the unit list exists.
 - Player commands part B (UI): a unit list at the top right (own team, with health, labels and the order text; click a row for its Move and ability buttons), `ACombatPlayerController` (left click selects or sets the Move target on the grid plane, right click cancels), a selection ring, and a move disc and line in the arena. Attacks get an optional `DisplayName`. UI only: no simulation changes.
 - Player commands part B done: the user checked the unit list, Move/Taunt, arena selection and replay in PIE.
+- LevelDesigner part A:
+  - `FCombatLevel` (JSON in `Levels/`, rows of `.#h~` and units) and `CombatLevels::BuildConfig`.
+  - `FCombatFightSource` (setup or level) throughout the subsystem.
+  - The arena shows a level (resized floor, instanced blocks, obstacles hidden), and the camera fits the grid.
+  - Replay format 3 copies the level. Start, Simulate and Batch accept `level=`, and levels appear in the panel's dropdown.
+  - `Levels/Demo.json` reproduces `DA_Setup_Taunt` in Arena-01 exactly (`0x7CE33AAB`). 37/37 tests.

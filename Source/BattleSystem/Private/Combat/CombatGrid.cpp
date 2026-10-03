@@ -2,7 +2,9 @@
 
 #include "Combat/CombatGrid.h"
 #include "Combat/CombatObstacle.h"
+#include "Components/InstancedStaticMeshComponent.h"
 #include "Components/StaticMeshComponent.h"
+#include "Materials/MaterialInstanceDynamic.h"
 #include "DrawDebugHelpers.h"
 #include "EngineUtils.h"
 #include "UObject/ConstructorHelpers.h"
@@ -21,6 +23,25 @@ ACombatGrid::ACombatGrid()
 	{
 		FloorMesh->SetStaticMesh(PlaneMesh.Object);
 	}
+
+	static ConstructorHelpers::FObjectFinder<UStaticMesh> CubeMesh(TEXT("/Engine/BasicShapes/Cube.Cube"));
+	static ConstructorHelpers::FObjectFinder<UMaterialInterface> ShapeMaterial(TEXT("/Engine/BasicShapes/BasicShapeMaterial.BasicShapeMaterial"));
+	BlockMaterialBase = ShapeMaterial.Succeeded() ? ShapeMaterial.Object : nullptr;
+
+	auto MakeBlocks = [this](const TCHAR* Name)
+	{
+		UInstancedStaticMeshComponent* Blocks = CreateDefaultSubobject<UInstancedStaticMeshComponent>(Name);
+		Blocks->SetupAttachment(RootComponent);
+		Blocks->SetCollisionEnabled(ECollisionEnabled::NoCollision);
+		if (CubeMesh.Succeeded())
+		{
+			Blocks->SetStaticMesh(CubeMesh.Object);
+		}
+		return Blocks;
+	};
+	WallBlocks = MakeBlocks(TEXT("WallBlocks"));
+	HedgeBlocks = MakeBlocks(TEXT("HedgeBlocks"));
+	WaterBlocks = MakeBlocks(TEXT("WaterBlocks"));
 }
 
 void ACombatGrid::OnConstruction(const FTransform& Transform)
@@ -42,7 +63,93 @@ void ACombatGrid::BeginPlay()
 	BuildCells();
 	if (bDrawDebugCells)
 	{
-		DrawDebugCells();
+		DrawDebugCells(GridData);
+	}
+}
+
+const FCombatGridData& ACombatGrid::GetShownGridData()
+{
+	return bHasLevel ? LevelGridData : GetGridData();
+}
+
+void ACombatGrid::ApplyLevel(const FCombatLevel& Level)
+{
+	bHasLevel = true;
+	Level.ToGridData(LevelGridData);
+	SetObstaclesHidden(true);
+	ShowGrid(LevelGridData);
+
+	// One block per wall (tall), hedge (lower) and water (flat) cell; the engine cube is 100 cm.
+	struct FBlockKind
+	{
+		UInstancedStaticMeshComponent* Blocks;
+		TCHAR Kind;
+		float BlockHeight;
+		FLinearColor Color;
+	};
+	const FBlockKind Kinds[] =
+	{
+		{ WallBlocks, FCombatLevel::Wall, 200.f, WallColor },
+		{ HedgeBlocks, FCombatLevel::Hedge, 120.f, HedgeColor },
+		{ WaterBlocks, FCombatLevel::Water, 6.f, WaterColor },
+	};
+	const float Size = Level.CellSize;
+	for (const FBlockKind& Kind : Kinds)
+	{
+		Kind.Blocks->ClearInstances();
+		if (BlockMaterialBase)
+		{
+			UMaterialInstanceDynamic* Material = Kind.Blocks->CreateAndSetMaterialInstanceDynamicFromMaterial(0, BlockMaterialBase);
+			Material->SetVectorParameterValue(TEXT("Color"), Kind.Color);
+		}
+		for (int32 Y = 0; Y < Level.Height; ++Y)
+		{
+			for (int32 X = 0; X < Level.Width; ++X)
+			{
+				if (Level.GetCell(FIntPoint(X, Y)) == Kind.Kind)
+				{
+					const FVector Location((X + 0.5) * Size, (Y + 0.5) * Size, Kind.BlockHeight * 0.5);
+					const FVector Scale(Size * 0.98 / 100.0, Size * 0.98 / 100.0, Kind.BlockHeight / 100.0);
+					Kind.Blocks->AddInstance(FTransform(FRotator::ZeroRotator, Location, Scale));
+				}
+			}
+		}
+	}
+}
+
+void ACombatGrid::ClearLevel()
+{
+	if (!bHasLevel)
+	{
+		return;
+	}
+	bHasLevel = false;
+	WallBlocks->ClearInstances();
+	HedgeBlocks->ClearInstances();
+	WaterBlocks->ClearInstances();
+	SetObstaclesHidden(false);
+	ShowGrid(GetGridData());
+}
+
+void ACombatGrid::ShowGrid(const FCombatGridData& Data)
+{
+	// The engine plane is 100x100 cm and centered on its origin.
+	const FVector2D Size = Data.GetLocalSize();
+	FloorMesh->SetRelativeLocation(FVector(Size.X * 0.5, Size.Y * 0.5, 0.0));
+	FloorMesh->SetRelativeScale3D(FVector(Size.X / 100.0, Size.Y / 100.0, 1.0));
+
+	if (bDrawDebugCells)
+	{
+		FlushPersistentDebugLines(GetWorld());
+		DrawDebugCells(Data);
+	}
+}
+
+void ACombatGrid::SetObstaclesHidden(bool bHideObstacles)
+{
+	for (TActorIterator<ACombatObstacle> It(GetWorld()); It; ++It)
+	{
+		It->SetActorHiddenInGame(bHideObstacles);
 	}
 }
 
@@ -114,30 +221,36 @@ void ACombatGrid::BuildCells()
 	bCellsBuilt = true;
 }
 
-void ACombatGrid::DrawDebugCells() const
+void ACombatGrid::DrawDebugCells(const FCombatGridData& Data) const
 {
 	const UWorld* World = GetWorld();
 	const FVector Origin = GetActorLocation() + FVector(0.0, 0.0, 2.0);
 	const FColor LineColor(80, 80, 80);
+	const double Size = Data.CellSize;
 
-	for (int32 X = 0; X <= Width; ++X)
+	for (int32 X = 0; X <= Data.Width; ++X)
 	{
-		DrawDebugLine(World, Origin + FVector(X * CellSize, 0.0, 0.0), Origin + FVector(X * CellSize, Height * CellSize, 0.0), LineColor, true);
+		DrawDebugLine(World, Origin + FVector(X * Size, 0.0, 0.0), Origin + FVector(X * Size, Data.Height * Size, 0.0), LineColor, true);
 	}
-	for (int32 Y = 0; Y <= Height; ++Y)
+	for (int32 Y = 0; Y <= Data.Height; ++Y)
 	{
-		DrawDebugLine(World, Origin + FVector(0.0, Y * CellSize, 0.0), Origin + FVector(Width * CellSize, Y * CellSize, 0.0), LineColor, true);
+		DrawDebugLine(World, Origin + FVector(0.0, Y * Size, 0.0), Origin + FVector(Data.Width * Size, Y * Size, 0.0), LineColor, true);
 	}
 
-	const FVector CellExtent(CellSize * 0.45, CellSize * 0.45, 2.0);
-	for (int32 Y = 0; Y < Height; ++Y)
+	// Blocked cells of the arena's own obstacles; a level shows its blocks instead.
+	if (bHasLevel)
 	{
-		for (int32 X = 0; X < Width; ++X)
+		return;
+	}
+	const FVector CellExtent(Size * 0.45, Size * 0.45, 2.0);
+	for (int32 Y = 0; Y < Data.Height; ++Y)
+	{
+		for (int32 X = 0; X < Data.Width; ++X)
 		{
 			const FIntPoint Cell(X, Y);
-			if (!GridData.IsWalkable(Cell))
+			if (!Data.IsWalkable(Cell))
 			{
-				DrawDebugBox(World, CellToWorld(Cell) + FVector(0.0, 0.0, 2.0), CellExtent, FColor::Red, true);
+				DrawDebugBox(World, Origin + FVector((X + 0.5) * Size, (Y + 0.5) * Size, 0.0), CellExtent, FColor::Red, true);
 			}
 		}
 	}
