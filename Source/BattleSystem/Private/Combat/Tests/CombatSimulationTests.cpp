@@ -1,7 +1,9 @@
 // Copyright Epic Games, Inc. All Rights Reserved.
 
 #include "Misc/AutomationTest.h"
+#include "Combat/CombatPathfinding.h"
 #include "Combat/CombatSimulation.h"
+#include "Combat/CombatTags.h"
 
 #if WITH_DEV_AUTOMATION_TESTS
 
@@ -502,6 +504,274 @@ bool FCombatProjectileTargetDiesTest::RunTest(const FString& Parameters)
 	{
 		return Projectile.TargetId == 2;
 	}));
+	return true;
+}
+
+namespace CombatTests
+{
+	static FCombatEffectStats MakeTauntEffect(int32 DurationTicks)
+	{
+		FCombatEffectStats Effect;
+		Effect.EffectTag = CombatTags::Effect_Taunt;
+		Effect.DurationTicks = DurationTicks;
+		Effect.Stacking = ECombatEffectStacking::Refresh;
+		Effect.GrantedTags.AddTag(CombatTags::Status_Taunted);
+		return Effect;
+	}
+
+	/** Threat on EnemyId after a single hit of Damage, then AfterTicks steps. Returns the threat right after the hit in OutStart. */
+	static float MeasureThreatDecay(const FCombatSimConfig& BaseConfig, float Damage, int32 AfterTicks, float& OutStart)
+	{
+		// A dummy (team 0) is shot once by an archer (team 1) whose cooldown outlasts the test.
+		FCombatSimConfig Config = BaseConfig;
+		Config.Grid.Init(20, 12, 100.f);
+		Config.MaxFirstAttackDelayTicks = 0;
+		Config.ThreatThreshold = 0.f;
+		CombatTests::AddUnit(Config, CombatTests::MakeDummyStats(), 0, FIntPoint(5, 5));
+		FCombatUnitStats Archer = CombatTests::MakeArcherStats(900.f, 3000.f, Damage);
+		Archer.Attacks[0].CooldownTicks = 10000;
+		CombatTests::AddUnit(Config, Archer, 1, FIntPoint(10, 5));
+
+		FCombatSimulation Simulation(Config);
+		OutStart = 0.f;
+		for (int32 Step = 0; Step < 100 && OutStart <= 0.f; ++Step)
+		{
+			Simulation.Step();
+			OutStart = Simulation.GetUnits()[0].GetThreatOn(1);
+		}
+		for (int32 Step = 0; Step < AfterTicks; ++Step)
+		{
+			Simulation.Step();
+		}
+		return Simulation.GetUnits()[0].GetThreatOn(1);
+	}
+}
+
+IMPLEMENT_SIMPLE_AUTOMATION_TEST(FCombatPathfindingTest, "BattleSystem.Combat.AStarPath",
+	EAutomationTestFlags::EditorContext | EAutomationTestFlags::ProductFilter)
+
+bool FCombatPathfindingTest::RunTest(const FString& Parameters)
+{
+	const FCombatGridData Grid = CombatTests::MakeWallGrid();
+	const FIntPoint Start(3, 2);
+	const FIntPoint Goal(9, 2);
+
+	TArray<FIntPoint> Path;
+	TestTrue(TEXT("A path around the wall exists"), CombatPathfinding::FindPath(Grid, Start, Goal, Path));
+	TestTrue(TEXT("It starts at the start"), Path.Num() > 0 && Path[0] == Start);
+	TestTrue(TEXT("It ends at the goal"), Path.Num() > 0 && Path.Last() == Goal);
+
+	bool bValidSteps = true;
+	for (int32 Index = 1; Index < Path.Num(); ++Index)
+	{
+		bValidSteps &= Grid.CanStep(Path[Index - 1], Path[Index] - Path[Index - 1]);
+	}
+	TestTrue(TEXT("Every step is a legal step (no walls, no corner cutting)"), bValidSteps);
+
+	// Shortest: the same cost as the distance map from the goal.
+	const FCombatDistanceMap::FSource Sources[] = { { Goal, 0 } };
+	FCombatDistanceMap Map;
+	Map.Build(Grid, Sources);
+	TestEqual(TEXT("Shortest route"), CombatPathfinding::PathCost(Path), Map.GetDistance(Start));
+
+	TArray<FIntPoint> Again;
+	CombatPathfinding::FindPath(Grid, Start, Goal, Again);
+	TestTrue(TEXT("Deterministic"), Path == Again);
+
+	TArray<FIntPoint> Blocked;
+	TestFalse(TEXT("No path into a wall"), CombatPathfinding::FindPath(Grid, Start, FIntPoint(6, 3), Blocked));
+	return true;
+}
+
+IMPLEMENT_SIMPLE_AUTOMATION_TEST(FCombatEffectListTest, "BattleSystem.Combat.EffectStacking",
+	EAutomationTestFlags::EditorContext | EAutomationTestFlags::ProductFilter)
+
+bool FCombatEffectListTest::RunTest(const FString& Parameters)
+{
+	const FGameplayTagContainer NoTags;
+
+	// Refresh: one effect, duration restarted, newest source.
+	FCombatEffectList Refresh;
+	Refresh.Apply(CombatTests::MakeTauntEffect(10), 1, 0, 0, NoTags);
+	for (int32 Tick = 0; Tick < 6; ++Tick)
+	{
+		Refresh.Tick();
+	}
+	Refresh.Apply(CombatTests::MakeTauntEffect(10), 2, 0, 0, NoTags);
+	TestEqual(TEXT("Refresh keeps one effect"), Refresh.GetEffects().Num(), 1);
+	TestEqual(TEXT("Refresh restarts the duration"), Refresh.GetEffects()[0].RemainingTicks, 10);
+	TestEqual(TEXT("Refresh takes the new source"), Refresh.FindSourceOfTag(CombatTags::Status_Taunted), 2);
+
+	for (int32 Tick = 0; Tick < 10; ++Tick)
+	{
+		Refresh.Tick();
+	}
+	TestEqual(TEXT("Expired effects are removed"), Refresh.GetEffects().Num(), 0);
+	TestFalse(TEXT("Expired effects grant nothing"), Refresh.HasGrantedTag(CombatTags::Status_Taunted));
+
+	// Stack: up to MaxStacks.
+	FCombatEffectStats Stacking = CombatTests::MakeTauntEffect(10);
+	Stacking.Stacking = ECombatEffectStacking::Stack;
+	Stacking.MaxStacks = 2;
+	FCombatEffectList Stacks;
+	for (int32 Count = 0; Count < 3; ++Count)
+	{
+		Stacks.Apply(Stacking, 1, 0, 0, NoTags);
+	}
+	TestEqual(TEXT("Stack is capped at MaxStacks"), Stacks.GetEffects()[0].Stacks, 2);
+
+	// Ignore: the first one stays.
+	FCombatEffectStats Ignoring = CombatTests::MakeTauntEffect(10);
+	Ignoring.Stacking = ECombatEffectStacking::Ignore;
+	FCombatEffectList Ignored;
+	Ignored.Apply(Ignoring, 1, 0, 0, NoTags);
+	TestFalse(TEXT("Ignore rejects a second application"), Ignored.Apply(Ignoring, 2, 0, 0, NoTags));
+	TestEqual(TEXT("Ignore keeps the first source"), Ignored.FindSourceOfTag(CombatTags::Status_Taunted), 1);
+
+	// Blocked by an innate tag.
+	FCombatEffectStats Blockable = CombatTests::MakeTauntEffect(10);
+	Blockable.BlockedByTags.AddTag(CombatTags::Status);
+	FGameplayTagContainer Immune;
+	Immune.AddTag(CombatTags::Status_Taunted);
+	FCombatEffectList Blocked;
+	TestFalse(TEXT("BlockedByTags blocks a unit with a matching tag"), Blocked.Apply(Blockable, 1, 0, 0, Immune));
+	TestEqual(TEXT("Nothing applied"), Blocked.GetEffects().Num(), 0);
+	return true;
+}
+
+IMPLEMENT_SIMPLE_AUTOMATION_TEST(FCombatThreatTargetTest, "BattleSystem.Combat.ThreatRedirectsTarget",
+	EAutomationTestFlags::EditorContext | EAutomationTestFlags::ProductFilter)
+
+bool FCombatThreatTargetTest::RunTest(const FString& Parameters)
+{
+	// U's nearest enemy is the dummy B, but archer C keeps shooting U: U must turn to C.
+	FCombatSimConfig Config;
+	Config.Grid.Init(20, 12, 100.f);
+	Config.MaxFirstAttackDelayTicks = 0;
+	CombatTests::AddUnit(Config, CombatTests::MakeStats(1000.f, 1.f, 20, 0), 0, FIntPoint(5, 5));
+	CombatTests::AddUnit(Config, CombatTests::MakeDummyStats(), 1, FIntPoint(8, 5));
+	FCombatUnitStats Archer = CombatTests::MakeArcherStats(900.f, 1500.f, 14.f);
+	Archer.MoveSpeed = 0.f;
+	CombatTests::AddUnit(Config, Archer, 1, FIntPoint(5, 11));
+
+	FCombatSimulation Simulation(Config);
+	Simulation.Step();
+	TestEqual(TEXT("First the nearest enemy"), Simulation.GetUnits()[0].TargetId, 1);
+
+	bool bTurned = false;
+	for (int32 Step = 0; Step < 100 && !bTurned; ++Step)
+	{
+		Simulation.Step();
+		const FCombatUnit& Unit = Simulation.GetUnits()[0];
+		bTurned = Unit.TargetId == 2 && Unit.TargetReason == ECombatTargetReason::Threat;
+	}
+	TestTrue(TEXT("Turns to the archer because of threat"), bTurned);
+	return true;
+}
+
+IMPLEMENT_SIMPLE_AUTOMATION_TEST(FCombatThreatDecayTest, "BattleSystem.Combat.ThreatDecay",
+	EAutomationTestFlags::EditorContext | EAutomationTestFlags::ProductFilter)
+
+bool FCombatThreatDecayTest::RunTest(const FString& Parameters)
+{
+	// Half-life: 40 ticks.
+	FCombatSimConfig HalfLife;
+	HalfLife.ThreatDecayFactorPerTick = FMath::Pow(0.5f, 1.f / 40.f);
+	float Start = 0.f;
+	const float AfterHalfLife = CombatTests::MeasureThreatDecay(HalfLife, 40.f, 40, Start);
+	TestEqual(TEXT("Half-life: the hit adds threat = damage"), Start, 40.f, 0.5f);
+	TestEqual(TEXT("Half-life: halved after one half-life"), AfterHalfLife, Start * 0.5f, 0.05f);
+
+	// Linear: 0.25 per tick.
+	FCombatSimConfig Linear;
+	Linear.ThreatDecayFactorPerTick = 1.f;
+	Linear.ThreatDecayAmountPerTick = 0.25f;
+	const float AfterLinear = CombatTests::MeasureThreatDecay(Linear, 40.f, 40, Start);
+	TestEqual(TEXT("Linear: 40 ticks x 0.25 subtracted"), AfterLinear, Start - 10.f, 0.01f);
+	const float Gone = CombatTests::MeasureThreatDecay(Linear, 40.f, 200, Start);
+	TestEqual(TEXT("Linear: removed once it reaches 0"), Gone, 0.f);
+	return true;
+}
+
+IMPLEMENT_SIMPLE_AUTOMATION_TEST(FCombatHysteresisTest, "BattleSystem.Combat.TargetHysteresis",
+	EAutomationTestFlags::EditorContext | EAutomationTestFlags::ProductFilter)
+
+bool FCombatHysteresisTest::RunTest(const FString& Parameters)
+{
+	// U stands still with dummy B 3 cells away; walker C approaches U. U may only switch once C is more than the margin closer.
+	FCombatSimConfig Config;
+	Config.Grid.Init(20, 12, 100.f);
+	Config.RetargetDistanceMargin = 150.f;
+	CombatTests::AddUnit(Config, CombatTests::MakeDummyStats(), 0, FIntPoint(5, 5));
+	CombatTests::AddUnit(Config, CombatTests::MakeDummyStats(), 1, FIntPoint(5, 8));
+	FCombatUnitStats Walker = CombatTests::MakeDummyStats();
+	Walker.MoveSpeed = 100.f;
+	CombatTests::AddUnit(Config, Walker, 1, FIntPoint(5, 0));
+
+	FCombatSimulation Simulation(Config);
+	Simulation.Step();
+	TestEqual(TEXT("First the nearest enemy B"), Simulation.GetUnits()[0].TargetId, 1);
+
+	bool bSwitched = false;
+	bool bSwitchedTooEarly = false;
+	for (int32 Step = 0; Step < 200 && !bSwitched; ++Step)
+	{
+		Simulation.Step();
+		const TArray<FCombatUnit>& Units = Simulation.GetUnits();
+		if (Units[0].TargetId == 2)
+		{
+			bSwitched = true;
+			// The decision used the positions at the start of this step.
+			const double ToB = FVector2D::Distance(Units[0].PreviousPosition, Units[1].PreviousPosition);
+			const double ToC = FVector2D::Distance(Units[0].PreviousPosition, Units[2].PreviousPosition);
+			bSwitchedTooEarly = ToB <= ToC + Config.RetargetDistanceMargin;
+		}
+	}
+	TestTrue(TEXT("Switches to C once it is clearly closer"), bSwitched);
+	TestFalse(TEXT("Not before C is more than the margin closer"), bSwitchedTooEarly);
+	return true;
+}
+
+IMPLEMENT_SIMPLE_AUTOMATION_TEST(FCombatTauntTest, "BattleSystem.Combat.TauntPullsEnemy",
+	EAutomationTestFlags::EditorContext | EAutomationTestFlags::ProductFilter)
+
+bool FCombatTauntTest::RunTest(const FString& Parameters)
+{
+	// The Brute goes for the archer (nearest); the tank's taunt must pull it to the tank.
+	FCombatSimConfig Config;
+	Config.Grid.Init(20, 12, 100.f);
+	Config.MaxFirstAttackDelayTicks = 0;
+
+	FCombatUnitStats Tank = CombatTests::MakeStats(400.f, 12.f, 24, 6);
+	FCombatAttackStats& Taunt = Tank.Attacks.AddDefaulted_GetRef();
+	Taunt.Range = 600.f;
+	Taunt.Damage = 0.f;
+	Taunt.CooldownTicks = 120;
+	Taunt.WindupTicks = 4;
+	Taunt.bNeedsWalkableLine = false;
+	Taunt.bAreaAroundSelf = true;
+	Taunt.Effects.Add(CombatTests::MakeTauntEffect(80));
+
+	FCombatUnitStats Brute = CombatTests::MakeStats(400.f, 20.f, 30, 10);
+	Brute.MoveSpeed = 220.f;
+
+	CombatTests::AddUnit(Config, Tank, 0, FIntPoint(10, 6));
+	CombatTests::AddUnit(Config, CombatTests::MakeArcherStats(600.f, 1500.f, 5.f), 0, FIntPoint(13, 1));
+	CombatTests::AddUnit(Config, Brute, 1, FIntPoint(17, 2));
+
+	FCombatSimulation Simulation(Config);
+	Simulation.Step();
+	TestEqual(TEXT("Without taunt the Brute goes for the archer"), Simulation.GetUnits()[2].TargetId, 1);
+
+	bool bPulled = false;
+	for (int32 Step = 0; Step < 200 && !bPulled; ++Step)
+	{
+		Simulation.Step();
+		const FCombatUnit& BruteUnit = Simulation.GetUnits()[2];
+		bPulled = BruteUnit.TargetId == 0 && BruteUnit.TargetReason == ECombatTargetReason::Taunt
+			&& BruteUnit.Effects.HasGrantedTag(CombatTags::Status_Taunted);
+	}
+	TestTrue(TEXT("The taunt pulls the Brute to the tank"), bPulled);
 	return true;
 }
 

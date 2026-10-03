@@ -8,6 +8,7 @@
 #include "Styling/CoreStyle.h"
 #include "Widgets/Input/SButton.h"
 #include "Widgets/Input/SEditableTextBox.h"
+#include "Widgets/Input/SSlider.h"
 #include "Widgets/Layout/SBorder.h"
 #include "Widgets/Layout/SBox.h"
 #include "Widgets/SBoxPanel.h"
@@ -17,6 +18,11 @@ namespace CombatControlPanel
 {
 	static const FLinearColor ActiveColor(0.2f, 0.8f, 0.3f);
 	static const float Speeds[] = { 0.5f, 1.f, 2.f, 4.f };
+
+	/** Taunt range slider: cm, in steps of TauntRangeStep. */
+	static const float MinTauntRange = 100.f;
+	static const float MaxTauntRange = 1000.f;
+	static const float TauntRangeStep = 50.f;
 }
 
 void SCombatControlPanel::Construct(const FArguments& InArgs)
@@ -150,6 +156,47 @@ void SCombatControlPanel::Construct(const FArguments& InArgs)
 				+ SHorizontalBox::Slot().AutoWidth()[ DebugRow ]
 			]
 
+			+ SVerticalBox::Slot().AutoHeight().Padding(0.f, 2.f)
+			[
+				SNew(SHorizontalBox)
+				+ SHorizontalBox::Slot().AutoWidth().VAlign(VAlign_Center)[ MakeLabel(INVTEXT("Taunt")) ]
+				+ SHorizontalBox::Slot().AutoWidth().Padding(0.f, 0.f, 4.f, 0.f)
+				[
+					MakeButton(INVTEXT("Asset"),
+						FOnClicked::CreateSP(this, &SCombatControlPanel::OnTauntRangeAssetClicked),
+						TAttribute<FSlateColor>::CreateSP(this, &SCombatControlPanel::GetTauntRangeAssetColor))
+				]
+				+ SHorizontalBox::Slot().FillWidth(1.f).VAlign(VAlign_Center).Padding(0.f, 0.f, 4.f, 0.f)
+				[
+					SNew(SBox)
+					.MinDesiredWidth(120.f)
+					[
+						SNew(SSlider)
+						.MinValue(CombatControlPanel::MinTauntRange)
+						.MaxValue(CombatControlPanel::MaxTauntRange)
+						.StepSize(CombatControlPanel::TauntRangeStep)
+						.Value(this, &SCombatControlPanel::GetTauntRangeSliderValue)
+						.OnValueChanged(this, &SCombatControlPanel::OnTauntRangeChanged)
+					]
+				]
+				+ SHorizontalBox::Slot().AutoWidth().VAlign(VAlign_Center)
+				[
+					SNew(STextBlock).Text(this, &SCombatControlPanel::GetTauntRangeText)
+				]
+			]
+
+			+ SVerticalBox::Slot().AutoHeight().Padding(0.f, 2.f)
+			[
+				SNew(SHorizontalBox)
+				+ SHorizontalBox::Slot().AutoWidth().VAlign(VAlign_Center)[ MakeLabel(INVTEXT("Show")) ]
+				+ SHorizontalBox::Slot().AutoWidth()
+				[
+					MakeButton(INVTEXT("Taunt range"),
+						FOnClicked::CreateSP(this, &SCombatControlPanel::OnShowRangesClicked),
+						TAttribute<FSlateColor>::CreateSP(this, &SCombatControlPanel::GetShowRangesColor))
+				]
+			]
+
 			+ SVerticalBox::Slot().AutoHeight().Padding(0.f, 8.f, 0.f, 0.f)
 			[
 				SNew(STextBlock).Text(this, &SCombatControlPanel::GetStatusText)
@@ -231,6 +278,54 @@ FReply SCombatControlPanel::OnDebugClicked(int32 Level)
 	return FReply::Handled();
 }
 
+FReply SCombatControlPanel::OnShowRangesClicked()
+{
+	if (IConsoleVariable* CVar = IConsoleManager::Get().FindConsoleVariable(TEXT("Combat.ShowRanges")))
+	{
+		CVar->Set(AreRangesShown() ? 0 : 1, ECVF_SetByConsole);
+	}
+	return FReply::Handled();
+}
+
+FReply SCombatControlPanel::OnTauntRangeAssetClicked()
+{
+	if (UCombatSubsystem* CombatSubsystem = Subsystem.Get())
+	{
+		CombatSubsystem->SetTauntRangeOverride(0.f);
+	}
+	return FReply::Handled();
+}
+
+void SCombatControlPanel::OnTauntRangeChanged(float Value)
+{
+	if (UCombatSubsystem* CombatSubsystem = Subsystem.Get())
+	{
+		CombatSubsystem->SetTauntRangeOverride(FMath::GridSnap(Value, CombatControlPanel::TauntRangeStep));
+	}
+}
+
+FSlateColor SCombatControlPanel::GetTauntRangeAssetColor() const
+{
+	const UCombatSubsystem* CombatSubsystem = Subsystem.Get();
+	return CombatSubsystem && CombatSubsystem->GetTauntRangeOverride() <= 0.f ? CombatControlPanel::ActiveColor : FLinearColor::White;
+}
+
+float SCombatControlPanel::GetTauntRangeSliderValue() const
+{
+	const UCombatSubsystem* CombatSubsystem = Subsystem.Get();
+	const float Override = CombatSubsystem ? CombatSubsystem->GetTauntRangeOverride() : 0.f;
+	return Override > 0.f ? Override : CombatControlPanel::MinTauntRange;
+}
+
+FText SCombatControlPanel::GetTauntRangeText() const
+{
+	const UCombatSubsystem* CombatSubsystem = Subsystem.Get();
+	const float Override = CombatSubsystem ? CombatSubsystem->GetTauntRangeOverride() : 0.f;
+	return Override > 0.f
+		? FText::FromString(FString::Printf(TEXT("%.1f m (on Start)"), Override / 100.f))
+		: INVTEXT("from asset");
+}
+
 FText SCombatControlPanel::GetStatusText() const
 {
 	const UCombatSubsystem* CombatSubsystem = Subsystem.Get();
@@ -272,6 +367,17 @@ FSlateColor SCombatControlPanel::GetSpeedColor(float Speed) const
 FSlateColor SCombatControlPanel::GetDebugColor(int32 Level) const
 {
 	return GetDebugLevel() == Level ? CombatControlPanel::ActiveColor : FLinearColor::White;
+}
+
+FSlateColor SCombatControlPanel::GetShowRangesColor() const
+{
+	return AreRangesShown() ? CombatControlPanel::ActiveColor : FLinearColor::White;
+}
+
+bool SCombatControlPanel::AreRangesShown()
+{
+	const IConsoleVariable* CVar = IConsoleManager::Get().FindConsoleVariable(TEXT("Combat.ShowRanges"));
+	return CVar && CVar->GetInt() > 0;
 }
 
 int32 SCombatControlPanel::GetDebugLevel()

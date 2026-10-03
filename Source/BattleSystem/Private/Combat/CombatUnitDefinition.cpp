@@ -10,13 +10,15 @@ FCombatUnitStats UCombatUnitDefinition::ToSimStats(int32 TickRate) const
 	Stats.MaxHP = MaxHP;
 	Stats.MoveSpeed = MoveSpeed;
 	Stats.Radius = Radius;
+	Stats.Tags = Tags;
 
 	for (int32 Index = 0; Index < Attacks.Num(); ++Index)
 	{
 		const FCombatAttackDefinition& Definition = Attacks[Index];
 		const bool bMelee = Definition.Type.MatchesTagExact(CombatTags::Attack_Melee);
 		const bool bRanged = Definition.Type.MatchesTagExact(CombatTags::Attack_Ranged);
-		if (!bMelee && !bRanged)
+		const bool bTaunt = Definition.Type.MatchesTagExact(CombatTags::Attack_Taunt);
+		if (!bMelee && !bRanged && !bTaunt)
 		{
 			continue;
 		}
@@ -31,6 +33,19 @@ FCombatUnitStats UCombatUnitDefinition::ToSimStats(int32 TickRate) const
 		Attack.bNeedsLineOfSight = bRanged && Definition.bRequiresLineOfSight;
 		Attack.ProjectileSpeed = bRanged ? Definition.ProjectileSpeed : 0.f;
 		Attack.SourceIndex = Index;
+		Attack.ThreatMultiplier = Definition.ThreatMultiplier;
+		Attack.bAreaAroundSelf = bTaunt;
+
+		for (const FCombatEffectDefinition& EffectDefinition : Definition.Effects)
+		{
+			FCombatEffectStats& Effect = Attack.Effects.AddDefaulted_GetRef();
+			Effect.EffectTag = EffectDefinition.EffectTag;
+			Effect.DurationTicks = FMath::Max(FMath::RoundToInt32(EffectDefinition.Duration * TickRate), 1);
+			Effect.Stacking = EffectDefinition.Stacking;
+			Effect.MaxStacks = FMath::Max(EffectDefinition.MaxStacks, 1);
+			Effect.GrantedTags = EffectDefinition.GrantedTags;
+			Effect.BlockedByTags = EffectDefinition.BlockedByTags;
+		}
 	}
 	return Stats;
 }

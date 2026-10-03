@@ -27,6 +27,13 @@ UNITS = {
     ]),
     # Stands still and never attacks: a target for checks.
     "DA_Doelpop": dict(name="Doelpop", max_hp=300.0, move_speed=0.0, radius=40.0, attacks=[]),
+    # Melee with 3x threat, plus a taunt around itself (6 m) that makes enemies target it for 4 s.
+    "DA_Tank": dict(name="Tank", max_hp=400.0, move_speed=250.0, radius=55.0, attacks=[
+        dict(type="Attack.Melee", range=70.0, cooldown=1.2, windup=0.3, damage=12.0, threat_multiplier=3.0),
+        dict(type="Attack.Taunt", range=600.0, cooldown=6.0, windup=0.2, damage=0.0, effects=[
+            dict(effect_tag="Effect.Taunt", duration=4.0, stacking="REFRESH", granted_tags=["Status.Taunted"]),
+        ]),
+    ]),
 }
 
 # Setup asset -> [(unit asset, team, start cell)], on a 20x12 grid.
@@ -49,6 +56,15 @@ SETUPS = {
     "DA_Setup_Archer": [
         ("DA_Boogschutter", 0, (3, 2)),
         ("DA_Doelpop", 1, (9, 2)),
+    ],
+    # Phase 4 check: the outer Brutes go for the archers on the flanks until the tank taunts them.
+    "DA_Setup_Taunt": [
+        ("DA_Tank", 0, (10, 6)),
+        ("DA_Boogschutter", 0, (13, 1)),
+        ("DA_Boogschutter", 0, (13, 11)),
+        ("DA_Brute", 1, (17, 2)),
+        ("DA_Brute", 1, (17, 6)),
+        ("DA_Brute", 1, (17, 10)),
     ],
     "DA_Setup_Mixed": [
         ("DA_Krijger", 0, (2, 3)),
@@ -87,6 +103,26 @@ def make_tag(tag_name):
     return tag
 
 
+def make_tag_container(tag_names):
+    container = unreal.GameplayTagContainer()
+    tags = ",".join(f'(TagName="{name}")' for name in tag_names)
+    container.import_text(f"(GameplayTags=({tags}))")
+    return container
+
+
+def make_effect(values):
+    effect = unreal.CombatEffectDefinition()
+    for key, value in values.items():
+        if key == "effect_tag":
+            value = make_tag(value)
+        elif key in ("granted_tags", "blocked_by_tags"):
+            value = make_tag_container(value)
+        elif key == "stacking":
+            value = getattr(unreal.CombatEffectStacking, value)
+        effect.set_editor_property(key, value)
+    return effect
+
+
 def main():
     definitions = {}
     to_save = []
@@ -106,7 +142,9 @@ def main():
             attack = unreal.CombatAttackDefinition()
             attack.set_editor_property("type", make_tag(attack_values["type"]))
             for key, value in attack_values.items():
-                if key != "type":
+                if key == "effects":
+                    attack.set_editor_property("effects", [make_effect(effect) for effect in value])
+                elif key != "type":
                     attack.set_editor_property(key, value)
             attacks.append(attack)
         definition.set_editor_property("attacks", attacks)

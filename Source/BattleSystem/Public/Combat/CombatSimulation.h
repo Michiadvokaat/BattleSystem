@@ -6,6 +6,7 @@
 #include "GameplayTagContainer.h"
 #include "Math/RandomStream.h"
 #include "Combat/CombatDistanceMap.h"
+#include "Combat/CombatEffects.h"
 #include "Combat/CombatGridData.h"
 
 /** One attack as the simulation sees it. */
@@ -27,8 +28,16 @@ struct FCombatAttackStats
 	float ProjectileSpeed = 0.f;
 	/** Index of this attack in the unit definition's Attacks, for the presentation layer. */
 	int32 SourceIndex = INDEX_NONE;
+	/** Threat the target gets on the attacker per point of damage. */
+	float ThreatMultiplier = 1.f;
+	/** Area around the unit itself (taunt): hits every enemy whose edge is within Range; needs no target. */
+	bool bAreaAroundSelf = false;
+	/** Applied to the target(s) when the attack lands. */
+	TArray<FCombatEffectStats> Effects;
 
-	bool IsRanged() const { return !bNeedsWalkableLine; }
+	bool IsRanged() const { return !bNeedsWalkableLine && !bAreaAroundSelf; }
+	/** Attacks aimed at the unit's target (not area attacks). */
+	bool IsTargeted() const { return !bAreaAroundSelf; }
 };
 
 /** Unit stats as the simulation sees them: copied from a definition at fight start, times in ticks. */
@@ -41,6 +50,8 @@ struct FCombatUnitStats
 	float Radius = 40.f;
 
 	TArray<FCombatAttackStats, TInlineAllocator<2>> Attacks;
+	/** Innate tags (for example immunities checked by BlockedByTags). */
+	FGameplayTagContainer Tags;
 };
 
 struct FCombatUnitSpawn
@@ -68,6 +79,36 @@ struct FCombatSimConfig
 	int32 PathLookaheadCells = 8;
 	/** Fraction of the overlap between two units that is pushed apart per tick (0..1). */
 	float SeparationStrength = 0.5f;
+
+	/** Threat decay per tick: threat = threat * ThreatDecayFactorPerTick - ThreatDecayAmountPerTick (half-life or linear). */
+	float ThreatDecayFactorPerTick = 1.f;
+	float ThreatDecayAmountPerTick = 0.f;
+	/** Threat below this does not count for targeting. */
+	float ThreatThreshold = 5.f;
+	/** A unit on a threat target only switches to an enemy with this many times more threat. */
+	float ThreatSwitchRatio = 1.2f;
+	/** A unit on a nearest target only switches to an enemy that is this many cm closer (as the crow flies). */
+	float RetargetDistanceMargin = 150.f;
+};
+
+/** Why a unit has its current target; also the order of priority. */
+enum class ECombatTargetReason : uint8
+{
+	None,
+	/** Nearest enemy by walking distance (or as the crow flies if none is reachable). */
+	Nearest,
+	/** Ranged: an enemy it can shoot right now. */
+	Visible,
+	/** The enemy with the most threat on this unit. */
+	Threat,
+	/** The source of a Status.Taunted effect. */
+	Taunt,
+};
+
+struct FCombatThreatEntry
+{
+	int32 EnemyId = INDEX_NONE;
+	float Threat = 0.f;
 };
 
 struct FCombatUnit
@@ -85,6 +126,7 @@ struct FCombatUnit
 	float HP = 0.f;
 	bool bAlive = true;
 	int32 TargetId = INDEX_NONE;
+	ECombatTargetReason TargetReason = ECombatTargetReason::None;
 	/** The point the unit steered towards in the last step (the target, or a point on its route). For debugging. */
 	FVector2D SteerPoint = FVector2D::ZeroVector;
 
@@ -96,6 +138,17 @@ struct FCombatUnit
 	int32 WindupTicks = 0;
 	int32 WindupTargetId = INDEX_NONE;
 	int32 WindupAttackIndex = INDEX_NONE;
+
+	/** Threat per enemy that damaged this unit; at most MaxThreatEntries. */
+	TArray<FCombatThreatEntry, TInlineAllocator<8>> Threat;
+	FCombatEffectList Effects;
+
+	/** Own A* route (start to goal cell) when the target is not the one the team's distance map leads to. */
+	TArray<FIntPoint> Path;
+
+	static constexpr int32 MaxThreatEntries = 8;
+
+	float GetThreatOn(int32 EnemyId) const;
 };
 
 /** A projectile in flight. It homes in on its target and is removed when it hits, is blocked, or its target dies. */
@@ -113,6 +166,7 @@ struct FCombatProjectile
 	/** cm per second. */
 	float Speed = 0.f;
 	float Damage = 0.f;
+	float Threat = 0.f;
 	bool bEnded = false;
 };
 
@@ -128,6 +182,10 @@ enum class ECombatEventType : uint8
 	ProjectileSpawned,
 	/** Projectile ProjectileId is gone: it hit, was blocked, or its target died. */
 	ProjectileEnded,
+	/** SourceId's attack AttackIndex applied an effect to TargetId. */
+	EffectApplied,
+	/** SourceId's area attack AttackIndex went off; Amount = its reach in cm from the unit's center. */
+	AreaAttackFired,
 };
 
 struct FCombatEvent
@@ -194,12 +252,20 @@ private:
 	{
 		int32 SourceId;
 		int32 TargetId;
+		int32 AttackIndex;
 		float Damage;
+		float Threat;
 	};
 
 	void RebuildDistanceMaps();
 	int32 FindNearestEnemy(const FCombatUnit& Unit) const;
-	int32 ChooseTarget(const FCombatUnit& Unit) const;
+	/** Taunt immediately; otherwise every RetargetIntervalTicks (or without a valid target) by priority, with hysteresis. */
+	void UpdateTarget(FCombatUnit& Unit);
+	void ChooseTarget(FCombatUnit& Unit) const;
+	int32 FindNearestByWalking(const FCombatUnit& Unit) const;
+	bool CanShootNow(const FCombatUnit& Unit, const FCombatUnit& Other) const;
+	/** An area attack that is off cooldown and would reach an enemy that does not have its effects from this unit yet. */
+	int32 FindReadyAreaAttack(const FCombatUnit& Unit) const;
 	/** For units with a ranged attack: the nearest enemy that attack can hit right now, or INDEX_NONE. */
 	int32 FindVisibleEnemyInRange(const FCombatUnit& Unit) const;
 	/** The attack with the smallest range that can reach the target now (cooldown not considered), or INDEX_NONE. */
@@ -207,16 +273,20 @@ private:
 	void UpdateUnit(FCombatUnit& Unit);
 	/** Targeting and attacks; returns the movement the unit wants this step (before separation). */
 	FVector2D UpdateCombat(FCombatUnit& Unit);
-	FVector2D FindRouteSteerPoint(const FCombatUnit& Unit) const;
+	FVector2D FindRouteSteerPoint(FCombatUnit& Unit) const;
 	FVector2D ComputeSeparation(const FCombatUnit& Unit) const;
 	/** Moves from From towards To without ending in a blocked cell, sliding along one axis if needed. */
 	FVector2D ResolveMove(const FVector2D& From, const FVector2D& To) const;
 	void TryStartAttack(FCombatUnit& Unit, const FCombatUnit& Target, int32 AttackIndex);
+	/** Starts an attack (event, cooldown, windup or fire); TargetId is INDEX_NONE for area attacks. */
+	void StartAttack(FCombatUnit& Unit, int32 TargetId, int32 AttackIndex);
 	/** End of the windup: queue the hit, or spawn the projectile. */
 	void FireAttack(const FCombatUnit& Unit, int32 AttackIndex, int32 TargetId);
 	void UpdateProjectiles();
 	void EndProjectile(FCombatProjectile& Projectile);
 	void ApplyPendingHits();
+	void AddThreat(FCombatUnit& Unit, int32 EnemyId, float Amount);
+	void DecayThreat(FCombatUnit& Unit);
 	void UpdateOutcome();
 	uint32 ComputeChecksum() const;
 

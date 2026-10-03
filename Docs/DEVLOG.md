@@ -34,3 +34,15 @@ Dated history: decisions, bugs, rejected approaches. Newest entries at the botto
 - In-game control panel, built fully in C++ (Slate, at the user's request rather than a Widget Blueprint). `ACombatHUD` shows `SCombatControlPanel` with setup, seed, start/stop, pause, speed and debug-level controls, plus a status line. Pause/speed only scale the presentation accumulator. `bAutoStartFight` is now off, so fights start from the panel. There are no automated UI tests; the user checks it in PIE.
 - Ranged units (any ranged attack) show as a cube, melee units and units without attacks as a cylinder (`MeleeBodyMesh`/`RangedBodyMesh` on `ACombatUnitActor`, overridable per Blueprint).
 - Phase 3 done: the user checked the fights and the control panel in PIE.
+- Phase 4 code:
+  - Effect model (`FCombatEffectList`: tags, duration in ticks, Refresh/Stack/Ignore, BlockedByTags).
+  - Threat list of 8 per unit (damage × `ThreatMultiplier`). Decay is a half-life or linear (`ThreatDecayMode`, at the user's request), expressed as factor and amount per tick.
+  - Target choice every retarget interval in the order taunt > threat > visible > nearest, with hysteresis.
+  - Own A* route (`CombatPathfinding::FindPath`) when the target is not the team map's nearest.
+  - `Attack.Taunt` as an area attack around the unit.
+  - Debug colors per target reason. Test assets `DA_Tank` and `DA_Setup_Taunt`.
+- Effect checksums use indices, not tag names: FName indices are not stable between processes.
+- Behavior change: `DA_Setup_Test` now ends after 233 ticks instead of 331 (units turn to whoever hits them and switch targets less). In `DA_Setup_Taunt`, team 1 (3 Brutes) wins with seeds 42 and 7.
+- Taunt visibility: a short magenta circle when an area attack (taunt) goes off (`AreaAttackFired` event → `ACombatUnitActor::OnAreaAttack`), and a permanent range circle via `Combat.ShowRanges` / the panel button "Taunt range".
+- Taunt range slider in the panel (an override applied at the next Start; "Asset" uses the Data Asset), and a magenta "T" above every unit with `Status.Taunted`.
+- Phase 4 done: the user checked taunt, the range circle, the slider and the T marker in PIE.

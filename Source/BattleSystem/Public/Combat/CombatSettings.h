@@ -8,6 +8,16 @@
 
 class UCombatSetup;
 
+/** How threat decreases over time. */
+UENUM()
+enum class ECombatThreatDecayMode : uint8
+{
+	/** Threat halves every ThreatHalfLife seconds: large values drop fast, small ones linger. */
+	HalfLife,
+	/** ThreatDecayPerSecond is subtracted every second: whoever built up a lot keeps it long. */
+	Linear,
+};
+
 /** Combat tuning values. Project Settings > Game > Combat, saved to DefaultGame.ini. */
 UCLASS(Config = Game, DefaultConfig, meta = (DisplayName = "Combat"))
 class BATTLESYSTEM_API UCombatSettings : public UDeveloperSettings
@@ -44,6 +54,30 @@ public:
 	/** Fraction of the overlap between two units that is pushed apart per tick. */
 	UPROPERTY(Config, EditAnywhere, Category = "Movement", meta = (ClampMin = 0, ClampMax = 1))
 	float SeparationStrength = 0.5f;
+
+	/** How threat decreases over time. */
+	UPROPERTY(Config, EditAnywhere, Category = "Threat")
+	ECombatThreatDecayMode ThreatDecayMode = ECombatThreatDecayMode::HalfLife;
+
+	/** HalfLife mode: seconds in which threat halves. */
+	UPROPERTY(Config, EditAnywhere, Category = "Threat", meta = (ClampMin = 0.1, Units = "s", EditCondition = "ThreatDecayMode == ECombatThreatDecayMode::HalfLife"))
+	float ThreatHalfLife = 4.f;
+
+	/** Linear mode: threat subtracted per second (down to 0). */
+	UPROPERTY(Config, EditAnywhere, Category = "Threat", meta = (ClampMin = 0, EditCondition = "ThreatDecayMode == ECombatThreatDecayMode::Linear"))
+	float ThreatDecayPerSecond = 5.f;
+
+	/** Threat below this does not count for targeting. */
+	UPROPERTY(Config, EditAnywhere, Category = "Threat", meta = (ClampMin = 0))
+	float ThreatThreshold = 5.f;
+
+	/** A unit on a threat target only switches to an enemy with this many times more threat (1.2 = 20% more). */
+	UPROPERTY(Config, EditAnywhere, Category = "Threat", meta = (ClampMin = 1))
+	float ThreatSwitchRatio = 1.2f;
+
+	/** A unit on a nearest target only switches to an enemy that is this much closer. */
+	UPROPERTY(Config, EditAnywhere, Category = "Threat", meta = (ClampMin = 0, Units = "cm"))
+	float RetargetDistanceMargin = 150.f;
 
 	/** Start a fight automatically when an arena with ACombatGameMode begins play. */
 	UPROPERTY(Config, EditAnywhere, Category = "Arena")

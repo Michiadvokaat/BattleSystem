@@ -41,6 +41,13 @@ public:
 	void SetTimeScale(float InTimeScale) { TimeScale = FMath::Max(InTimeScale, 0.f); }
 	float GetTimeScale() const { return TimeScale; }
 
+	/**
+	 * Range (cm, edge to edge) for every taunt in fights started with StartFight; 0 = the Range from the Data Asset.
+	 * Applied at the next start, so a running fight never changes.
+	 */
+	void SetTauntRangeOverride(float InRange) { TauntRangeOverride = FMath::Max(InRange, 0.f); }
+	float GetTauntRangeOverride() const { return TauntRangeOverride; }
+
 	/** Seed and setup name of the current (or last) fight. */
 	int32 GetCurrentSeed() const { return CurrentSeed; }
 	const FString& GetCurrentSetupName() const { return CurrentSetupName; }
@@ -68,6 +75,8 @@ private:
 	void UpdateActors(float Alpha);
 	/** Debug lines and distance-map numbers, depending on the Combat.Debug console variable. */
 	void DrawDebug(float Alpha) const;
+	/** Range circles of area attacks (taunt), depending on the Combat.ShowRanges console variable. */
+	void DrawAreaRanges(float Alpha) const;
 	void ReportResult() const;
 	FVector SimToWorld(const FVector2D& Local) const { return GridOrigin + FVector(Local.X, Local.Y, 0.0); }
 
@@ -91,6 +100,7 @@ private:
 
 	bool bPaused = false;
 	float TimeScale = 1.f;
+	float TauntRangeOverride = 0.f;
 	int32 CurrentSeed = 0;
 	FString CurrentSetupName;
 };

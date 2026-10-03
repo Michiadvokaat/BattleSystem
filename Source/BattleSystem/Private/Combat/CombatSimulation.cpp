@@ -1,7 +1,15 @@
 // Copyright Epic Games, Inc. All Rights Reserved.
 
 #include "Combat/CombatSimulation.h"
+#include "Combat/CombatPathfinding.h"
+#include "Combat/CombatTags.h"
 #include "Misc/Crc.h"
+
+float FCombatUnit::GetThreatOn(int32 EnemyId) const
+{
+	const FCombatThreatEntry* Entry = Threat.FindByPredicate([EnemyId](const FCombatThreatEntry& Candidate) { return Candidate.EnemyId == EnemyId; });
+	return Entry ? Entry->Threat : 0.f;
+}
 
 FCombatSimulation::FCombatSimulation(const FCombatSimConfig& InConfig)
 	: Config(InConfig)
@@ -58,6 +66,15 @@ void FCombatSimulation::Step()
 	for (FCombatProjectile& Projectile : Projectiles)
 	{
 		Projectile.PreviousPosition = Projectile.Position;
+	}
+
+	for (FCombatUnit& Unit : Units)
+	{
+		if (Unit.bAlive)
+		{
+			Unit.Effects.Tick();
+			DecayThreat(Unit);
+		}
 	}
 
 	if (bDistanceMapsDirty || (Tick - 1) % FMath::Max(Config.RetargetIntervalTicks, 1) == 0)
@@ -135,15 +152,75 @@ void FCombatSimulation::RebuildDistanceMaps()
 	bDistanceMapsDirty = false;
 }
 
-int32 FCombatSimulation::ChooseTarget(const FCombatUnit& Unit) const
+void FCombatSimulation::UpdateTarget(FCombatUnit& Unit)
 {
-	// A unit with a ranged attack first takes an enemy it can shoot right now.
+	// A taunt overrides everything, right away.
+	const int32 TaunterId = Unit.Effects.FindSourceOfTag(CombatTags::Status_Taunted);
+	if (TaunterId != INDEX_NONE && Units[TaunterId].bAlive && Units[TaunterId].Team != Unit.Team)
+	{
+		Unit.TargetId = TaunterId;
+		Unit.TargetReason = ECombatTargetReason::Taunt;
+		return;
+	}
+
+	const bool bHasTarget = Unit.TargetId != INDEX_NONE && Units[Unit.TargetId].bAlive;
+	const bool bRetargetTick = (Tick - 1) % FMath::Max(Config.RetargetIntervalTicks, 1) == 0;
+	if (bRetargetTick || !bHasTarget || Unit.TargetReason == ECombatTargetReason::Taunt)
+	{
+		ChooseTarget(Unit);
+	}
+}
+
+void FCombatSimulation::ChooseTarget(FCombatUnit& Unit) const
+{
+	const int32 CurrentId = Unit.TargetId != INDEX_NONE && Units[Unit.TargetId].bAlive ? Unit.TargetId : INDEX_NONE;
+
+	// 1. The most threat above the threshold. Stay on the current target unless another has clearly more.
+	int32 BestThreatId = INDEX_NONE;
+	float BestThreat = 0.f;
+	for (const FCombatThreatEntry& Entry : Unit.Threat)
+	{
+		if (Units[Entry.EnemyId].bAlive
+			&& (BestThreatId == INDEX_NONE || Entry.Threat > BestThreat || (Entry.Threat == BestThreat && Entry.EnemyId < BestThreatId)))
+		{
+			BestThreatId = Entry.EnemyId;
+			BestThreat = Entry.Threat;
+		}
+	}
+	if (BestThreatId != INDEX_NONE && BestThreat >= Config.ThreatThreshold)
+	{
+		const float CurrentThreat = CurrentId != INDEX_NONE ? Unit.GetThreatOn(CurrentId) : 0.f;
+		const bool bKeep = CurrentThreat >= Config.ThreatThreshold && BestThreat < CurrentThreat * Config.ThreatSwitchRatio;
+		Unit.TargetId = bKeep ? CurrentId : BestThreatId;
+		Unit.TargetReason = ECombatTargetReason::Threat;
+		return;
+	}
+
+	// 2. Ranged: an enemy it can shoot right now. Stay on the current target while it can still be shot.
 	const int32 VisibleId = FindVisibleEnemyInRange(Unit);
 	if (VisibleId != INDEX_NONE)
 	{
-		return VisibleId;
+		const bool bKeep = CurrentId != INDEX_NONE && CanShootNow(Unit, Units[CurrentId]);
+		Unit.TargetId = bKeep ? CurrentId : VisibleId;
+		Unit.TargetReason = ECombatTargetReason::Visible;
+		return;
 	}
 
+	// 3. Nearest by walking. Stay on the current target unless the new one is clearly closer.
+	const int32 NearestId = FindNearestByWalking(Unit);
+	bool bKeep = false;
+	if (NearestId != INDEX_NONE && CurrentId != INDEX_NONE && CurrentId != NearestId)
+	{
+		const double CurrentDistance = FVector2D::Distance(Unit.PreviousPosition, Units[CurrentId].PreviousPosition);
+		const double NearestDistance = FVector2D::Distance(Unit.PreviousPosition, Units[NearestId].PreviousPosition);
+		bKeep = CurrentDistance <= NearestDistance + Config.RetargetDistanceMargin;
+	}
+	Unit.TargetId = bKeep ? CurrentId : NearestId;
+	Unit.TargetReason = Unit.TargetId != INDEX_NONE ? ECombatTargetReason::Nearest : ECombatTargetReason::None;
+}
+
+int32 FCombatSimulation::FindNearestByWalking(const FCombatUnit& Unit) const
+{
 	// Nearest enemy by walking distance; as the crow flies if no enemy is reachable.
 	if (const FCombatDistanceMap* Map = GetDistanceMap(Unit.Team))
 	{
@@ -156,8 +233,13 @@ int32 FCombatSimulation::ChooseTarget(const FCombatUnit& Unit) const
 	return FindNearestEnemy(Unit);
 }
 
-int32 FCombatSimulation::FindVisibleEnemyInRange(const FCombatUnit& Unit) const
+bool FCombatSimulation::CanShootNow(const FCombatUnit& Unit, const FCombatUnit& Other) const
 {
+	if (!Other.bAlive || Other.Team == Unit.Team)
+	{
+		return false;
+	}
+
 	const FCombatAttackStats* Ranged = nullptr;
 	for (const FCombatAttackStats& Attack : Unit.Stats.Attacks)
 	{
@@ -168,22 +250,22 @@ int32 FCombatSimulation::FindVisibleEnemyInRange(const FCombatUnit& Unit) const
 	}
 	if (!Ranged)
 	{
-		return INDEX_NONE;
+		return false;
 	}
 
+	const double Gap = FVector2D::Distance(Unit.PreviousPosition, Other.PreviousPosition) - Unit.Stats.Radius - Other.Stats.Radius;
+	return Gap <= Ranged->Range
+		&& (!Ranged->bNeedsLineOfSight || Config.Grid.HasLineOfSight(Unit.PreviousPosition, Other.PreviousPosition));
+}
+
+int32 FCombatSimulation::FindVisibleEnemyInRange(const FCombatUnit& Unit) const
+{
 	int32 BestId = INDEX_NONE;
 	double BestDistSq = TNumericLimits<double>::Max();
 	for (const FCombatUnit& Other : Units)
 	{
-		if (!Other.bAlive || Other.Team == Unit.Team)
-		{
-			continue;
-		}
-
 		const double DistSq = FVector2D::DistSquared(Unit.PreviousPosition, Other.PreviousPosition);
-		const double Gap = FMath::Sqrt(DistSq) - Unit.Stats.Radius - Other.Stats.Radius;
-		if (DistSq < BestDistSq && Gap <= Ranged->Range
-			&& (!Ranged->bNeedsLineOfSight || Config.Grid.HasLineOfSight(Unit.PreviousPosition, Other.PreviousPosition)))
+		if (DistSq < BestDistSq && CanShootNow(Unit, Other))
 		{
 			BestDistSq = DistSq;
 			BestId = Other.Id;
@@ -192,13 +274,50 @@ int32 FCombatSimulation::FindVisibleEnemyInRange(const FCombatUnit& Unit) const
 	return BestId;
 }
 
+int32 FCombatSimulation::FindReadyAreaAttack(const FCombatUnit& Unit) const
+{
+	for (int32 Index = 0; Index < Unit.Stats.Attacks.Num(); ++Index)
+	{
+		const FCombatAttackStats& Attack = Unit.Stats.Attacks[Index];
+		if (!Attack.bAreaAroundSelf || Unit.AttackCooldowns[Index] > 0)
+		{
+			continue;
+		}
+
+		for (const FCombatUnit& Other : Units)
+		{
+			if (!Other.bAlive || Other.Team == Unit.Team)
+			{
+				continue;
+			}
+
+			const double Gap = FVector2D::Distance(Unit.PreviousPosition, Other.PreviousPosition) - Unit.Stats.Radius - Other.Stats.Radius;
+			if (Gap > Attack.Range || (Attack.bNeedsLineOfSight && !Config.Grid.HasLineOfSight(Unit.PreviousPosition, Other.PreviousPosition)))
+			{
+				continue;
+			}
+
+			// Worth using if it deals damage, or if an enemy in range lacks one of its effects from this unit.
+			const bool bMissingEffect = Attack.Effects.ContainsByPredicate([&Other, &Unit](const FCombatEffectStats& Effect)
+			{
+				return !Other.Effects.HasEffectFromSource(Effect.EffectTag, Unit.Id);
+			});
+			if (Attack.Damage > 0.f || bMissingEffect)
+			{
+				return Index;
+			}
+		}
+	}
+	return INDEX_NONE;
+}
+
 int32 FCombatSimulation::FindUsableAttack(const FCombatUnit& Unit, double Gap, bool bClearWalkingLine, bool bLineOfSight) const
 {
 	int32 BestIndex = INDEX_NONE;
 	for (int32 Index = 0; Index < Unit.Stats.Attacks.Num(); ++Index)
 	{
 		const FCombatAttackStats& Attack = Unit.Stats.Attacks[Index];
-		const bool bCanReach = Gap <= Attack.Range
+		const bool bCanReach = Attack.IsTargeted() && Gap <= Attack.Range
 			&& (!Attack.bNeedsWalkableLine || bClearWalkingLine)
 			&& (!Attack.bNeedsLineOfSight || bLineOfSight);
 		if (bCanReach && (BestIndex == INDEX_NONE || Attack.Range < Unit.Stats.Attacks[BestIndex].Range))
@@ -234,7 +353,7 @@ FVector2D FCombatSimulation::UpdateCombat(FCombatUnit& Unit)
 	{
 		if (--Unit.WindupTicks == 0)
 		{
-			if (Units[Unit.WindupTargetId].bAlive)
+			if (Unit.WindupTargetId == INDEX_NONE || Units[Unit.WindupTargetId].bAlive)
 			{
 				FireAttack(Unit, Unit.WindupAttackIndex, Unit.WindupTargetId);
 			}
@@ -244,7 +363,15 @@ FVector2D FCombatSimulation::UpdateCombat(FCombatUnit& Unit)
 		return FVector2D::ZeroVector;
 	}
 
-	Unit.TargetId = ChooseTarget(Unit);
+	// Area attacks (taunt) need no target and go first.
+	const int32 AreaIndex = FindReadyAreaAttack(Unit);
+	if (AreaIndex != INDEX_NONE)
+	{
+		StartAttack(Unit, INDEX_NONE, AreaIndex);
+		return FVector2D::ZeroVector;
+	}
+
+	UpdateTarget(Unit);
 	if (Unit.TargetId == INDEX_NONE)
 	{
 		return FVector2D::ZeroVector;
@@ -272,7 +399,7 @@ FVector2D FCombatSimulation::UpdateCombat(FCombatUnit& Unit)
 		double StopGap = 0.0;
 		for (const FCombatAttackStats& Attack : Unit.Stats.Attacks)
 		{
-			if (!Attack.bNeedsLineOfSight || bLineOfSight)
+			if (Attack.IsTargeted() && (!Attack.bNeedsLineOfSight || bLineOfSight))
 			{
 				StopGap = FMath::Max<double>(StopGap, Attack.Range);
 			}
@@ -287,7 +414,7 @@ FVector2D FCombatSimulation::UpdateCombat(FCombatUnit& Unit)
 		return Direction * FMath::Min(MaxStep, Gap - StopGap + 1.0);
 	}
 
-	// Something in the way: follow the route of the distance map.
+	// Something in the way: follow a route around it.
 	Unit.SteerPoint = FindRouteSteerPoint(Unit);
 	const FVector2D ToSteer = Unit.SteerPoint - Unit.PreviousPosition;
 	const double SteerDistance = ToSteer.Size();
@@ -298,30 +425,54 @@ FVector2D FCombatSimulation::UpdateCombat(FCombatUnit& Unit)
 	return ToSteer / SteerDistance * FMath::Min(MaxStep, SteerDistance);
 }
 
-FVector2D FCombatSimulation::FindRouteSteerPoint(const FCombatUnit& Unit) const
+FVector2D FCombatSimulation::FindRouteSteerPoint(FCombatUnit& Unit) const
 {
+	const FCombatGridData& Grid = Config.Grid;
+	const FCombatUnit& Target = Units[Unit.TargetId];
+	const FIntPoint StartCell = Grid.LocalToCell(Unit.PreviousPosition);
 	const FCombatDistanceMap* Map = GetDistanceMap(Unit.Team);
-	const FIntPoint StartCell = Config.Grid.LocalToCell(Unit.PreviousPosition);
-	if (!Map || Map->GetDistance(StartCell) == FCombatDistanceMap::Unreachable)
+
+	// Path smoothing: steer to the farthest route cell center that is in a clear line (the first step always counts).
+	FVector2D SteerPoint = Unit.PreviousPosition;
+
+	if (Map && Map->GetNearestId(StartCell) == Unit.TargetId)
 	{
-		// No route: head straight at the target; ResolveMove keeps the unit out of blocked cells.
-		return Units[Unit.TargetId].PreviousPosition;
+		// The team's distance map leads to this target: follow it downhill.
+		Unit.Path.Reset();
+		FIntPoint Cell = StartCell;
+		for (int32 Step = 0; Step < Config.PathLookaheadCells; ++Step)
+		{
+			FIntPoint Next;
+			if (!Map->GetNextCell(Grid, Cell, Next))
+			{
+				break;
+			}
+			Cell = Next;
+
+			const FVector2D Point = Grid.CellToLocal(Cell);
+			if (Step > 0 && !Grid.IsLineWalkable(Unit.PreviousPosition, Point))
+			{
+				break;
+			}
+			SteerPoint = Point;
+		}
+		return SteerPoint;
 	}
 
-	// Path smoothing: steer to the farthest cell center along the route that is in a clear line.
-	FIntPoint Cell = StartCell;
-	FVector2D SteerPoint = Unit.PreviousPosition;
-	for (int32 Step = 0; Step < Config.PathLookaheadCells; ++Step)
+	// Another target (threat, taunt, hysteresis): an own A* route, recomputed when either end changes cell.
+	const FIntPoint GoalCell = Grid.LocalToCell(Target.PreviousPosition);
+	const bool bPathValid = Unit.Path.Num() >= 2 && Unit.Path[0] == StartCell && Unit.Path.Last() == GoalCell;
+	if (!bPathValid && !CombatPathfinding::FindPath(Grid, StartCell, GoalCell, Unit.Path))
 	{
-		FIntPoint Next;
-		if (!Map->GetNextCell(Config.Grid, Cell, Next))
-		{
-			break;
-		}
-		Cell = Next;
+		// No route: head straight at the target; ResolveMove keeps the unit out of blocked cells.
+		return Target.PreviousPosition;
+	}
 
-		const FVector2D Point = Config.Grid.CellToLocal(Cell);
-		if (Step > 0 && !Config.Grid.IsLineWalkable(Unit.PreviousPosition, Point))
+	const int32 LastIndex = FMath::Min(Config.PathLookaheadCells, Unit.Path.Num() - 1);
+	for (int32 Index = 1; Index <= LastIndex; ++Index)
+	{
+		const FVector2D Point = Grid.CellToLocal(Unit.Path[Index]);
+		if (Index > 1 && !Grid.IsLineWalkable(Unit.PreviousPosition, Point))
 		{
 			break;
 		}
@@ -388,31 +539,59 @@ void FCombatSimulation::TryStartAttack(FCombatUnit& Unit, const FCombatUnit& Tar
 	{
 		return;
 	}
+	StartAttack(Unit, Target.Id, AttackIndex);
+}
 
+void FCombatSimulation::StartAttack(FCombatUnit& Unit, int32 TargetId, int32 AttackIndex)
+{
 	const FCombatAttackStats& Attack = Unit.Stats.Attacks[AttackIndex];
 	Unit.AttackCooldowns[AttackIndex] = Attack.CooldownTicks;
 
-	FCombatEvent& Event = Events.Add_GetRef({ ECombatEventType::Attack, Unit.Id, Target.Id, 0.f });
+	FCombatEvent& Event = Events.Add_GetRef({ ECombatEventType::Attack, Unit.Id, TargetId, 0.f });
 	Event.AttackIndex = AttackIndex;
 
 	if (Attack.WindupTicks > 0)
 	{
 		Unit.WindupTicks = Attack.WindupTicks;
-		Unit.WindupTargetId = Target.Id;
+		Unit.WindupTargetId = TargetId;
 		Unit.WindupAttackIndex = AttackIndex;
 	}
 	else
 	{
-		FireAttack(Unit, AttackIndex, Target.Id);
+		FireAttack(Unit, AttackIndex, TargetId);
 	}
 }
 
 void FCombatSimulation::FireAttack(const FCombatUnit& Unit, int32 AttackIndex, int32 TargetId)
 {
 	const FCombatAttackStats& Attack = Unit.Stats.Attacks[AttackIndex];
+	const float Threat = Attack.Damage * Attack.ThreatMultiplier;
+
+	if (Attack.bAreaAroundSelf)
+	{
+		// Reach from the center: an enemy is hit when its edge is within Range of this unit's edge.
+		FCombatEvent& Event = Events.Add_GetRef({ ECombatEventType::AreaAttackFired, Unit.Id, INDEX_NONE, Attack.Range + Unit.Stats.Radius });
+		Event.AttackIndex = AttackIndex;
+
+		// Every enemy in range, in ID order.
+		for (const FCombatUnit& Other : Units)
+		{
+			if (!Other.bAlive || Other.Team == Unit.Team)
+			{
+				continue;
+			}
+			const double Gap = FVector2D::Distance(Unit.PreviousPosition, Other.PreviousPosition) - Unit.Stats.Radius - Other.Stats.Radius;
+			if (Gap <= Attack.Range && (!Attack.bNeedsLineOfSight || Config.Grid.HasLineOfSight(Unit.PreviousPosition, Other.PreviousPosition)))
+			{
+				PendingHits.Add({ Unit.Id, Other.Id, AttackIndex, Attack.Damage, Threat });
+			}
+		}
+		return;
+	}
+
 	if (Attack.ProjectileSpeed <= 0.f)
 	{
-		PendingHits.Add({ Unit.Id, TargetId, Attack.Damage });
+		PendingHits.Add({ Unit.Id, TargetId, AttackIndex, Attack.Damage, Threat });
 		return;
 	}
 
@@ -426,6 +605,7 @@ void FCombatSimulation::FireAttack(const FCombatUnit& Unit, int32 AttackIndex, i
 	Projectile.Position = Unit.PreviousPosition;
 	Projectile.Speed = Attack.ProjectileSpeed;
 	Projectile.Damage = Attack.Damage;
+	Projectile.Threat = Threat;
 
 	FCombatEvent& Event = Events.Add_GetRef({ ECombatEventType::ProjectileSpawned, Unit.Id, TargetId, 0.f });
 	Event.AttackIndex = AttackIndex;
@@ -454,7 +634,7 @@ void FCombatSimulation::UpdateProjectiles()
 			if (Grid.HasLineOfSight(Projectile.PreviousPosition, Target.Position))
 			{
 				Projectile.Position = Target.Position;
-				PendingHits.Add({ Projectile.SourceId, Projectile.TargetId, Projectile.Damage });
+				PendingHits.Add({ Projectile.SourceId, Projectile.TargetId, Projectile.AttackIndex, Projectile.Damage, Projectile.Threat });
 			}
 			EndProjectile(Projectile);
 			continue;
@@ -482,11 +662,35 @@ void FCombatSimulation::EndProjectile(FCombatProjectile& Projectile)
 
 void FCombatSimulation::ApplyPendingHits()
 {
-	// Pass 2: all hits of this step land together, then deaths are resolved.
+	// Pass 2: all damage of this step lands together, then effects, then deaths are resolved.
 	for (const FPendingHit& Hit : PendingHits)
 	{
-		Units[Hit.TargetId].HP -= Hit.Damage;
-		Events.Add({ ECombatEventType::Hit, Hit.SourceId, Hit.TargetId, Hit.Damage });
+		if (Hit.Damage > 0.f)
+		{
+			FCombatUnit& Target = Units[Hit.TargetId];
+			Target.HP -= Hit.Damage;
+			AddThreat(Target, Hit.SourceId, Hit.Threat);
+			Events.Add({ ECombatEventType::Hit, Hit.SourceId, Hit.TargetId, Hit.Damage });
+		}
+	}
+
+	for (const FPendingHit& Hit : PendingHits)
+	{
+		FCombatUnit& Target = Units[Hit.TargetId];
+		if (!Target.bAlive || Target.HP <= 0.f)
+		{
+			continue;
+		}
+
+		const TArray<FCombatEffectStats>& Effects = Units[Hit.SourceId].Stats.Attacks[Hit.AttackIndex].Effects;
+		for (int32 EffectIndex = 0; EffectIndex < Effects.Num(); ++EffectIndex)
+		{
+			if (Target.Effects.Apply(Effects[EffectIndex], Hit.SourceId, Hit.AttackIndex, EffectIndex, Target.Stats.Tags))
+			{
+				FCombatEvent& Event = Events.Add_GetRef({ ECombatEventType::EffectApplied, Hit.SourceId, Hit.TargetId, 0.f });
+				Event.AttackIndex = Hit.AttackIndex;
+			}
+		}
 	}
 
 	for (FCombatUnit& Unit : Units)
@@ -497,12 +701,62 @@ void FCombatSimulation::ApplyPendingHits()
 			Unit.HP = 0.f;
 			Unit.Velocity = FVector2D::ZeroVector;
 			Unit.TargetId = INDEX_NONE;
+			Unit.TargetReason = ECombatTargetReason::None;
 			Unit.WindupTicks = 0;
 			Unit.WindupTargetId = INDEX_NONE;
+			Unit.Threat.Reset();
+			Unit.Effects.Reset();
+			Unit.Path.Reset();
 			Events.Add({ ECombatEventType::Death, INDEX_NONE, Unit.Id, 0.f });
 			bDistanceMapsDirty = true;
 		}
 	}
+}
+
+void FCombatSimulation::AddThreat(FCombatUnit& Unit, int32 EnemyId, float Amount)
+{
+	if (Amount <= 0.f)
+	{
+		return;
+	}
+
+	if (FCombatThreatEntry* Entry = Unit.Threat.FindByPredicate([EnemyId](const FCombatThreatEntry& Candidate) { return Candidate.EnemyId == EnemyId; }))
+	{
+		Entry->Threat += Amount;
+		return;
+	}
+
+	if (Unit.Threat.Num() < FCombatUnit::MaxThreatEntries)
+	{
+		Unit.Threat.Add({ EnemyId, Amount });
+		return;
+	}
+
+	// Full: replace the lowest entry (the first one on ties) if the newcomer has more.
+	int32 LowestIndex = 0;
+	for (int32 Index = 1; Index < Unit.Threat.Num(); ++Index)
+	{
+		if (Unit.Threat[Index].Threat < Unit.Threat[LowestIndex].Threat)
+		{
+			LowestIndex = Index;
+		}
+	}
+	if (Amount > Unit.Threat[LowestIndex].Threat)
+	{
+		Unit.Threat[LowestIndex] = { EnemyId, Amount };
+	}
+}
+
+void FCombatSimulation::DecayThreat(FCombatUnit& Unit)
+{
+	for (FCombatThreatEntry& Entry : Unit.Threat)
+	{
+		Entry.Threat = Entry.Threat * Config.ThreatDecayFactorPerTick - Config.ThreatDecayAmountPerTick;
+	}
+	Unit.Threat.RemoveAll([this](const FCombatThreatEntry& Entry)
+	{
+		return Entry.Threat <= 0.f || !Units[Entry.EnemyId].bAlive;
+	});
 }
 
 void FCombatSimulation::UpdateOutcome()
@@ -545,6 +799,13 @@ uint32 FCombatSimulation::ComputeChecksum() const
 		Crc = FCrc::MemCrc32(&Unit.FirstAttackDelayTicks, sizeof(Unit.FirstAttackDelayTicks), Crc);
 		Crc = FCrc::MemCrc32(&Unit.WindupTicks, sizeof(Unit.WindupTicks), Crc);
 		Crc = FCrc::MemCrc32(&bAlive, sizeof(bAlive), Crc);
+		Crc = FCrc::MemCrc32(&Unit.TargetReason, sizeof(Unit.TargetReason), Crc);
+		for (const FCombatThreatEntry& Entry : Unit.Threat)
+		{
+			Crc = FCrc::MemCrc32(&Entry.EnemyId, sizeof(Entry.EnemyId), Crc);
+			Crc = FCrc::MemCrc32(&Entry.Threat, sizeof(Entry.Threat), Crc);
+		}
+		Crc = Unit.Effects.AppendChecksum(Crc);
 	}
 	for (const FCombatProjectile& Projectile : Projectiles)
 	{

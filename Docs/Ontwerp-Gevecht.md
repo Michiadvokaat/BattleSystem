@@ -1,6 +1,6 @@
 # Ontwerp: autobattle-gevechtssysteem
 
-Status: fase 1 t/m 3 klaar (2026-10-03). Volgende: fase 4. Dit document is zelfstandig: het gaat uit van een **leeg Unreal Engine 5 C++-project** zonder bestaande gameplaycode. Werk het bij als besluiten veranderen of een fase klaar is (zet dan "Status" en de tabel "Besluiten" bij).
+Status: fase 1 t/m 4 klaar (2026-10-03). Volgende: fase 5. Dit document is zelfstandig: het gaat uit van een **leeg Unreal Engine 5 C++-project** zonder bestaande gameplaycode. Werk het bij als besluiten veranderen of een fase klaar is (zet dan "Status" en de tabel "Besluiten" bij).
 
 In dit document staat `<Module>` voor de naam van de gamemodule van het project. Alle code komt in `Source/<Module>/Public|Private/Combat/`.
 
@@ -190,3 +190,8 @@ Elke fase levert iets op dat je kunt spelen en testen. Nieuwe C++-klassen vereis
 | Doelwit ranged | Eerst de dichtstbijzijnde vijand in bereik met zicht, anders via looppaden | Altijd via looppaden |
 | Meerdere aanvallen | Kortste bereik dat het doel nu kan raken; elke aanval eigen cooldown | Alleen de eerste aanval |
 | Kiten | Nee, ranged stopt op bereik | Terugwijken bij melee dichtbij |
+| Taunt | Gebied rond de tank, effect met duur | Eén doelwit |
+| Doelwitprioriteit | Taunt > threat > zichtbaar (ranged) > dichtstbij, met hysterese | Zichtbaar vóór threat |
+| Threat-bron | Ontvangen schade × ThreatMultiplier van de aanval | Alleen taunt |
+| Threat-verval | Instelbaar: halfwaardetijd (standaard 4 s) of lineair per seconde | Eén vaste vorm |
+| Effectmodel fase 4 | Tags, duur, stacking (geen attribuut-modifiers) | Ook modifiers |

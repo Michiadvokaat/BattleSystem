@@ -28,13 +28,21 @@ private:
 	FReply OnRandomSeedClicked();
 	FReply OnSpeedClicked(float Speed);
 	FReply OnDebugClicked(int32 Level);
+	FReply OnShowRangesClicked();
+	FReply OnTauntRangeAssetClicked();
+	void OnTauntRangeChanged(float Value);
 
 	FText GetStatusText() const;
 	FText GetPauseText() const;
 	FSlateColor GetSpeedColor(float Speed) const;
 	FSlateColor GetDebugColor(int32 Level) const;
+	FSlateColor GetShowRangesColor() const;
+	FSlateColor GetTauntRangeAssetColor() const;
+	float GetTauntRangeSliderValue() const;
+	FText GetTauntRangeText() const;
 
 	static int32 GetDebugLevel();
+	static bool AreRangesShown();
 
 	TSharedRef<SWidget> MakeButton(const FText& Label, FOnClicked OnClicked, TAttribute<FSlateColor> Color = FSlateColor(FLinearColor::White));
 	TSharedRef<SWidget> MakeLabel(const FText& Label);

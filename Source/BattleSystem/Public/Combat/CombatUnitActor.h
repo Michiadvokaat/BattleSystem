@@ -33,6 +33,11 @@ public:
 	virtual void OnAttack(const FVector& TargetLocation);
 	virtual void OnHit(float Damage);
 	virtual void OnDeath();
+	/** Whether the unit is taunted (Status.Taunted); shows TauntMarkerText above it while true. */
+	virtual void SetTaunted(bool bInTaunted) { bTaunted = bInTaunted; }
+
+	/** An area attack (taunt) went off; Radius = its reach from the unit's center in cm. */
+	virtual void OnAreaAttack(float Radius);
 
 	int32 GetUnitId() const { return UnitId; }
 	int32 GetTeam() const { return Team; }
@@ -46,6 +51,9 @@ protected:
 
 	UFUNCTION(BlueprintImplementableEvent, Category = "Combat", meta = (DisplayName = "On Unit Death"))
 	void ReceiveUnitDeath();
+
+	UFUNCTION(BlueprintImplementableEvent, Category = "Combat", meta = (DisplayName = "On Unit Area Attack"))
+	void ReceiveUnitAreaAttack(float Radius);
 
 	UPROPERTY(VisibleAnywhere, Category = "Combat")
 	TObjectPtr<UStaticMeshComponent> BodyMesh;
@@ -86,6 +94,20 @@ protected:
 	UPROPERTY(EditDefaultsOnly, Category = "Combat|Presentation", meta = (Units = "s"))
 	float DamageTextDuration = 1.f;
 
+	/** How long the circle shown when an area attack (taunt) goes off stays visible. */
+	UPROPERTY(EditDefaultsOnly, Category = "Combat|Presentation", meta = (Units = "s"))
+	float AreaPulseDuration = 0.4f;
+
+	UPROPERTY(EditDefaultsOnly, Category = "Combat|Presentation")
+	FColor AreaPulseColor = FColor::Magenta;
+
+	/** Shown above the unit while it is taunted. */
+	UPROPERTY(EditDefaultsOnly, Category = "Combat|Presentation")
+	FString TauntMarkerText = TEXT("T");
+
+	UPROPERTY(EditDefaultsOnly, Category = "Combat|Presentation")
+	FColor TauntMarkerColor = FColor::Magenta;
+
 private:
 	void SetBodyColor(const FLinearColor& Color);
 
@@ -100,4 +122,5 @@ private:
 	FVector LungeDirection = FVector::ZeroVector;
 	double HitFlashStartTime = -1.0;
 	bool bFlashing = false;
+	bool bTaunted = false;
 };

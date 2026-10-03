@@ -6,6 +6,7 @@
 #include "Combat/CombatProjectileActor.h"
 #include "Combat/CombatSettings.h"
 #include "Combat/CombatSetup.h"
+#include "Combat/CombatTags.h"
 #include "Combat/CombatUnitActor.h"
 #include "Combat/CombatUnitDefinition.h"
 #include "DrawDebugHelpers.h"
@@ -18,7 +19,13 @@ DEFINE_LOG_CATEGORY(LogCombat);
 static TAutoConsoleVariable<int32> CVarCombatDebug(
 	TEXT("Combat.Debug"),
 	0,
-	TEXT("Combat debug drawing. 0 = off, 1 = lines to target (team color) and steer point (yellow), 2 = also team 0's distance map in cells."));
+	TEXT("Combat debug drawing. 0 = off, 1 = lines to target and steer point (yellow), 2 = also team 0's distance map in cells. ")
+	TEXT("Target line color = reason: team color = nearest, cyan = visible (ranged), orange = threat, magenta = taunt."));
+
+static TAutoConsoleVariable<int32> CVarCombatShowRanges(
+	TEXT("Combat.ShowRanges"),
+	0,
+	TEXT("1 = draw the range of area attacks (taunt) around the units that have one."));
 
 void UCombatSubsystem::Tick(float DeltaTime)
 {
@@ -59,6 +66,7 @@ void UCombatSubsystem::Tick(float DeltaTime)
 	const float Alpha = FMath::Clamp(static_cast<float>(Accumulator / FixedDt), 0.f, 1.f);
 	UpdateActors(Alpha);
 	DrawDebug(Alpha);
+	DrawAreaRanges(Alpha);
 }
 
 TStatId UCombatSubsystem::GetStatId() const
@@ -92,6 +100,20 @@ bool UCombatSubsystem::StartFight(int32 Seed, const UCombatSetup* Setup)
 	if (!BuildSimConfig(GetWorld(), Seed, *Setup, Config, GridOrigin, &Definitions))
 	{
 		return false;
+	}
+
+	if (TauntRangeOverride > 0.f)
+	{
+		for (FCombatUnitSpawn& Spawn : Config.Units)
+		{
+			for (FCombatAttackStats& Attack : Spawn.Stats.Attacks)
+			{
+				if (Attack.Type.MatchesTagExact(CombatTags::Attack_Taunt))
+				{
+					Attack.Range = TauntRangeOverride;
+				}
+			}
+		}
 	}
 
 	Simulation = MakeUnique<FCombatSimulation>(Config);
@@ -158,7 +180,8 @@ void UCombatSubsystem::DispatchEvents()
 		case ECombatEventType::Attack:
 			if (ACombatUnitActor* Actor = UnitActors[Event.SourceId])
 			{
-				Actor->OnAttack(SimToWorld(Units[Event.TargetId].Position));
+				// Area attacks have no target: no lunge direction.
+				Actor->OnAttack(Event.TargetId != INDEX_NONE ? SimToWorld(Units[Event.TargetId].Position) : Actor->GetActorLocation());
 			}
 			break;
 		case ECombatEventType::Hit:
@@ -171,6 +194,12 @@ void UCombatSubsystem::DispatchEvents()
 			if (ACombatUnitActor* Actor = UnitActors[Event.TargetId])
 			{
 				Actor->OnDeath();
+			}
+			break;
+		case ECombatEventType::AreaAttackFired:
+			if (ACombatUnitActor* Actor = UnitActors[Event.SourceId])
+			{
+				Actor->OnAreaAttack(Event.Amount);
 			}
 			break;
 		case ECombatEventType::ProjectileSpawned:
@@ -231,6 +260,7 @@ void UCombatSubsystem::UpdateActors(float Alpha)
 			Facing = FMath::Lerp(Target.PreviousPosition, Target.Position, Alpha) - Position;
 		}
 
+		Actor->SetTaunted(Unit.Effects.HasGrantedTag(CombatTags::Status_Taunted));
 		Actor->UpdatePresentation(SimToWorld(Position), FVector(Facing.X, Facing.Y, 0.0));
 	}
 
@@ -270,7 +300,15 @@ void UCombatSubsystem::DrawDebug(float Alpha) const
 		{
 			const FCombatUnit& Target = Units[Unit.TargetId];
 			const FVector TargetPosition = SimToWorld(FMath::Lerp(Target.PreviousPosition, Target.Position, Alpha)) + Lift;
-			DrawDebugLine(World, Position, TargetPosition, Settings->GetTeamColor(Unit.Team).ToFColor(true), false, -1.f, 0, 3.f);
+			FColor ReasonColor = Settings->GetTeamColor(Unit.Team).ToFColor(true);
+			switch (Unit.TargetReason)
+			{
+			case ECombatTargetReason::Visible: ReasonColor = FColor::Cyan; break;
+			case ECombatTargetReason::Threat: ReasonColor = FColor::Orange; break;
+			case ECombatTargetReason::Taunt: ReasonColor = FColor::Magenta; break;
+			default: break;
+			}
+			DrawDebugLine(World, Position, TargetPosition, ReasonColor, false, -1.f, 0, 3.f);
 
 			if (!Unit.SteerPoint.Equals(Target.PreviousPosition))
 			{
@@ -294,6 +332,35 @@ void UCombatSubsystem::DrawDebug(float Alpha) const
 						FString::Printf(TEXT("%.1f"), Distance / static_cast<float>(FCombatDistanceMap::StraightCost)),
 						nullptr, FColor::White, 0.f, false, 1.f);
 				}
+			}
+		}
+	}
+}
+
+void UCombatSubsystem::DrawAreaRanges(float Alpha) const
+{
+	if (CVarCombatShowRanges.GetValueOnGameThread() <= 0)
+	{
+		return;
+	}
+
+	UWorld* World = GetWorld();
+	const FColor RangeColor(255, 0, 255, 120);
+	for (const FCombatUnit& Unit : Simulation->GetUnits())
+	{
+		if (!Unit.bAlive)
+		{
+			continue;
+		}
+
+		const FVector Center = SimToWorld(FMath::Lerp(Unit.PreviousPosition, Unit.Position, Alpha)) + FVector(0.0, 0.0, 10.0);
+		for (const FCombatAttackStats& Attack : Unit.Stats.Attacks)
+		{
+			if (Attack.bAreaAroundSelf)
+			{
+				// Reach from the center: an enemy is hit when its edge is inside this circle.
+				DrawDebugCircle(World, Center, Attack.Range + Unit.Stats.Radius, 64, RangeColor, false, -1.f, 0, 2.f,
+					FVector(1.0, 0.0, 0.0), FVector(0.0, 1.0, 0.0), false);
 			}
 		}
 	}
@@ -339,6 +406,20 @@ bool UCombatSubsystem::BuildSimConfig(UWorld* World, int32 Seed, const UCombatSe
 	OutConfig.RetargetIntervalTicks = FMath::Max(Settings->SecondsToTicks(Settings->RetargetInterval), 1);
 	OutConfig.PathLookaheadCells = Settings->PathLookaheadCells;
 	OutConfig.SeparationStrength = Settings->SeparationStrength;
+
+	if (Settings->ThreatDecayMode == ECombatThreatDecayMode::HalfLife)
+	{
+		OutConfig.ThreatDecayFactorPerTick = FMath::Pow(0.5f, 1.f / (FMath::Max(Settings->ThreatHalfLife, 0.1f) * OutConfig.TickRate));
+		OutConfig.ThreatDecayAmountPerTick = 0.f;
+	}
+	else
+	{
+		OutConfig.ThreatDecayFactorPerTick = 1.f;
+		OutConfig.ThreatDecayAmountPerTick = Settings->ThreatDecayPerSecond / OutConfig.TickRate;
+	}
+	OutConfig.ThreatThreshold = Settings->ThreatThreshold;
+	OutConfig.ThreatSwitchRatio = Settings->ThreatSwitchRatio;
+	OutConfig.RetargetDistanceMargin = Settings->RetargetDistanceMargin;
 
 	OutConfig.Units.Reset();
 	for (int32 Index = 0; Index < Setup.Units.Num(); ++Index)

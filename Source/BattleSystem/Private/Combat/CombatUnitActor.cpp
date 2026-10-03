@@ -91,6 +91,12 @@ void ACombatUnitActor::UpdatePresentation(const FVector& InLocation, const FVect
 		SetActorRotation(FacingDirection.Rotation());
 	}
 
+	if (bTaunted)
+	{
+		// One frame of debug text, redrawn every frame while taunted.
+		DrawDebugString(GetWorld(), InLocation + FVector(0.0, 0.0, BodyHeight + 60.0), TauntMarkerText, nullptr, TauntMarkerColor, 0.f, true, 1.6f);
+	}
+
 	const bool bShouldFlash = HitFlashStartTime >= 0.0 && Now - HitFlashStartTime < HitFlashDuration;
 	if (bShouldFlash != bFlashing)
 	{
@@ -120,6 +126,13 @@ void ACombatUnitActor::OnDeath()
 		TEXT("X"), nullptr, FColor::Red, DamageTextDuration * 2.f, true);
 	SetActorHiddenInGame(true);
 	ReceiveUnitDeath();
+}
+
+void ACombatUnitActor::OnAreaAttack(float Radius)
+{
+	DrawDebugCircle(GetWorld(), GetActorLocation() + FVector(0.0, 0.0, 15.0), Radius, 64, AreaPulseColor, false, AreaPulseDuration, 0, 6.f,
+		FVector(1.0, 0.0, 0.0), FVector(0.0, 1.0, 0.0), false);
+	ReceiveUnitAreaAttack(Radius);
 }
 
 void ACombatUnitActor::SetBodyColor(const FLinearColor& Color)
