@@ -129,7 +129,7 @@ protected:
 	FName BodyColorParameter = TEXT("Color");
 
 	UPROPERTY(EditDefaultsOnly, Category = "Combat|Presentation", meta = (Units = "cm"))
-	float BodyHeight = 180.f;
+	float BodyHeight = 10.f;
 
 	/** How far the body lunges towards the target on an attack. */
 	UPROPERTY(EditDefaultsOnly, Category = "Combat|Presentation", meta = (Units = "cm"))

@@ -100,7 +100,7 @@ Code: `Source/BattleSystem/{Public,Private}/Combat/`. Layers: grid ← simulatio
   - It fills three instanced meshes with blocks: walls grey and 2 m tall, hedges green and 1.2 m, water blue and flat.
   - It hides the placed `ACombatObstacle`s. `GetGridData()` stays the arena's own grid (for setups).
   - `ClearLevel` restores everything when a setup fight starts.
-  - The subsystem fits the view camera (keeping its rotation) above the shown grid with a 12% margin, using its FOV and the viewport aspect, and puts the camera back for setups.
+  - The subsystem points the view camera straight down with grid X (width) to the right and Y (height) downwards, like the rows of a level file. It fits it above the shown grid with a 12% margin, using its FOV and the viewport aspect, and puts the camera back for setups.
 - LevelDesigner (`SCombatLevelDesigner`, bottom left; presentation only, no simulation):
   - **Edit** enters edit mode (`EnterDesignMode`). It stops the fight and edits the level of the fight on screen if it had one, otherwise the last edited level, otherwise an empty 20×12 level. The arena shows it (`ApplyLevel`, camera fit) with preview unit actors on their cells, without AI. Edit again leaves, and the arena is restored.
   - Rows: Name + **Save** (`Levels/<name>.json`; the name is cleaned to letters, digits, - and _), a level dropdown + **Load** + **New**, and Size W/H spin boxes (5–40; shrinking drops what falls outside, and the camera refits).
@@ -160,7 +160,7 @@ Code: `Source/BattleSystem/{Public,Private}/Combat/`. Layers: grid ← simulatio
 
 ### Presentation (`ACombatUnitActor`)
 
-- Placeholder look: a body mesh (diameter = 2 × radius, height `BodyHeight`). It is `RangedBodyMesh` (default the engine cube) for units with a ranged attack and `MeleeBodyMesh` (default the engine cylinder) otherwise; the subsystem passes `bRanged` to `InitUnit`. The body has a dynamic material in the team color (made from `BodyMaterialBase`, default `BasicShapeMaterial`, through the `BodyColorParameter` `Color`; the cylinder's own `DefaultMaterial` has no color parameter), and a small cube "nose" for the facing. No collision.
+- Placeholder look: a body mesh (diameter = 2 × radius, height `BodyHeight`, 10 cm: flat pieces like on a board). It is `RangedBodyMesh` (default the engine cube) for units with a ranged attack and `MeleeBodyMesh` (default the engine cylinder) otherwise; the subsystem passes `bRanged` to `InitUnit`. The body has a dynamic material in the team color (made from `BodyMaterialBase`, default `BasicShapeMaterial`, through the `BodyColorParameter` `Color`; the cylinder's own `DefaultMaterial` has no color parameter), and a small cube "nose" for the facing. No collision.
 - `OnAttack` lunges towards the target (sine over `LungeDuration`). `OnHit` flashes white and shows the damage as debug text. `OnDeath` shows "X" and hides the actor. Two screen-space `UWidgetComponent`s (Slate, built in code: `SCombatUnitWidgets`) show more:
   - **Health bar** (`SCombatHealthBar`), `HealthBarOffset` above the body and `HealthBarSize` pixels. The fill goes from green (full) via yellow (half) to red, and the rim has the team color. It uses its own `FProgressBarStyle` (plain white fill, dark background) because the default style tints the fill. Each frame the subsystem calls `SetHealth(HP / MaxHP)`.
   - **Status labels** (`SCombatStatusIcons`) on the body's center: one label per active effect, in effect order.

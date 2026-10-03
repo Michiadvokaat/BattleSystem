@@ -1039,7 +1039,10 @@ void UCombatSubsystem::FitCameraToShownGrid()
 	const FVector2D Size = Data.GetLocalSize();
 	const FVector Center = Grid->GetActorLocation() + FVector(Size.X * 0.5, Size.Y * 0.5, 0.0);
 
-	// Half extents of the grid along the camera's screen axes (it keeps its rotation; top-down expected).
+	// Straight down with grid X (width) to the right and Y (height) downwards, like the rows of a level file.
+	Camera->SetActorRotation(FRotator(-90.0, -90.0, 0.0));
+
+	// Half extents of the grid along the camera's screen axes.
 	const FVector Right = Camera->GetActorRightVector();
 	const FVector Up = Camera->GetActorUpVector();
 	double HalfRight = 0.0;

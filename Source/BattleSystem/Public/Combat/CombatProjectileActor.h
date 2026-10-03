@@ -42,7 +42,7 @@ protected:
 
 	/** Height above the floor at which the projectile flies. */
 	UPROPERTY(EditDefaultsOnly, Category = "Combat|Presentation", meta = (Units = "cm"))
-	float FlightHeight = 110.f;
+	float FlightHeight = 15.f;
 
 	UPROPERTY(EditDefaultsOnly, Category = "Combat|Presentation", meta = (Units = "cm"))
 	float Diameter = 20.f;

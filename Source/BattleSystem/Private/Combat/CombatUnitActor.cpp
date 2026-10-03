@@ -121,8 +121,10 @@ void ACombatUnitActor::InitUnit(int32 InUnitId, int32 InTeam, float InRadius, co
 	// The engine cylinder and cube are 100 cm and centered on their origin.
 	BodyMesh->SetRelativeScale3D(FVector(InRadius * 2.0 / 100.0, InRadius * 2.0 / 100.0, BodyHeight / 100.0));
 	BodyMesh->SetRelativeLocation(FVector(0.0, 0.0, BodyHeight * 0.5));
-	NoseMesh->SetRelativeScale3D(FVector(0.25));
-	NoseMesh->SetRelativeLocation(FVector(InRadius, 0.0, BodyHeight * 0.75));
+	// The nose scales with the body (at most 25 cm), so flat pieces get a small one.
+	const double NoseSize = FMath::Min(25.0, BodyHeight * 0.8);
+	NoseMesh->SetRelativeScale3D(FVector(NoseSize / 100.0));
+	NoseMesh->SetRelativeLocation(FVector(InRadius, 0.0, FMath::Max(BodyHeight * 0.75, NoseSize * 0.5)));
 
 	BodyMaterial = BodyMaterialBase
 		? BodyMesh->CreateAndSetMaterialInstanceDynamicFromMaterial(0, BodyMaterialBase)

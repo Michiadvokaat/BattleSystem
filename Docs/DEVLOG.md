@@ -79,3 +79,5 @@ Dated history: decisions, bugs, rejected approaches. Newest entries at the botto
   - `Levels/Demo.json` reproduces `DA_Setup_Taunt` in Arena-01 exactly (`0x7CE33AAB`). 37/37 tests.
 - LevelDesigner part B: a bottom-left menu with edit mode, name/save, load/new, size, wall/hedge/water/unit tools with type and team, and Play. Mouse painting with drag, erasing with the right button, and preview units. Start in the control panel plays the edited level while editing.
 - LevelDesigner part B done: the user built and played `Levels/TestLevel.json` in PIE.
+- Camera orientation for levels: Arena-01's camera has yaw 0, so grid X (width) ran upwards on screen. When fitting a level the camera is now set to (pitch -90, yaw -90): width to the right, height downwards. Setups get the original camera back.
+- Units are flat board pieces: `BodyHeight` is 10 cm (was 180), the nose scales with the body (at most 25 cm), and projectiles fly at 15 cm (`FlightHeight`, was 110).
