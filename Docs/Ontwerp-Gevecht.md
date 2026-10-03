@@ -199,3 +199,6 @@ Elke fase levert iets op dat je kunt spelen en testen. Nieuwe C++-klassen vereis
 | Friendly fire | Per aanval (bAffectsEnemies/bAffectsAllies) | Altijd alleen vijanden |
 | Modifiers | Snelheid, uitgedeelde en ontvangen schade (per stack) | Later |
 | Replay | JSON met setup-pad, seed, build, sim-instellingen en eind-checksum | USaveGame; volledig zelfstandige snapshot van unit-stats |
+| Spelersinvoer | Commando's per unit (verplaatsen naar cel, spelersvaardigheid) met vaste vertraging (3 ticks), in een commando-log dat in de replay staat | Directe ingrepen in de simulatie |
+| Verplaatsen vs. taunt | Het commando van de speler wint | Taunt wint |
+| Spelersvaardigheden | Per unit-type in de Data Asset, zonder cooldown | Vaste vaardigheid voor iedere unit |

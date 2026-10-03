@@ -56,6 +56,32 @@ UNITS = {
     ]),
 }
 
+# Player abilities (no cooldown, the player triggers them). Added to these units if they have none yet,
+# also when the asset already exists, so tuned values elsewhere in the asset are kept.
+PLAYER_ABILITIES = {
+    "DA_Tank": [
+        dict(type="Attack.Taunt", range=400.0, cooldown=0.0, windup=0.0, damage=0.0, impact_cue="Cue.Taunt", effects=[
+            dict(effect_tag="Effect.Taunt", duration=3.0, stacking="REFRESH", granted_tags=["Status.Taunted"]),
+        ]),
+    ],
+    "DA_Krijger": [
+        dict(type="Attack.Taunt", range=300.0, cooldown=0.0, windup=0.0, damage=0.0, impact_cue="Cue.Taunt", effects=[
+            dict(effect_tag="Effect.Taunt", duration=2.0, stacking="REFRESH", granted_tags=["Status.Taunted"]),
+        ]),
+    ],
+}
+
+# Command scripts: (tick, unit ID, "MOVE", (x, y)) or (tick, unit ID, "ABILITY", ability index).
+# Unit IDs are the indices of the setup's entries (DA_Setup_Taunt: 0 tank, 1-2 archers, 3-5 Brutes).
+COMMAND_SCRIPTS = {
+    "DA_Script_TauntDemo": [
+        (20, 1, "MOVE", (10, 2)),
+        (20, 2, "MOVE", (10, 10)),
+        (40, 0, "ABILITY", 0),
+        (100, 0, "ABILITY", 0),
+    ],
+}
+
 # Cue tag -> debug color (R, G, B). VFX and sound can be set in the editor later.
 CUES = {
     "Cue.Fire": (1.0, 0.45, 0.0),
@@ -174,6 +200,33 @@ def make_cue_table(should_fill, table):
     table.set_editor_property("cues", cues)
 
 
+def make_attack(attack_values):
+    attack = unreal.CombatAttackDefinition()
+    attack.set_editor_property("type", make_tag(attack_values["type"]))
+    for key, value in attack_values.items():
+        if key == "effects":
+            attack.set_editor_property("effects", [make_effect(effect) for effect in value])
+        elif key == "impact_cue":
+            attack.set_editor_property(key, make_tag(value))
+        elif key == "area_shape":
+            attack.set_editor_property(key, getattr(unreal.CombatAreaShape, value))
+        elif key != "type":
+            attack.set_editor_property(key, value)
+    return attack
+
+
+def make_command(tick, unit_id, kind, argument):
+    command = unreal.CombatCommand()
+    command.set_editor_property("tick", tick)
+    command.set_editor_property("unit_id", unit_id)
+    command.set_editor_property("type", getattr(unreal.CombatCommandType, kind))
+    if kind == "MOVE":
+        command.set_editor_property("target_cell", unreal.IntPoint(*argument))
+    else:
+        command.set_editor_property("ability_index", argument)
+    return command
+
+
 def main():
     definitions = {}
     to_save = []
@@ -188,22 +241,22 @@ def main():
         definition.set_editor_property("move_speed", values["move_speed"])
         definition.set_editor_property("radius", values["radius"])
 
-        attacks = []
-        for attack_values in values["attacks"]:
-            attack = unreal.CombatAttackDefinition()
-            attack.set_editor_property("type", make_tag(attack_values["type"]))
-            for key, value in attack_values.items():
-                if key == "effects":
-                    attack.set_editor_property("effects", [make_effect(effect) for effect in value])
-                elif key == "impact_cue":
-                    attack.set_editor_property(key, make_tag(value))
-                elif key == "area_shape":
-                    attack.set_editor_property(key, getattr(unreal.CombatAreaShape, value))
-                elif key != "type":
-                    attack.set_editor_property(key, value)
-            attacks.append(attack)
-        definition.set_editor_property("attacks", attacks)
+        definition.set_editor_property("attacks", [make_attack(values) for values in values["attacks"]])
         to_save.append(definition)
+
+    for asset_name, abilities in PLAYER_ABILITIES.items():
+        definition = definitions[asset_name]
+        if len(definition.get_editor_property("player_abilities")) == 0:
+            definition.set_editor_property("player_abilities", [make_attack(values) for values in abilities])
+            log(f"Added player abilities to {asset_name}")
+            if definition not in to_save:
+                to_save.append(definition)
+
+    for script_name, commands in COMMAND_SCRIPTS.items():
+        script, should_fill = load_or_create(script_name, unreal.CombatCommandScript)
+        if should_fill:
+            script.set_editor_property("commands", [make_command(*command) for command in commands])
+            to_save.append(script)
 
     for setup_name, lineup in SETUPS.items():
         setup, should_fill = load_or_create(setup_name, unreal.CombatSetup)

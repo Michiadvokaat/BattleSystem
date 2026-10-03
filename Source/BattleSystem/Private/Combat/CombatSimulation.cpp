@@ -4,6 +4,7 @@
 #include "Combat/CombatPathfinding.h"
 #include "Combat/CombatTags.h"
 #include "Misc/Crc.h"
+#include "Algo/StableSort.h"
 
 bool FCombatArea::Contains(const FVector2D& Position, float UnitRadius) const
 {
@@ -66,6 +67,15 @@ FCombatSimulation::FCombatSimulation(const FCombatSimConfig& InConfig)
 	}
 	DistanceMaps.SetNum(TeamIds.Num());
 
+	// Commands known in advance (script, replay): by tick, keeping the given order within a tick.
+	TArray<FCombatCommand> Known = Config.Commands;
+	Algo::StableSortBy(Known, [](const FCombatCommand& Command) { return FMath::Max(Command.Tick, 1); });
+	for (FCombatCommand Command : Known)
+	{
+		Command.Tick = FMath::Max(Command.Tick, 1);
+		QueueCommand(Command);
+	}
+
 	Checksum = ComputeChecksum();
 }
 
@@ -106,6 +116,9 @@ void FCombatSimulation::Step()
 
 	// Before the units: areas placed this step only start counting down next step.
 	UpdatePendingAreas();
+
+	// Player commands run at the start of their tick, after the areas so a telegraphed ability counts down from next step.
+	ExecuteDueCommands();
 
 	for (FCombatUnit& Unit : Units)
 	{
@@ -384,6 +397,12 @@ FVector2D FCombatSimulation::UpdateCombat(FCombatUnit& Unit)
 {
 	Unit.SteerPoint = Unit.PreviousPosition;
 
+	// A player move order overrides the AI, taunts included.
+	if (Unit.bHasMoveOrder)
+	{
+		return UpdateMoveOrder(Unit);
+	}
+
 	// A unit winding up an attack stands still and keeps its target until the hit or shot.
 	if (Unit.WindupTicks > 0)
 	{
@@ -495,15 +514,25 @@ FVector2D FCombatSimulation::FindRouteSteerPoint(FCombatUnit& Unit) const
 		return SteerPoint;
 	}
 
-	// Another target (threat, taunt, hysteresis): an own A* route, recomputed when either end changes cell.
-	const FIntPoint GoalCell = Grid.LocalToCell(Target.PreviousPosition);
+	// Another target (threat, taunt, hysteresis): an own A* route.
+	return SteerAlongPath(Unit, Grid.LocalToCell(Target.PreviousPosition), Target.PreviousPosition);
+}
+
+FVector2D FCombatSimulation::SteerAlongPath(FCombatUnit& Unit, const FIntPoint& GoalCell, const FVector2D& Fallback) const
+{
+	const FCombatGridData& Grid = Config.Grid;
+	const FIntPoint StartCell = Grid.LocalToCell(Unit.PreviousPosition);
+
+	// Recomputed only when either end changes cell.
 	const bool bPathValid = Unit.Path.Num() >= 2 && Unit.Path[0] == StartCell && Unit.Path.Last() == GoalCell;
 	if (!bPathValid && !CombatPathfinding::FindPath(Grid, StartCell, GoalCell, Unit.Path))
 	{
-		// No route: head straight at the target; ResolveMove keeps the unit out of blocked cells.
-		return Target.PreviousPosition;
+		// No route: head straight for it; ResolveMove keeps the unit out of blocked cells.
+		return Fallback;
 	}
 
+	// Path smoothing: the farthest path cell center in a clear line (the first step always counts).
+	FVector2D SteerPoint = Unit.PreviousPosition;
 	const int32 LastIndex = FMath::Min(Config.PathLookaheadCells, Unit.Path.Num() - 1);
 	for (int32 Index = 1; Index <= LastIndex; ++Index)
 	{
@@ -515,6 +544,132 @@ FVector2D FCombatSimulation::FindRouteSteerPoint(FCombatUnit& Unit) const
 		SteerPoint = Point;
 	}
 	return SteerPoint;
+}
+
+FVector2D FCombatSimulation::UpdateMoveOrder(FCombatUnit& Unit)
+{
+	const FCombatGridData& Grid = Config.Grid;
+	const FVector2D Goal = Grid.CellToLocal(Unit.MoveTargetCell);
+	const double MaxStep = Unit.Stats.MoveSpeed * Unit.Effects.GetMoveSpeedMultiplier() * FixedDt;
+
+	Unit.TargetId = INDEX_NONE;
+	Unit.TargetReason = ECombatTargetReason::None;
+
+	const FVector2D ToGoal = Goal - Unit.PreviousPosition;
+	const double GoalDistance = ToGoal.Size();
+	if (GoalDistance <= FMath::Max(MaxStep, 1.0))
+	{
+		// Arrived: step onto the cell center and hand back to the AI.
+		Unit.bHasMoveOrder = false;
+		Unit.Path.Reset();
+		Unit.SteerPoint = Goal;
+		return ToGoal;
+	}
+
+	if (Grid.IsLineWalkable(Unit.PreviousPosition, Goal))
+	{
+		Unit.SteerPoint = Goal;
+	}
+	else
+	{
+		const FIntPoint StartCell = Grid.LocalToCell(Unit.PreviousPosition);
+		const bool bPathValid = Unit.Path.Num() >= 2 && Unit.Path[0] == StartCell && Unit.Path.Last() == Unit.MoveTargetCell;
+		if (!bPathValid && !CombatPathfinding::FindPath(Grid, StartCell, Unit.MoveTargetCell, Unit.Path))
+		{
+			// Unreachable: give up the order.
+			Unit.bHasMoveOrder = false;
+			Unit.Path.Reset();
+			return FVector2D::ZeroVector;
+		}
+		Unit.SteerPoint = SteerAlongPath(Unit, Unit.MoveTargetCell, Goal);
+	}
+
+	const FVector2D ToSteer = Unit.SteerPoint - Unit.PreviousPosition;
+	const double SteerDistance = ToSteer.Size();
+	if (SteerDistance <= UE_KINDA_SMALL_NUMBER)
+	{
+		return FVector2D::ZeroVector;
+	}
+	return ToSteer / SteerDistance * FMath::Min(MaxStep, SteerDistance);
+}
+
+bool FCombatSimulation::QueueCommand(const FCombatCommand& Command)
+{
+	if (Command.Tick <= Tick || IsFinished())
+	{
+		return false;
+	}
+
+	// After every command with the same or an earlier tick, so the given order holds within a tick.
+	const int32 InsertAt = PendingCommands.IndexOfByPredicate([&Command](const FCombatCommand& Pending) { return Pending.Tick > Command.Tick; });
+	PendingCommands.Insert(Command, InsertAt == INDEX_NONE ? PendingCommands.Num() : InsertAt);
+	CommandLog.Add(Command);
+	return true;
+}
+
+void FCombatSimulation::ExecuteDueCommands()
+{
+	int32 Count = 0;
+	while (Count < PendingCommands.Num() && PendingCommands[Count].Tick <= Tick)
+	{
+		ExecuteCommand(PendingCommands[Count]);
+		++Count;
+	}
+	PendingCommands.RemoveAt(0, Count);
+}
+
+void FCombatSimulation::ExecuteCommand(const FCombatCommand& Command)
+{
+	auto AddEvent = [this, &Command](ECombatEventType Type, int32 AttackIndex)
+	{
+		FCombatEvent& Event = Events.Add_GetRef({ Type, Command.UnitId, INDEX_NONE, 0.f });
+		Event.AttackIndex = AttackIndex;
+	};
+
+	if (!Units.IsValidIndex(Command.UnitId) || !Units[Command.UnitId].bAlive)
+	{
+		AddEvent(ECombatEventType::CommandRejected, INDEX_NONE);
+		return;
+	}
+	FCombatUnit& Unit = Units[Command.UnitId];
+
+	switch (Command.Type)
+	{
+	case ECombatCommandType::Move:
+		if (!Config.Grid.IsWalkable(Command.TargetCell))
+		{
+			AddEvent(ECombatEventType::CommandRejected, INDEX_NONE);
+			return;
+		}
+		// The order replaces any windup and earlier order.
+		Unit.bHasMoveOrder = true;
+		Unit.MoveTargetCell = Command.TargetCell;
+		Unit.WindupTicks = 0;
+		Unit.WindupTargetId = INDEX_NONE;
+		Unit.WindupAttackIndex = INDEX_NONE;
+		Unit.Path.Reset();
+		AddEvent(ECombatEventType::CommandExecuted, INDEX_NONE);
+		return;
+
+	case ECombatCommandType::Ability:
+	{
+		// Only areas around the unit for now (taunt, auras): they need no target.
+		const bool bValid = Unit.Stats.PlayerAbilities.IsValidIndex(Command.AbilityIndex)
+			&& Unit.Stats.PlayerAbilities[Command.AbilityIndex].AreaShape == ECombatAreaShape::CircleAroundSelf;
+		if (!bValid)
+		{
+			AddEvent(ECombatEventType::CommandRejected, INDEX_NONE);
+			return;
+		}
+
+		const int32 AttackIndex = Unit.Stats.GetPlayerAbilityAttackIndex(Command.AbilityIndex);
+		AddEvent(ECombatEventType::CommandExecuted, AttackIndex);
+		FCombatEvent& Event = Events.Add_GetRef({ ECombatEventType::Attack, Unit.Id, INDEX_NONE, 0.f });
+		Event.AttackIndex = AttackIndex;
+		PlaceArea(Unit, AttackIndex, INDEX_NONE);
+		return;
+	}
+	}
 }
 
 FVector2D FCombatSimulation::ComputeSeparation(const FCombatUnit& Unit) const
@@ -580,7 +735,7 @@ void FCombatSimulation::TryStartAttack(FCombatUnit& Unit, const FCombatUnit& Tar
 
 void FCombatSimulation::StartAttack(FCombatUnit& Unit, int32 TargetId, int32 AttackIndex)
 {
-	const FCombatAttackStats& Attack = Unit.Stats.Attacks[AttackIndex];
+	const FCombatAttackStats& Attack = Unit.Stats.GetAttack(AttackIndex);
 	Unit.AttackCooldowns[AttackIndex] = Attack.CooldownTicks;
 
 	FCombatEvent& Event = Events.Add_GetRef({ ECombatEventType::Attack, Unit.Id, TargetId, 0.f });
@@ -600,7 +755,7 @@ void FCombatSimulation::StartAttack(FCombatUnit& Unit, int32 TargetId, int32 Att
 
 void FCombatSimulation::FireAttack(const FCombatUnit& Unit, int32 AttackIndex, int32 TargetId)
 {
-	const FCombatAttackStats& Attack = Unit.Stats.Attacks[AttackIndex];
+	const FCombatAttackStats& Attack = Unit.Stats.GetAttack(AttackIndex);
 	if (Attack.IsArea())
 	{
 		PlaceArea(Unit, AttackIndex, TargetId);
@@ -633,7 +788,7 @@ void FCombatSimulation::FireAttack(const FCombatUnit& Unit, int32 AttackIndex, i
 
 void FCombatSimulation::PlaceArea(const FCombatUnit& Unit, int32 AttackIndex, int32 TargetId)
 {
-	const FCombatAttackStats& Attack = Unit.Stats.Attacks[AttackIndex];
+	const FCombatAttackStats& Attack = Unit.Stats.GetAttack(AttackIndex);
 
 	FCombatArea Area;
 	Area.Shape = Attack.AreaShape;
@@ -682,7 +837,7 @@ void FCombatSimulation::PlaceArea(const FCombatUnit& Unit, int32 AttackIndex, in
 void FCombatSimulation::ResolveArea(int32 SourceId, int32 Team, int32 AttackIndex, const FCombatArea& Area, int32 AreaId, float DamageDealtMultiplier)
 {
 	const FCombatUnit& Source = Units[SourceId];
-	const FCombatAttackStats& Attack = Source.Stats.Attacks[AttackIndex];
+	const FCombatAttackStats& Attack = Source.Stats.GetAttack(AttackIndex);
 
 	FCombatEvent& Event = Events.Add_GetRef({ ECombatEventType::AreaAttackFired, SourceId, INDEX_NONE, 0.f });
 	Event.AttackIndex = AttackIndex;
@@ -778,7 +933,7 @@ void FCombatSimulation::ApplyPendingHits()
 
 			FCombatEvent& Event = Events.Add_GetRef({ ECombatEventType::Hit, Hit.SourceId, Hit.TargetId, Damage });
 			Event.AttackIndex = Hit.AttackIndex;
-			Event.Cue = Units[Hit.SourceId].Stats.Attacks[Hit.AttackIndex].ImpactCue;
+			Event.Cue = Units[Hit.SourceId].Stats.GetAttack(Hit.AttackIndex).ImpactCue;
 		}
 	}
 
@@ -790,7 +945,7 @@ void FCombatSimulation::ApplyPendingHits()
 			continue;
 		}
 
-		const TArray<FCombatEffectStats>& Effects = Units[Hit.SourceId].Stats.Attacks[Hit.AttackIndex].Effects;
+		const TArray<FCombatEffectStats>& Effects = Units[Hit.SourceId].Stats.GetAttack(Hit.AttackIndex).Effects;
 		for (int32 EffectIndex = 0; EffectIndex < Effects.Num(); ++EffectIndex)
 		{
 			if (Target.Effects.Apply(Effects[EffectIndex], Hit.SourceId, Hit.AttackIndex, EffectIndex, Target.Stats.Tags))
@@ -914,6 +1069,11 @@ uint32 FCombatSimulation::ComputeChecksum() const
 			Crc = FCrc::MemCrc32(&Entry.Threat, sizeof(Entry.Threat), Crc);
 		}
 		Crc = Unit.Effects.AppendChecksum(Crc);
+		// Only while a move order is active, so a fight without commands keeps its old checksums.
+		if (Unit.bHasMoveOrder)
+		{
+			Crc = FCrc::MemCrc32(&Unit.MoveTargetCell, sizeof(Unit.MoveTargetCell), Crc);
+		}
 	}
 	for (const FCombatProjectile& Projectile : Projectiles)
 	{

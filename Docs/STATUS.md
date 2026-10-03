@@ -13,6 +13,7 @@ _Last updated: 2026-10-03_
 
 ## Open work
 
+- Player commands part A is done (simulation, scripts, replay v2; 34/34 tests). Part B: a unit list on the right of the HUD (own team; click a unit to see its action buttons), Move via a click in the arena, and a selection ring.
 - Balance (from the batch): team 0 wins `DA_Setup_AoE` 86.5% and `DA_Setup_Mixed` 99.7%; the Brutes win `DA_Setup_Test` and `DA_Setup_Taunt`.
 - Phase 6 (only if needed): finer navigation grid and clearance for unit sizes.
 - Optional: link VFX/sound in `DA_CueTable`.

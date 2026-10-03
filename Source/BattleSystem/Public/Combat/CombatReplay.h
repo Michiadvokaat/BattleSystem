@@ -3,6 +3,7 @@
 #pragma once
 
 #include "CoreMinimal.h"
+#include "Combat/CombatTypes.h"
 #include "CombatReplay.generated.h"
 
 struct FCombatSimConfig;
@@ -43,7 +44,8 @@ struct BATTLESYSTEM_API FCombatReplay
 {
 	GENERATED_BODY()
 
-	UPROPERTY() int32 FormatVersion = 1;
+	/** 1 = no commands; 2 = with the command log and checkpoints. */
+	UPROPERTY() int32 FormatVersion = 2;
 	UPROPERTY() FString SavedAt;
 	/** Engine build; a replay is only guaranteed identical on the same build. */
 	UPROPERTY() FString BuildVersion;
@@ -54,6 +56,15 @@ struct BATTLESYSTEM_API FCombatReplay
 	UPROPERTY() FString SetupPath;
 	UPROPERTY() int32 Seed = 0;
 	UPROPERTY() FCombatSimSettings Settings;
+
+	/** Every player command, with the tick it ran at; replayed exactly. */
+	UPROPERTY() TArray<FCombatCommand> Commands;
+	/** For information: the delay between giving and running a command when it was recorded. */
+	UPROPERTY() int32 CommandDelayTicks = 0;
+
+	/** Checksum (hex) after every CheckpointInterval-th tick, to find where a different replay starts to differ. */
+	UPROPERTY() int32 CheckpointInterval = 0;
+	UPROPERTY() TArray<FString> Checkpoints;
 
 	/** The recorded result, to compare against. */
 	UPROPERTY() int32 Ticks = 0;

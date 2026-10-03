@@ -1115,4 +1115,232 @@ bool FCombatBatchTest::RunTest(const FString& Parameters)
 	return true;
 }
 
+namespace CombatTests
+{
+	static FCombatCommand MakeMove(int32 Tick, int32 UnitId, FIntPoint Cell)
+	{
+		FCombatCommand Command;
+		Command.Tick = Tick;
+		Command.UnitId = UnitId;
+		Command.Type = ECombatCommandType::Move;
+		Command.TargetCell = Cell;
+		return Command;
+	}
+
+	static FCombatCommand MakeAbility(int32 Tick, int32 UnitId, int32 AbilityIndex)
+	{
+		FCombatCommand Command;
+		Command.Tick = Tick;
+		Command.UnitId = UnitId;
+		Command.Type = ECombatCommandType::Ability;
+		Command.AbilityIndex = AbilityIndex;
+		return Command;
+	}
+
+	/** A taunt around the unit (no damage) with a long cooldown, as an AI attack or a player ability. */
+	static FCombatAttackStats MakeTauntArea(float Radius, int32 DurationTicks)
+	{
+		FCombatAttackStats Taunt = MakeAreaAttack(ECombatAreaShape::CircleAroundSelf, 0.f, Radius, 0.f);
+		Taunt.bNeedsWalkableLine = false;
+		Taunt.Effects.Add(MakeTauntEffect(DurationTicks));
+		return Taunt;
+	}
+
+	static int32 CountEvents(const FCombatSimulation& Simulation, ECombatEventType Type, int32 SourceId)
+	{
+		int32 Count = 0;
+		for (const FCombatEvent& Event : Simulation.GetEvents())
+		{
+			Count += Event.Type == Type && Event.SourceId == SourceId ? 1 : 0;
+		}
+		return Count;
+	}
+}
+
+IMPLEMENT_SIMPLE_AUTOMATION_TEST(FCombatMoveCommandTest, "BattleSystem.Combat.CommandMove",
+	EAutomationTestFlags::EditorContext | EAutomationTestFlags::ProductFilter)
+
+bool FCombatMoveCommandTest::RunTest(const FString& Parameters)
+{
+	// A fighter next to an enemy is ordered away: no attacks on the way, arrives, then the AI fights again.
+	FCombatSimConfig Config;
+	Config.Grid.Init(20, 12, 100.f);
+	Config.MaxFirstAttackDelayTicks = 0;
+	CombatTests::AddUnit(Config, CombatTests::MakeStats(100.f, 10.f, 10, 0), 0, FIntPoint(2, 5));
+	CombatTests::AddUnit(Config, CombatTests::MakeDummyStats(), 1, FIntPoint(3, 5));
+	Config.Commands.Add(CombatTests::MakeMove(1, 0, FIntPoint(2, 10)));
+
+	FCombatSimulation Simulation(Config);
+	bool bAttackedWhileMoving = false;
+	int32 ArrivedTick = INDEX_NONE;
+	for (int32 Step = 0; Step < 100 && ArrivedTick == INDEX_NONE; ++Step)
+	{
+		Simulation.Step();
+		bAttackedWhileMoving |= CombatTests::CountEvents(Simulation, ECombatEventType::Attack, 0) > 0;
+		if (!Simulation.GetUnits()[0].bHasMoveOrder)
+		{
+			ArrivedTick = Simulation.GetTick();
+		}
+	}
+
+	TestFalse(TEXT("No attacks while moving"), bAttackedWhileMoving);
+	TestTrue(TEXT("Arrives"), ArrivedTick != INDEX_NONE);
+	TestTrue(TEXT("At the target cell"), Config.Grid.LocalToCell(Simulation.GetUnits()[0].Position) == FIntPoint(2, 10));
+
+	bool bFightsAgain = false;
+	for (int32 Step = 0; Step < 200 && !bFightsAgain; ++Step)
+	{
+		Simulation.Step();
+		bFightsAgain = CombatTests::CountEvents(Simulation, ECombatEventType::Attack, 0) > 0;
+	}
+	TestTrue(TEXT("The AI takes over again after arrival"), bFightsAgain);
+	return true;
+}
+
+IMPLEMENT_SIMPLE_AUTOMATION_TEST(FCombatMoveOverridesTauntTest, "BattleSystem.Combat.CommandMoveOverridesTaunt",
+	EAutomationTestFlags::EditorContext | EAutomationTestFlags::ProductFilter)
+
+bool FCombatMoveOverridesTauntTest::RunTest(const FString& Parameters)
+{
+	FCombatSimConfig Config;
+	Config.Grid.Init(20, 12, 100.f);
+	Config.MaxFirstAttackDelayTicks = 0;
+	CombatTests::AddUnit(Config, CombatTests::MakeStats(100.f, 1.f, 20, 0), 0, FIntPoint(5, 5));
+	CombatTests::AddUnit(Config, CombatTests::MakeUnitWithAttack(CombatTests::MakeTauntArea(600.f, 200)), 1, FIntPoint(8, 5));
+	Config.Commands.Add(CombatTests::MakeMove(3, 0, FIntPoint(1, 1)));
+
+	FCombatSimulation Simulation(Config);
+	for (int32 Step = 0; Step < 2; ++Step)
+	{
+		Simulation.Step();
+	}
+	TestTrue(TEXT("Taunted first"), Simulation.GetUnits()[0].Effects.HasGrantedTag(CombatTags::Status_Taunted));
+
+	const double StartDistance = FVector2D::Distance(Simulation.GetUnits()[0].Position, Simulation.GetUnits()[1].Position);
+	bool bTargetedTaunter = false;
+	for (int32 Step = 0; Step < 20; ++Step)
+	{
+		Simulation.Step();
+		const FCombatUnit& Unit = Simulation.GetUnits()[0];
+		bTargetedTaunter |= Unit.bHasMoveOrder && Unit.TargetId == 1;
+	}
+	const double EndDistance = FVector2D::Distance(Simulation.GetUnits()[0].Position, Simulation.GetUnits()[1].Position);
+
+	TestTrue(TEXT("Still taunted"), Simulation.GetUnits()[0].Effects.HasGrantedTag(CombatTags::Status_Taunted));
+	TestFalse(TEXT("Does not target the taunter while ordered to move"), bTargetedTaunter);
+	TestTrue(TEXT("Walks away from the taunter"), EndDistance > StartDistance + 100.0);
+	return true;
+}
+
+IMPLEMENT_SIMPLE_AUTOMATION_TEST(FCombatPlayerAbilityTest, "BattleSystem.Combat.CommandPlayerAbility",
+	EAutomationTestFlags::EditorContext | EAutomationTestFlags::ProductFilter)
+
+bool FCombatPlayerAbilityTest::RunTest(const FString& Parameters)
+{
+	// A player taunt has no cooldown: two commands in two ticks both go off. The AI never uses it itself.
+	FCombatUnitStats Shouter = CombatTests::MakeDummyStats();
+	Shouter.PlayerAbilities.Add(CombatTests::MakeTauntArea(300.f, 60));
+
+	FCombatSimConfig Config;
+	Config.Grid.Init(20, 12, 100.f);
+	CombatTests::AddUnit(Config, Shouter, 0, FIntPoint(5, 5));
+	CombatTests::AddUnit(Config, CombatTests::MakeDummyStats(), 1, FIntPoint(7, 5));
+	Config.Commands.Add(CombatTests::MakeAbility(10, 0, 0));
+	Config.Commands.Add(CombatTests::MakeAbility(11, 0, 0));
+
+	FCombatSimulation Simulation(Config);
+	int32 Executed = 0;
+	int32 Fired = 0;
+	for (int32 Step = 0; Step < 12; ++Step)
+	{
+		Simulation.Step();
+		if (Simulation.GetTick() < 10)
+		{
+			TestEqual(TEXT("The AI does not use a player ability"), CombatTests::CountEvents(Simulation, ECombatEventType::AreaAttackFired, 0), 0);
+		}
+		Executed += CombatTests::CountEvents(Simulation, ECombatEventType::CommandExecuted, 0);
+		Fired += CombatTests::CountEvents(Simulation, ECombatEventType::AreaAttackFired, 0);
+	}
+
+	TestEqual(TEXT("Both commands run"), Executed, 2);
+	TestEqual(TEXT("Both taunts go off (no cooldown)"), Fired, 2);
+	TestEqual(TEXT("The enemy is taunted by the shouter"), Simulation.GetUnits()[1].Effects.FindSourceOfTag(CombatTags::Status_Taunted), 0);
+	return true;
+}
+
+IMPLEMENT_SIMPLE_AUTOMATION_TEST(FCombatRejectedCommandTest, "BattleSystem.Combat.CommandRejected",
+	EAutomationTestFlags::EditorContext | EAutomationTestFlags::ProductFilter)
+
+bool FCombatRejectedCommandTest::RunTest(const FString& Parameters)
+{
+	FCombatSimConfig Config;
+	Config.Grid = CombatTests::MakeWallGrid();
+	CombatTests::AddUnit(Config, CombatTests::MakeDummyStats(), 0, FIntPoint(3, 2));
+	CombatTests::AddUnit(Config, CombatTests::MakeDummyStats(), 1, FIntPoint(15, 2));
+	Config.Commands.Add(CombatTests::MakeMove(2, 0, FIntPoint(6, 3)));	// into the wall
+	Config.Commands.Add(CombatTests::MakeAbility(2, 0, 0));				// no such ability
+
+	FCombatSimulation Simulation(Config);
+	Simulation.Step();
+	TestFalse(TEXT("A command for a tick that already ran is refused"), Simulation.QueueCommand(CombatTests::MakeMove(1, 0, FIntPoint(2, 2))));
+	Simulation.Step();
+
+	TestEqual(TEXT("Both commands are rejected"), CombatTests::CountEvents(Simulation, ECombatEventType::CommandRejected, 0), 2);
+	TestFalse(TEXT("No move order"), Simulation.GetUnits()[0].bHasMoveOrder);
+	TestEqual(TEXT("Rejected commands stay in the log"), Simulation.GetCommandLog().Num(), 2);
+	return true;
+}
+
+IMPLEMENT_SIMPLE_AUTOMATION_TEST(FCombatCommandReplayTest, "BattleSystem.Combat.CommandsReplayIdentically",
+	EAutomationTestFlags::EditorContext | EAutomationTestFlags::ProductFilter)
+
+bool FCombatCommandReplayTest::RunTest(const FString& Parameters)
+{
+	// Record: commands given live during the fight (as the player would, 3 ticks ahead).
+	FCombatSimulation Recorded(CombatTests::MakeSkirmish(42));
+	TArray<uint32> RecordedChecksums;
+	while (!Recorded.IsFinished())
+	{
+		const int32 Now = Recorded.GetTick();
+		if (Now == 20)
+		{
+			Recorded.QueueCommand(CombatTests::MakeMove(Now + 3, 0, FIntPoint(2, 0)));
+		}
+		if (Now == 25)
+		{
+			Recorded.QueueCommand(CombatTests::MakeMove(Now + 3, 2, FIntPoint(4, 11)));
+		}
+		Recorded.Step();
+		RecordedChecksums.Add(Recorded.GetChecksum());
+	}
+
+	// Replay: the same commands from the log, known in advance.
+	FCombatSimConfig ReplayConfig = CombatTests::MakeSkirmish(42);
+	ReplayConfig.Commands = Recorded.GetCommandLog();
+	const TArray<uint32> ReplayChecksums = CombatTests::RunAndCollectChecksums(ReplayConfig);
+	TestEqual(TEXT("Two commands in the log"), Recorded.GetCommandLog().Num(), 2);
+	TestTrue(TEXT("The replay has the same checksum after every step"), RecordedChecksums == ReplayChecksums);
+
+	// Without commands the fight is different (and identical to itself, as before).
+	const TArray<uint32> WithoutCommands = CombatTests::RunAndCollectChecksums(CombatTests::MakeSkirmish(42));
+	TestFalse(TEXT("Commands change the fight"), WithoutCommands == RecordedChecksums);
+
+	// The command log survives a JSON replay round trip.
+	FCombatReplay Replay;
+	Replay.Commands = Recorded.GetCommandLog();
+	FString Json;
+	CombatReplay::ToJson(Replay, Json);
+	FCombatReplay Loaded;
+	CombatReplay::FromJson(Json, Loaded);
+	bool bSameCommands = Loaded.Commands.Num() == Replay.Commands.Num();
+	for (int32 Index = 0; bSameCommands && Index < Replay.Commands.Num(); ++Index)
+	{
+		const FCombatCommand& A = Replay.Commands[Index];
+		const FCombatCommand& B = Loaded.Commands[Index];
+		bSameCommands = A.Tick == B.Tick && A.UnitId == B.UnitId && A.Type == B.Type && A.TargetCell == B.TargetCell && A.AbilityIndex == B.AbilityIndex;
+	}
+	TestTrue(TEXT("Commands survive JSON"), bSameCommands);
+	return true;
+}
+
 #endif // WITH_DEV_AUTOMATION_TESTS

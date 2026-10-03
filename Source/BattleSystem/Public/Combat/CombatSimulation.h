@@ -96,8 +96,17 @@ struct FCombatUnitStats
 	float Radius = 40.f;
 
 	TArray<FCombatAttackStats, TInlineAllocator<2>> Attacks;
+	/** Abilities only the player triggers (Ability commands); the AI never uses them. No cooldown, no windup. */
+	TArray<FCombatAttackStats> PlayerAbilities;
 	/** Innate tags (for example immunities checked by BlockedByTags). */
 	FGameplayTagContainer Tags;
+
+	/** Attack indices run over Attacks first, then PlayerAbilities (index Attacks.Num() + ability index). */
+	const FCombatAttackStats& GetAttack(int32 Index) const
+	{
+		return Index < Attacks.Num() ? Attacks[Index] : PlayerAbilities[Index - Attacks.Num()];
+	}
+	int32 GetPlayerAbilityAttackIndex(int32 AbilityIndex) const { return Attacks.Num() + AbilityIndex; }
 };
 
 struct FCombatUnitSpawn
@@ -117,6 +126,8 @@ struct FCombatSimConfig
 	int32 TickRate = 20;
 	/** The fight ends as a time-out after this many ticks. */
 	int32 MaxTicks = 2400;
+	/** Player commands known in advance (a script or a replay), queued at the start in this order. */
+	TArray<FCombatCommand> Commands;
 	/** Once a unit first reaches attack range, its first attack waits a random 0..N ticks, so the seed matters. */
 	int32 MaxFirstAttackDelayTicks = 10;
 	/** The per-team distance maps (and so the targets) are rebuilt every N ticks, and after every death. */
@@ -193,8 +204,12 @@ struct FCombatUnit
 	float DamageDealt = 0.f;
 	float DamageTaken = 0.f;
 
-	/** Own A* route (start to goal cell) when the target is not the one the team's distance map leads to. */
+	/** Own A* route (start to goal cell): to a target the team map does not lead to, or to a move order's cell. */
 	TArray<FIntPoint> Path;
+
+	/** Player Move command: walk to MoveTargetCell, ignoring enemies, until there. */
+	bool bHasMoveOrder = false;
+	FIntPoint MoveTargetCell = FIntPoint::ZeroValue;
 
 	static constexpr int32 MaxThreatEntries = 8;
 
@@ -235,6 +250,10 @@ enum class ECombatEventType : uint8
 	ProjectileEnded,
 	/** SourceId's attack AttackIndex applied an effect to TargetId. */
 	EffectApplied,
+	/** A player command for unit SourceId ran (AttackIndex is set for abilities). */
+	CommandExecuted,
+	/** A player command for unit SourceId could not run (dead unit, blocked cell, unknown ability). */
+	CommandRejected,
 	/** SourceId placed a telegraphed area (AreaId, Area) that goes off later. */
 	AreaTelegraphStarted,
 	/** SourceId's area attack AttackIndex went off (AreaId, Area). */
@@ -297,6 +316,14 @@ public:
 	const TArray<FCombatProjectile>& GetProjectiles() const { return Projectiles; }
 	/** Telegraphed areas that have not gone off yet, in placement order. */
 	const TArray<FCombatPendingArea>& GetPendingAreas() const { return PendingAreas; }
+
+	/**
+	 * Queues a player command for a future tick (Tick > GetTick()). Returns false for a tick that has
+	 * already run. Accepted commands are kept in the command log, rejected-on-execution ones included.
+	 */
+	bool QueueCommand(const FCombatCommand& Command);
+	/** Every accepted command, in the order given: with setup, seed and settings, this reproduces the fight. */
+	const TArray<FCombatCommand>& GetCommandLog() const { return CommandLog; }
 	/** Events of the last step only. */
 	const TArray<FCombatEvent>& GetEvents() const { return Events; }
 	/** CRC32 of the state after the last step. */
@@ -334,6 +361,12 @@ private:
 	/** Queues hits on every affected unit inside the area, using the positions at the start of this step. */
 	void ResolveArea(int32 SourceId, int32 Team, int32 AttackIndex, const FCombatArea& Area, int32 AreaId, float DamageDealtMultiplier);
 	void UpdatePendingAreas();
+	void ExecuteDueCommands();
+	void ExecuteCommand(const FCombatCommand& Command);
+	/** Movement for a unit with a move order (clears the order on arrival). */
+	FVector2D UpdateMoveOrder(FCombatUnit& Unit);
+	/** Steers along the unit's own A* path to GoalCell; returns the steer point (Fallback if there is no path). */
+	FVector2D SteerAlongPath(FCombatUnit& Unit, const FIntPoint& GoalCell, const FVector2D& Fallback) const;
 	/** For units with a ranged attack: the nearest enemy that attack can hit right now, or INDEX_NONE. */
 	int32 FindVisibleEnemyInRange(const FCombatUnit& Unit) const;
 	/** The attack with the smallest range that can reach the target now (cooldown not considered), or INDEX_NONE. */
@@ -369,6 +402,10 @@ private:
 	int32 NextProjectileId = 0;
 	TArray<FCombatPendingArea> PendingAreas;
 	int32 NextAreaId = 0;
+
+	/** Commands not yet run, ordered by tick and then by the order they were given. */
+	TArray<FCombatCommand> PendingCommands;
+	TArray<FCombatCommand> CommandLog;
 
 	/** Team values in order of first appearance, and the distance map towards each team's enemies. */
 	TArray<int32> TeamIds;

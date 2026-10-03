@@ -44,7 +44,7 @@ $P  = "D:\Unreal\UnrealProjects\BattleSystem\BattleSystem.uproject"
 
 Output goes to `Saved/Logs/BattleSystem.log`, which each run overwrites. Grep it for `LogCombat`, `Test Completed` or the script's log tag.
 
-Console commands (in PIE or headless): `Combat.Start <seed> [setup]`, `Combat.Simulate <seed> [setup]`, `Combat.Stop`, `Combat.Batch <count> [setup] [startseed] [csv]` (headless statistics; CSV to `Saved/CombatBatch/`), `Combat.SaveReplay`, and `Combat.Replay <file>` (`Saved/Replays/`). The console variable `Combat.Debug 1|2` draws targets, steer points and the distance map. In PIE the same controls (plus setup, seed, pause and speed) are on the in-game control panel (`ACombatHUD`). `setup` is an asset name (`DA_Setup_Test`) or an object path. Without it, the default setup from Project Settings > Game > Combat is used.
+Console commands (in PIE or headless): `Combat.Start <seed> [setup]`, `Combat.Simulate <seed> [setup]`, `Combat.Stop`, `Combat.Batch <count> [setup] [startseed] [csv]` (headless statistics; CSV to `Saved/CombatBatch/`), `Combat.SaveReplay`, `Combat.Replay <file>` (`Saved/Replays/`), and the player commands `Combat.Move <unit> <x> <y>` and `Combat.Ability <unit> [index]`. Simulate and Batch accept `script=<name>` (a `UCombatCommandScript`). The console variable `Combat.Debug 1|2` draws targets, steer points and the distance map. In PIE the same controls (plus setup, seed, pause and speed) are on the in-game control panel (`ACombatHUD`). `setup` is an asset name (`DA_Setup_Test`) or an object path. Without it, the default setup from Project Settings > Game > Combat is used.
 
 New UCLASS/USTRUCT types and header changes need a full build plus an editor restart. Live Coding only covers changes to function bodies in .cpp files.
 
@@ -65,4 +65,5 @@ The mechanics of built systems are in `Docs/Architecture.md`; later phases are i
 - All randomness comes from one seeded `FRandomStream`. Never use `FMath::Rand`/`FRand`.
 - No `DeltaTime`, wall-clock time, NavMesh, Detour, CharacterMovement, physics, or overlap events in the logic. UE collision is only allowed for mouse picking.
 - Apply damage and effects in two passes: collect everything in the step first, then apply it all at once.
+- Player input reaches the simulation only as `FCombatCommand`s queued for a future tick (the command log). Never change simulation state directly from input or presentation.
 - Acceptance check: running `Combat.Simulate 42` twice must print the same checksum. `BattleSystem.Combat.Determinism` checks the checksum after every step.

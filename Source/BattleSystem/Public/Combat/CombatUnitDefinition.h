@@ -153,6 +153,13 @@ public:
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Unit")
 	TArray<FCombatAttackDefinition> Attacks;
 
+	/**
+	 * Abilities only the player triggers (Ability commands); the AI never uses them. They go off right away,
+	 * without cooldown or windup. For now an Attack.Taunt, or an Attack.AoE with CircleAroundSelf.
+	 */
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Unit")
+	TArray<FCombatAttackDefinition> PlayerAbilities;
+
 	/** Innate tags, for example an immunity that an effect's BlockedByTags checks. */
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Unit")
 	FGameplayTagContainer Tags;

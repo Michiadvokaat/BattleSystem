@@ -4,27 +4,20 @@
 #include "Combat/CombatSimulation.h"
 #include "Combat/CombatTags.h"
 
-FCombatUnitStats UCombatUnitDefinition::ToSimStats(int32 TickRate) const
+namespace
 {
-	FCombatUnitStats Stats;
-	Stats.MaxHP = MaxHP;
-	Stats.MoveSpeed = MoveSpeed;
-	Stats.Radius = Radius;
-	Stats.Tags = Tags;
-
-	for (int32 Index = 0; Index < Attacks.Num(); ++Index)
+	/** Converts one attack (or player ability) to simulation stats. False for types the simulation does not use. */
+	bool ConvertAttack(const FCombatAttackDefinition& Definition, int32 Index, int32 TickRate, FCombatAttackStats& Attack)
 	{
-		const FCombatAttackDefinition& Definition = Attacks[Index];
 		const bool bMelee = Definition.Type.MatchesTagExact(CombatTags::Attack_Melee);
 		const bool bRanged = Definition.Type.MatchesTagExact(CombatTags::Attack_Ranged);
 		const bool bTaunt = Definition.Type.MatchesTagExact(CombatTags::Attack_Taunt);
 		const bool bAoE = Definition.Type.MatchesTagExact(CombatTags::Attack_AoE);
 		if (!bMelee && !bRanged && !bTaunt && !bAoE)
 		{
-			continue;
+			return false;
 		}
 
-		FCombatAttackStats& Attack = Stats.Attacks.AddDefaulted_GetRef();
 		Attack.Type = Definition.Type;
 		Attack.Range = Definition.Range;
 		Attack.Damage = Definition.Damage;
@@ -64,6 +57,32 @@ FCombatUnitStats UCombatUnitDefinition::ToSimStats(int32 TickRate) const
 			Effect.DamageDealtMultiplier = EffectDefinition.DamageDealtMultiplier;
 			Effect.DamageTakenMultiplier = EffectDefinition.DamageTakenMultiplier;
 		}
+		return true;
+	}
+}
+
+FCombatUnitStats UCombatUnitDefinition::ToSimStats(int32 TickRate) const
+{
+	FCombatUnitStats Stats;
+	Stats.MaxHP = MaxHP;
+	Stats.MoveSpeed = MoveSpeed;
+	Stats.Radius = Radius;
+	Stats.Tags = Tags;
+
+	for (int32 Index = 0; Index < Attacks.Num(); ++Index)
+	{
+		FCombatAttackStats Attack;
+		if (ConvertAttack(Attacks[Index], Index, TickRate, Attack))
+		{
+			Stats.Attacks.Add(MoveTemp(Attack));
+		}
+	}
+
+	// Player abilities keep their index (a command names it), so unusable ones still take a slot.
+	for (int32 Index = 0; Index < PlayerAbilities.Num(); ++Index)
+	{
+		FCombatAttackStats& Ability = Stats.PlayerAbilities.AddDefaulted_GetRef();
+		ConvertAttack(PlayerAbilities[Index], Index, TickRate, Ability);
 	}
 	return Stats;
 }

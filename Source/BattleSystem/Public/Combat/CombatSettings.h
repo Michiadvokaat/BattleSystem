@@ -98,6 +98,18 @@ public:
 	UPROPERTY(Config, EditAnywhere, Category = "Threat", meta = (ClampMin = 0, Units = "cm"))
 	float RetargetDistanceMargin = 150.f;
 
+	/** The team the player commands (unit list, commands). */
+	UPROPERTY(Config, EditAnywhere, Category = "Player")
+	int32 PlayerTeam = 0;
+
+	/** Ticks between giving a command and running it (3 = 0.15 s); a fixed delay keeps lockstep multiplayer possible. */
+	UPROPERTY(Config, EditAnywhere, Category = "Player", meta = (ClampMin = 1, ClampMax = 60))
+	int32 CommandDelayTicks = 3;
+
+	/** Replays store a checksum every this many ticks, to show where a different replay starts to differ. */
+	UPROPERTY(Config, EditAnywhere, Category = "Player", meta = (ClampMin = 1))
+	int32 ReplayCheckpointInterval = 20;
+
 	/** Start a fight automatically when an arena with ACombatGameMode begins play. */
 	UPROPERTY(Config, EditAnywhere, Category = "Arena")
 	bool bAutoStartFight = false;

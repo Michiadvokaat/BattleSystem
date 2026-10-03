@@ -9,6 +9,7 @@
 #include "CombatSubsystem.generated.h"
 
 class ACombatProjectileActor;
+class UCombatCommandScript;
 class UCombatCueTable;
 class ACombatUnitActor;
 class UCombatSetup;
@@ -33,7 +34,14 @@ public:
 
 	/** Starts a fight with presentation, replacing any running fight. Uses the project settings and the taunt range override. */
 	bool StartFight(int32 Seed, const UCombatSetup* Setup);
-	bool StartFightWithSettings(int32 Seed, const UCombatSetup* Setup, const FCombatSimSettings& Settings);
+	bool StartFightWithSettings(int32 Seed, const UCombatSetup* Setup, const FCombatSimSettings& Settings,
+		TConstArrayView<FCombatCommand> Commands = {});
+
+	/**
+	 * A player command for a unit of the player's team. It runs CommandDelayTicks after the current tick
+	 * (also while paused). Ignored while a replay plays or after the fight. The Tick of Command is set here.
+	 */
+	bool IssueCommand(FCombatCommand Command);
 
 	/** The project settings with this subsystem's taunt range override. */
 	FCombatSimSettings GetCurrentSimSettings() const { return FCombatSimSettings::FromProjectSettings(TauntRangeOverride); }
@@ -52,7 +60,7 @@ public:
 
 	/** Shared by RunBatch and the Combat.Batch command. Logs and returns the summary. */
 	static bool RunBatchInWorld(UWorld* World, const UCombatSetup& Setup, int32 Count, int32 StartSeed,
-		const FCombatSimSettings& Settings, bool bWriteCsv, FString& OutSummary);
+		const FCombatSimSettings& Settings, bool bWriteCsv, FString& OutSummary, TConstArrayView<FCombatCommand> Commands = {});
 	void StopFight();
 
 	const FCombatSimulation* GetSimulation() const { return Simulation.Get(); }
@@ -87,6 +95,8 @@ public:
 
 	/** Finds a setup by asset name or object path. An empty string gives the default setup from UCombatSettings. */
 	static UCombatSetup* FindSetup(const FString& NameOrPath);
+	/** Finds a command script by asset name or object path. */
+	static UCombatCommandScript* FindCommandScript(const FString& NameOrPath);
 
 protected:
 	virtual bool DoesSupportWorldType(const EWorldType::Type WorldType) const override;
@@ -109,6 +119,8 @@ private:
 	void DrawArea(const FCombatArea& Area, const FColor& Color, float Duration, float Thickness, float Scale = 1.f) const;
 	/** Logs the result once the fight is over; for a replay also decides the verdict. */
 	void ReportResult();
+	/** After each step: record a checkpoint, or compare it while a replay plays. */
+	void UpdateCheckpoints();
 	FVector SimToWorld(const FVector2D& Local) const { return GridOrigin + FVector(Local.X, Local.Y, 0.0); }
 
 	TUniquePtr<FCombatSimulation> Simulation;
@@ -143,5 +155,10 @@ private:
 	bool bIsReplay = false;
 	FCombatReplay PlayingReplay;
 	FString ReplayVerdict;
+	/** Checksums of this fight every ReplayCheckpointInterval ticks (saved in replays). */
+	int32 CheckpointInterval = 20;
+	TArray<FString> Checkpoints;
+	/** Replay: the first checkpoint tick that differed, or INDEX_NONE. */
+	int32 FirstDifferentTick = INDEX_NONE;
 	FString LastBatchSummary;
 };

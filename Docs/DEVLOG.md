@@ -63,3 +63,9 @@ Dated history: decisions, bugs, rejected approaches. Newest entries at the botto
 - Phase 5 done: the user checked AoE, replay save/play (identical) and Batch 1000 in PIE.
 - Health bar above each unit and status labels for active effects on its center (screen-space widgets, Slate in code; `StatusIcons` setting). They replace the debug "T". Presentation only: checksums unchanged.
 - Health bar stayed green: the default `SProgressBar` style tints its striped fill texture (`PrimaryHover`), which multiplied with our color. The bar now uses its own style: a plain white fill on a dark background, without the fill animation.
+- Player commands part A (simulation): `FCombatCommand` (Move/Ability) with a tick, a command log in the simulation, and `QueueCommand`.
+  - Move orders override the AI and taunts. Player abilities (`PlayerAbilities`) have no cooldown.
+  - `UCombatCommandScript` for Simulate and Batch, and replay format 2 with commands and checkpoints every 20 ticks.
+  - Checksums without commands are unchanged (`0xBED8CC97`, `0x7CE33AAB`, `0x32F7C942`).
+  - `DA_Setup_Taunt` with `DA_Script_TauntDemo` gives `0xB029A714`. Over 1000 fights the archers deal 155 damage instead of 58, but team 0 still always loses.
+  - Console commands `Combat.Move` and `Combat.Ability` for testing until the unit list exists.
