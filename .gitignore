@@ -23,5 +23,8 @@ Plugins/*/Intermediate/
 Content/Developers/
 Content/Collections/
 
+# Local Fab asset packs (kept out of the repo)
+Content/ZZ_FAB/
+
 # Claude Code local settings
 .claude/settings.local.json

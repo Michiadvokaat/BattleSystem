@@ -2,36 +2,49 @@
 
 This file provides guidance to Claude Code (claude.ai/code) when working with code in this repository.
 
-## Project state
+## Working agreements
 
-Unreal Engine **5.8** C++ project (`BattleSystem.uproject`, single runtime module `BattleSystem`). The source is still the empty template: no gameplay code, no maps, no assets. All planned work is in **`Docs/Ontwerp-Gevecht.md`** (in Dutch), the design for a deterministic autobattle combat system that will be built in phases 1–6. Read it before you implement anything. Keep it current: when a phase is done or a decision changes, update its "Status" line and the "Besluiten" table.
+Follow the working agreements in @Docs/Werkafspraken.md (language, feature workflow, git, debugging, docs, Unreal build rules). They take precedence over defaults elsewhere in this file.
 
-The project is not a git repository.
+## Repo docs
+
+- `Docs/STATUS.md`: current state and open work. Read it at the start of a session.
+- `Docs/Ontwerp-Gevecht.md`: the design for the autobattle combat system (phases 1–6, in Dutch). When a phase is done or a decision changes, update its "Status" line and the "Besluiten" table.
+- `Docs/Architecture.md`: the mechanics of each built system.
+- `Docs/DEVLOG.md`: dated history. Search it; don't read it in full.
+- `Docs/Licenses/README.md`: licenses for all third-party content.
+
+## Project
+
+Unreal Engine **5.8** C++ project (`BattleSystem.uproject`, single runtime module `BattleSystem`). Third-party asset packs from Fab go in `Content/ZZ_FAB/`, which is gitignored. Repo content that references those packs only resolves when they are installed locally.
 
 ## Build & run
 
-Engine install: `C:\Program Files\Epic Games\UE_5.8`. Run these from PowerShell (`$UE` = engine root):
+Before building or running the editor headless, check whether the editor is running (`tasklist | grep -i unrealeditor`) and follow the Live Coding / close-editor rules in the working agreements.
 
 ```powershell
 $UE = "C:\Program Files\Epic Games\UE_5.8"
 $P  = "D:\Unreal\UnrealProjects\BattleSystem\BattleSystem.uproject"
 
-# Build the editor target (the main dev build)
+# Build the editor target
 & "$UE\Engine\Build\BatchFiles\Build.bat" BattleSystemEditor Win64 Development -Project="$P" -WaitMutex
 
-# Regenerate project files (needed after adding/removing source files)
+# Regenerate project files (after adding/removing source files)
 & "$UE\Engine\Build\BatchFiles\Build.bat" -ProjectFiles -Project="$P" -Game
 
 # Headless run, e.g. for the planned Combat.Simulate / Combat.Batch console commands
 & "$UE\Engine\Binaries\Win64\UnrealEditor-Cmd.exe" "$P" -game -nullrhi -unattended -nosplash -ExecCmds="Combat.Simulate 42, Quit" -log
 
-# Automation tests (once tests exist under e.g. "BattleSystem.Combat")
-& "$UE\Engine\Binaries\Win64\UnrealEditor-Cmd.exe" "$P" -unattended -nullrhi -nosplash -ExecCmds="Automation RunTests BattleSystem.Combat; Quit" -log
+# Automation tests (test names under "BattleSystem.*" once tests exist)
+& "$UE\Engine\Binaries\Win64\UnrealEditor-Cmd.exe" "$P" -unattended -nullrhi -nosplash -ExecCmds="Automation RunTests BattleSystem; Quit" -log
+
+# Edit binary assets headless with editor Python (editor must be closed)
+& "$UE\Engine\Binaries\Win64\UnrealEditor-Cmd.exe" "$P" -run=pythonscript -script="<path to .py>" -unattended -nullrhi
 ```
 
-From the design doc: **new C++ classes (UCLASS/USTRUCT) need a full build**, meaning regenerate the project files, build, and restart the editor. Live Coding is only suitable for changes to the bodies of existing functions. A build fails if the editor is open with Live Coding active, so close the editor first or use Live Coding (Ctrl+Alt+F11).
+New UCLASS/USTRUCT types and header changes need a full build plus an editor restart. Live Coding only covers changes to function bodies in .cpp files.
 
-## Planned architecture (from the design doc)
+## Combat architecture (from the design doc)
 
 All combat code goes in `Source/BattleSystem/Public|Private/Combat/`. There are three layers with a strict dependency direction: **grid ← simulation ← presentation**.
 
@@ -49,7 +62,3 @@ All combat code goes in `Source/BattleSystem/Public|Private/Combat/`. There are 
 - No `DeltaTime`, wall-clock time, NavMesh, Detour, CharacterMovement, physics, or overlap events in the logic. UE collision is only allowed for mouse picking.
 - Apply damage and effects in two passes: collect everything in the step first, then apply it all at once.
 - Acceptance check: running `Combat.Simulate 42` twice must print the same checksum.
-
-## Module dependencies
-
-`BattleSystem.Build.cs` currently has Core, CoreUObject, Engine, InputCore, and EnhancedInput. Phase 1 adds `GameplayTags` (and `DeveloperSettings` for `UCombatSettings`).
