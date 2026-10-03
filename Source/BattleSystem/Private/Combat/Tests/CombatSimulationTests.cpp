@@ -180,4 +180,145 @@ bool FCombatTimeLimitTest::RunTest(const FString& Parameters)
 	return true;
 }
 
+namespace CombatTests
+{
+	/** 20x12 grid with a wall at x = 6, y = 0..8; the gap is y = 9..11. */
+	static FCombatGridData MakeWallGrid()
+	{
+		FCombatGridData Grid;
+		Grid.Init(20, 12, 100.f);
+		for (int32 Y = 0; Y <= 8; ++Y)
+		{
+			Grid.AddFlags(FIntPoint(6, Y), ECombatCellFlags::Blocked | ECombatCellFlags::BlocksSight);
+		}
+		return Grid;
+	}
+
+	/** A unit that neither moves nor attacks. */
+	static FCombatUnitStats MakeDummyStats()
+	{
+		FCombatUnitStats Stats = MakeStats(1000.f, 0.f, 20, 0);
+		Stats.bHasAttack = false;
+		Stats.MoveSpeed = 0.f;
+		return Stats;
+	}
+}
+
+IMPLEMENT_SIMPLE_AUTOMATION_TEST(FCombatLineWalkableTest, "BattleSystem.Combat.LineWalkable",
+	EAutomationTestFlags::EditorContext | EAutomationTestFlags::ProductFilter)
+
+bool FCombatLineWalkableTest::RunTest(const FString& Parameters)
+{
+	const FCombatGridData Grid = CombatTests::MakeWallGrid();
+	TestTrue(TEXT("Open line"), Grid.IsLineWalkable(Grid.CellToLocal(FIntPoint(2, 2)), Grid.CellToLocal(FIntPoint(5, 7))));
+	TestFalse(TEXT("Line through the wall"), Grid.IsLineWalkable(Grid.CellToLocal(FIntPoint(3, 2)), Grid.CellToLocal(FIntPoint(9, 2))));
+	TestTrue(TEXT("Line through the gap"), Grid.IsLineWalkable(Grid.CellToLocal(FIntPoint(3, 10)), Grid.CellToLocal(FIntPoint(9, 10))));
+	TestFalse(TEXT("Diagonal past the wall end touches the wall"), Grid.IsLineWalkable(Grid.CellToLocal(FIntPoint(5, 7)), Grid.CellToLocal(FIntPoint(7, 9))));
+	return true;
+}
+
+IMPLEMENT_SIMPLE_AUTOMATION_TEST(FCombatDistanceMapTest, "BattleSystem.Combat.DistanceMap",
+	EAutomationTestFlags::EditorContext | EAutomationTestFlags::ProductFilter)
+
+bool FCombatDistanceMapTest::RunTest(const FString& Parameters)
+{
+	const FCombatGridData Grid = CombatTests::MakeWallGrid();
+
+	// Source A behind the wall (ID 1), source B on the open side (ID 2).
+	const FCombatDistanceMap::FSource Sources[] = { { FIntPoint(9, 2), 1 }, { FIntPoint(3, 10), 2 } };
+	FCombatDistanceMap Map;
+	Map.Build(Grid, Sources);
+
+	TestEqual(TEXT("Source cell has distance 0"), Map.GetDistance(FIntPoint(9, 2)), 0);
+	TestEqual(TEXT("Straight neighbor costs 10"), Map.GetDistance(FIntPoint(10, 2)), 10);
+	TestEqual(TEXT("Diagonal neighbor costs 14"), Map.GetDistance(FIntPoint(10, 3)), 14);
+	TestEqual(TEXT("Blocked cells are unreachable"), Map.GetDistance(FIntPoint(6, 4)), FCombatDistanceMap::Unreachable);
+	TestEqual(TEXT("(3,2) is nearest to B by walking, although A is nearer as the crow flies"), Map.GetNearestId(FIntPoint(3, 2)), 2);
+	TestEqual(TEXT("(8,2) is nearest to A"), Map.GetNearestId(FIntPoint(8, 2)), 1);
+
+	FIntPoint Next;
+	TestTrue(TEXT("A route step exists from (3,2)"), Map.GetNextCell(Grid, FIntPoint(3, 2), Next));
+	TestTrue(TEXT("The step lowers the distance"), Map.GetDistance(Next) < Map.GetDistance(FIntPoint(3, 2)));
+
+	// Equal distance from two sources: the lowest ID wins.
+	FCombatGridData Open;
+	Open.Init(5, 1, 100.f);
+	const FCombatDistanceMap::FSource TieSources[] = { { FIntPoint(4, 0), 7 }, { FIntPoint(0, 0), 3 } };
+	FCombatDistanceMap TieMap;
+	TieMap.Build(Open, TieSources);
+	TestEqual(TEXT("Tie goes to the lowest ID"), TieMap.GetNearestId(FIntPoint(2, 0)), 3);
+	return true;
+}
+
+IMPLEMENT_SIMPLE_AUTOMATION_TEST(FCombatWalkingTargetTest, "BattleSystem.Combat.TargetNearestByWalking",
+	EAutomationTestFlags::EditorContext | EAutomationTestFlags::ProductFilter)
+
+bool FCombatWalkingTargetTest::RunTest(const FString& Parameters)
+{
+	FCombatSimConfig Config;
+	Config.Grid = CombatTests::MakeWallGrid();
+	CombatTests::AddUnit(Config, CombatTests::MakeStats(100.f, 10.f, 20, 6), 0, FIntPoint(3, 2));
+	CombatTests::AddUnit(Config, CombatTests::MakeDummyStats(), 1, FIntPoint(9, 2));
+	CombatTests::AddUnit(Config, CombatTests::MakeDummyStats(), 1, FIntPoint(3, 10));
+
+	FCombatSimulation Simulation(Config);
+	Simulation.Step();
+	TestEqual(TEXT("Targets B (reachable sooner), not A (nearer as the crow flies)"), Simulation.GetUnits()[0].TargetId, 2);
+	return true;
+}
+
+IMPLEMENT_SIMPLE_AUTOMATION_TEST(FCombatPathAroundWallTest, "BattleSystem.Combat.PathAroundWall",
+	EAutomationTestFlags::EditorContext | EAutomationTestFlags::ProductFilter)
+
+bool FCombatPathAroundWallTest::RunTest(const FString& Parameters)
+{
+	FCombatSimConfig Config;
+	Config.Grid = CombatTests::MakeWallGrid();
+	Config.MaxFirstAttackDelayTicks = 0;
+	CombatTests::AddUnit(Config, CombatTests::MakeStats(100.f, 10.f, 20, 6), 0, FIntPoint(3, 2));
+	CombatTests::AddUnit(Config, CombatTests::MakeDummyStats(), 1, FIntPoint(9, 2));
+
+	FCombatSimulation Simulation(Config);
+	bool bAlwaysWalkable = true;
+	bool bAttacked = false;
+	for (int32 Step = 0; Step < 600 && !bAttacked; ++Step)
+	{
+		Simulation.Step();
+		const FCombatUnit& Unit = Simulation.GetUnits()[0];
+		bAlwaysWalkable &= Config.Grid.IsWalkable(Config.Grid.LocalToCell(Unit.Position));
+		bAttacked = Simulation.GetEvents().ContainsByPredicate([](const FCombatEvent& Event)
+		{
+			return Event.Type == ECombatEventType::Attack && Event.SourceId == 0;
+		});
+	}
+
+	TestTrue(TEXT("Never in a blocked cell"), bAlwaysWalkable);
+	TestTrue(TEXT("Reaches the target behind the wall and attacks"), bAttacked);
+	return true;
+}
+
+IMPLEMENT_SIMPLE_AUTOMATION_TEST(FCombatSeparationTest, "BattleSystem.Combat.Separation",
+	EAutomationTestFlags::EditorContext | EAutomationTestFlags::ProductFilter)
+
+bool FCombatSeparationTest::RunTest(const FString& Parameters)
+{
+	FCombatSimConfig Config;
+	Config.Grid.Init(20, 12, 100.f);
+	CombatTests::AddUnit(Config, CombatTests::MakeDummyStats(), 0, FIntPoint(5, 5));
+	CombatTests::AddUnit(Config, CombatTests::MakeDummyStats(), 0, FIntPoint(5, 5));
+	CombatTests::AddUnit(Config, CombatTests::MakeDummyStats(), 1, FIntPoint(15, 5));
+
+	FCombatSimulation Simulation(Config);
+	for (int32 Step = 0; Step < 60; ++Step)
+	{
+		Simulation.Step();
+	}
+
+	const TArray<FCombatUnit>& Units = Simulation.GetUnits();
+	const double Distance = FVector2D::Distance(Units[0].Position, Units[1].Position);
+	const double MinDistance = Units[0].Stats.Radius + Units[1].Stats.Radius;
+	TestTrue(TEXT("Two units that start on the same spot are pushed apart"), Distance >= MinDistance * 0.9);
+	return true;
+}
+
 #endif // WITH_DEV_AUTOMATION_TESTS

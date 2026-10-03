@@ -7,11 +7,17 @@
 #include "Combat/CombatSetup.h"
 #include "Combat/CombatUnitActor.h"
 #include "Combat/CombatUnitDefinition.h"
+#include "DrawDebugHelpers.h"
 #include "Engine/Engine.h"
 #include "Engine/World.h"
 #include "HAL/IConsoleManager.h"
 
 DEFINE_LOG_CATEGORY(LogCombat);
+
+static TAutoConsoleVariable<int32> CVarCombatDebug(
+	TEXT("Combat.Debug"),
+	0,
+	TEXT("Combat debug drawing. 0 = off, 1 = lines to target (team color) and steer point (yellow), 2 = also team 0's distance map in cells."));
 
 void UCombatSubsystem::Tick(float DeltaTime)
 {
@@ -46,7 +52,9 @@ void UCombatSubsystem::Tick(float DeltaTime)
 		}
 	}
 
-	UpdateActors(FMath::Clamp(static_cast<float>(Accumulator / FixedDt), 0.f, 1.f));
+	const float Alpha = FMath::Clamp(static_cast<float>(Accumulator / FixedDt), 0.f, 1.f);
+	UpdateActors(Alpha);
+	DrawDebug(Alpha);
 }
 
 TStatId UCombatSubsystem::GetStatId() const
@@ -173,6 +181,60 @@ void UCombatSubsystem::UpdateActors(float Alpha)
 	}
 }
 
+void UCombatSubsystem::DrawDebug(float Alpha) const
+{
+	const int32 Level = CVarCombatDebug.GetValueOnGameThread();
+	if (Level <= 0)
+	{
+		return;
+	}
+
+	UWorld* World = GetWorld();
+	const UCombatSettings* Settings = GetDefault<UCombatSettings>();
+	const FVector Lift(0.0, 0.0, 30.0);
+	const TArray<FCombatUnit>& Units = Simulation->GetUnits();
+
+	for (const FCombatUnit& Unit : Units)
+	{
+		if (!Unit.bAlive)
+		{
+			continue;
+		}
+
+		const FVector Position = SimToWorld(FMath::Lerp(Unit.PreviousPosition, Unit.Position, Alpha)) + Lift;
+		if (Unit.TargetId != INDEX_NONE && Units[Unit.TargetId].bAlive)
+		{
+			const FCombatUnit& Target = Units[Unit.TargetId];
+			const FVector TargetPosition = SimToWorld(FMath::Lerp(Target.PreviousPosition, Target.Position, Alpha)) + Lift;
+			DrawDebugLine(World, Position, TargetPosition, Settings->GetTeamColor(Unit.Team).ToFColor(true), false, -1.f, 0, 3.f);
+
+			if (!Unit.SteerPoint.Equals(Target.PreviousPosition))
+			{
+				DrawDebugLine(World, Position, SimToWorld(Unit.SteerPoint) + Lift, FColor::Yellow, false, -1.f, 0, 2.f);
+			}
+		}
+	}
+
+	const FCombatDistanceMap* Map = Level >= 2 ? Simulation->GetDistanceMap(0) : nullptr;
+	if (Map)
+	{
+		const FCombatGridData& Grid = Simulation->GetGrid();
+		for (int32 Y = 0; Y < Grid.Height; ++Y)
+		{
+			for (int32 X = 0; X < Grid.Width; ++X)
+			{
+				const int32 Distance = Map->GetDistance(FIntPoint(X, Y));
+				if (Distance != FCombatDistanceMap::Unreachable)
+				{
+					DrawDebugString(World, SimToWorld(Grid.CellToLocal(FIntPoint(X, Y))) + FVector(0.0, 0.0, 10.0),
+						FString::Printf(TEXT("%.1f"), Distance / static_cast<float>(FCombatDistanceMap::StraightCost)),
+						nullptr, FColor::White, 0.f, false, 1.f);
+				}
+			}
+		}
+	}
+}
+
 void UCombatSubsystem::ReportResult() const
 {
 	FString Result = FCombatSimulation::OutcomeToString(Simulation->GetOutcome());
@@ -210,6 +272,9 @@ bool UCombatSubsystem::BuildSimConfig(UWorld* World, int32 Seed, const UCombatSe
 	OutConfig.TickRate = Settings->TickRate;
 	OutConfig.MaxTicks = Settings->SecondsToTicks(Settings->FightTimeLimit);
 	OutConfig.MaxFirstAttackDelayTicks = Settings->SecondsToTicks(Settings->MaxFirstAttackDelay);
+	OutConfig.RetargetIntervalTicks = FMath::Max(Settings->SecondsToTicks(Settings->RetargetInterval), 1);
+	OutConfig.PathLookaheadCells = Settings->PathLookaheadCells;
+	OutConfig.SeparationStrength = Settings->SeparationStrength;
 
 	OutConfig.Units.Reset();
 	for (int32 Index = 0; Index < Setup.Units.Num(); ++Index)

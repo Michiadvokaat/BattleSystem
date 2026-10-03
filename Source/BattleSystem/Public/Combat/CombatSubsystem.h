@@ -51,6 +51,8 @@ protected:
 private:
 	void DispatchEvents();
 	void UpdateActors(float Alpha);
+	/** Debug lines and distance-map numbers, depending on the Combat.Debug console variable. */
+	void DrawDebug(float Alpha) const;
 	void ReportResult() const;
 	FVector SimToWorld(const FVector2D& Local) const { return GridOrigin + FVector(Local.X, Local.Y, 0.0); }
 

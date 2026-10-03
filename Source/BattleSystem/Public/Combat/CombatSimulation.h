@@ -5,6 +5,7 @@
 #include "CoreMinimal.h"
 #include "GameplayTagContainer.h"
 #include "Math/RandomStream.h"
+#include "Combat/CombatDistanceMap.h"
 #include "Combat/CombatGridData.h"
 
 /** Unit stats as the simulation sees them: copied from a definition at fight start, times in ticks. */
@@ -46,6 +47,12 @@ struct FCombatSimConfig
 	int32 MaxTicks = 2400;
 	/** Once a unit first reaches attack range, its first attack waits a random 0..N ticks, so the seed matters. */
 	int32 MaxFirstAttackDelayTicks = 10;
+	/** The per-team distance maps (and so the targets) are rebuilt every N ticks, and after every death. */
+	int32 RetargetIntervalTicks = 5;
+	/** How many cells ahead on the route a unit looks for the farthest visible point to steer to. */
+	int32 PathLookaheadCells = 8;
+	/** Fraction of the overlap between two units that is pushed apart per tick (0..1). */
+	float SeparationStrength = 0.5f;
 };
 
 struct FCombatUnit
@@ -63,6 +70,8 @@ struct FCombatUnit
 	float HP = 0.f;
 	bool bAlive = true;
 	int32 TargetId = INDEX_NONE;
+	/** The point the unit steered towards in the last step (the target, or a point on its route). For debugging. */
+	FVector2D SteerPoint = FVector2D::ZeroVector;
 
 	/** Ticks until the next attack may start. */
 	int32 CooldownTicks = 0;
@@ -133,6 +142,9 @@ public:
 	/** CRC32 of the state after the last step. */
 	uint32 GetChecksum() const { return Checksum; }
 
+	/** The distance map towards the enemies of a team, or null if the team has no units. */
+	const FCombatDistanceMap* GetDistanceMap(int32 Team) const;
+
 	static const TCHAR* OutcomeToString(ECombatOutcome InOutcome);
 
 private:
@@ -143,8 +155,17 @@ private:
 		float Damage;
 	};
 
+	void RebuildDistanceMaps();
 	int32 FindNearestEnemy(const FCombatUnit& Unit) const;
+	int32 ChooseTarget(const FCombatUnit& Unit) const;
 	void UpdateUnit(FCombatUnit& Unit);
+	/** Targeting and attacks; returns the movement the unit wants this step (before separation). */
+	FVector2D UpdateCombat(FCombatUnit& Unit);
+	FVector2D FindRouteSteerPoint(const FCombatUnit& Unit) const;
+	FVector2D ComputeSeparation(const FCombatUnit& Unit) const;
+	/** Moves from From towards To without ending in a blocked cell, sliding along one axis if needed. */
+	FVector2D ResolveMove(const FVector2D& From, const FVector2D& To) const;
+	void TryStartAttack(FCombatUnit& Unit, const FCombatUnit& Target);
 	void ApplyPendingHits();
 	void UpdateOutcome();
 	uint32 ComputeChecksum() const;
@@ -156,6 +177,11 @@ private:
 	TArray<FCombatUnit> Units;
 	TArray<FCombatEvent> Events;
 	TArray<FPendingHit> PendingHits;
+
+	/** Team values in order of first appearance, and the distance map towards each team's enemies. */
+	TArray<int32> TeamIds;
+	TArray<FCombatDistanceMap> DistanceMaps;
+	bool bDistanceMapsDirty = true;
 
 	int32 Tick = 0;
 	ECombatOutcome Outcome = ECombatOutcome::InProgress;

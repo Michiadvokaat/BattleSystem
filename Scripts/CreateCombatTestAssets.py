@@ -3,13 +3,15 @@
 Run headless with the editor closed:
     UnrealEditor-Cmd.exe BattleSystem.uproject -run=pythonscript -script="<abs path>/Scripts/CreateCombatTestAssets.py" -unattended -nullrhi
 
-Re-running overwrites the values below; tune in the editor afterwards only if you do not re-run this script.
+Only assets that do not exist yet are created and filled, so values tuned in the editor are kept.
+Set FORCE_UPDATE = True to overwrite existing assets with the values below.
 """
 
 import unreal
 
 LOG_TAG = "[CombatAssets]"
 ASSET_PATH = "/Game/Combat"
+FORCE_UPDATE = False
 
 UNITS = {
     "DA_Krijger": dict(name="Krijger", max_hp=100.0, move_speed=350.0, radius=40.0,
@@ -18,14 +20,23 @@ UNITS = {
                      attack=dict(range=80.0, cooldown=1.6, windup=0.5, damage=30.0)),
 }
 
-# (unit asset, team, start cell) on a 20x12 grid.
-SETUP = [
-    ("DA_Krijger", 0, (2, 3)),
-    ("DA_Krijger", 0, (2, 6)),
-    ("DA_Krijger", 0, (2, 9)),
-    ("DA_Brute", 1, (17, 4)),
-    ("DA_Brute", 1, (17, 8)),
-]
+# Setup asset -> [(unit asset, team, start cell)], on a 20x12 grid.
+SETUPS = {
+    "DA_Setup_Test": [
+        ("DA_Krijger", 0, (2, 3)),
+        ("DA_Krijger", 0, (2, 6)),
+        ("DA_Krijger", 0, (2, 9)),
+        ("DA_Brute", 1, (17, 4)),
+        ("DA_Brute", 1, (17, 8)),
+    ],
+    # Phase 2 check, with a wall at x = 6, y = 0..8 in Arena-01: the Krijger must go for B (3,10),
+    # which is farther as the crow flies but reachable sooner than A (9,2) behind the wall.
+    "DA_Setup_Wall": [
+        ("DA_Krijger", 0, (3, 2)),
+        ("DA_Brute", 1, (9, 2)),
+        ("DA_Brute", 1, (3, 10)),
+    ],
+}
 
 
 def log(message):
@@ -33,10 +44,11 @@ def log(message):
 
 
 def load_or_create(name, asset_class):
+    """Returns (asset, should_fill)."""
     full_path = f"{ASSET_PATH}/{name}"
     if unreal.EditorAssetLibrary.does_asset_exist(full_path):
-        log(f"Updating {full_path}")
-        return unreal.load_asset(full_path)
+        log(f"{'Updating' if FORCE_UPDATE else 'Keeping'} {full_path}")
+        return unreal.load_asset(full_path), FORCE_UPDATE
 
     factory = unreal.DataAssetFactory()
     factory.set_editor_property("data_asset_class", asset_class)
@@ -44,7 +56,7 @@ def load_or_create(name, asset_class):
     if not asset:
         raise RuntimeError(f"{LOG_TAG} Could not create {full_path}")
     log(f"Created {full_path}")
-    return asset
+    return asset, True
 
 
 def make_tag(tag_name):
@@ -55,8 +67,13 @@ def make_tag(tag_name):
 
 def main():
     definitions = {}
+    to_save = []
     for asset_name, values in UNITS.items():
-        definition = load_or_create(asset_name, unreal.CombatUnitDefinition)
+        definition, should_fill = load_or_create(asset_name, unreal.CombatUnitDefinition)
+        definitions[asset_name] = definition
+        if not should_fill:
+            continue
+
         definition.set_editor_property("display_name", values["name"])
         definition.set_editor_property("max_hp", values["max_hp"])
         definition.set_editor_property("move_speed", values["move_speed"])
@@ -67,20 +84,23 @@ def main():
         for key in ("range", "cooldown", "windup", "damage"):
             attack.set_editor_property(key, values["attack"][key])
         definition.set_editor_property("attacks", [attack])
+        to_save.append(definition)
 
-        definitions[asset_name] = definition
+    for setup_name, lineup in SETUPS.items():
+        setup, should_fill = load_or_create(setup_name, unreal.CombatSetup)
+        if not should_fill:
+            continue
 
-    setup = load_or_create("DA_Setup_Test", unreal.CombatSetup)
-    entries = []
-    for asset_name, team, (x, y) in SETUP:
-        entry = unreal.CombatSetupEntry()
-        entry.set_editor_property("definition", definitions[asset_name])
-        entry.set_editor_property("team", team)
-        entry.set_editor_property("start_cell", unreal.IntPoint(x, y))
-        entries.append(entry)
-    setup.set_editor_property("units", entries)
+        entries = []
+        for asset_name, team, (x, y) in lineup:
+            entry = unreal.CombatSetupEntry()
+            entry.set_editor_property("definition", definitions[asset_name])
+            entry.set_editor_property("team", team)
+            entry.set_editor_property("start_cell", unreal.IntPoint(x, y))
+            entries.append(entry)
+        setup.set_editor_property("units", entries)
+        to_save.append(setup)
 
-    to_save = list(definitions.values()) + [setup]
     for asset in to_save:
         if not unreal.EditorAssetLibrary.save_loaded_asset(asset, only_if_is_dirty=False):
             raise RuntimeError(f"{LOG_TAG} Could not save {asset.get_path_name()}")

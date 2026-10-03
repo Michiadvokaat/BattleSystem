@@ -33,6 +33,18 @@ public:
 	UPROPERTY(Config, EditAnywhere, Category = "Simulation", meta = (ClampMin = 0, Units = "s"))
 	float MaxFirstAttackDelay = 0.5f;
 
+	/** How often the per-team distance maps (and so the targets) are rebuilt; they are also rebuilt after every death. */
+	UPROPERTY(Config, EditAnywhere, Category = "Movement", meta = (ClampMin = 0.05, Units = "s"))
+	float RetargetInterval = 0.25f;
+
+	/** How many cells ahead on its route a unit looks for the farthest visible point to steer to. */
+	UPROPERTY(Config, EditAnywhere, Category = "Movement", meta = (ClampMin = 1, ClampMax = 32))
+	int32 PathLookaheadCells = 8;
+
+	/** Fraction of the overlap between two units that is pushed apart per tick. */
+	UPROPERTY(Config, EditAnywhere, Category = "Movement", meta = (ClampMin = 0, ClampMax = 1))
+	float SeparationStrength = 0.5f;
+
 	/** Start a fight automatically when an arena with ACombatGameMode begins play. */
 	UPROPERTY(Config, EditAnywhere, Category = "Arena")
 	bool bAutoStartFight = true;

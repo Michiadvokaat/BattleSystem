@@ -1,6 +1,6 @@
 # Ontwerp: autobattle-gevechtssysteem
 
-Status: fase 1 klaar (2026-10-03). Volgende: fase 2. Dit document is zelfstandig: het gaat uit van een **leeg Unreal Engine 5 C++-project** zonder bestaande gameplaycode. Werk het bij als besluiten veranderen of een fase klaar is (zet dan "Status" en de tabel "Besluiten" bij).
+Status: fase 1 en 2 klaar (2026-10-03). Volgende: fase 3. Dit document is zelfstandig: het gaat uit van een **leeg Unreal Engine 5 C++-project** zonder bestaande gameplaycode. Werk het bij als besluiten veranderen of een fase klaar is (zet dan "Status" en de tabel "Besluiten" bij).
 
 In dit document staat `<Module>` voor de naam van de gamemodule van het project. Alle code komt in `Source/<Module>/Public|Private/Combat/`.
 

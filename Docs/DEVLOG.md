@@ -18,3 +18,7 @@ Dated history: decisions, bugs, rejected approaches. Newest entries at the botto
 - Headless editor runs: ExecCmds are comma-separated, and `Quit` does not exit editor mode; use `QUIT_EDITOR`.
 - Units stayed grey and did not flash: the engine cylinder uses `DefaultMaterial`, which has no `Color` parameter, so `SetVectorParameterValue` did nothing. The body MID is now made from `BasicShapeMaterial` (`BodyMaterialBase`, overridable per Blueprint).
 - Phase 1 done: the arena `Arena-01` is built in the editor (grid, 3 obstacles, top-down camera, `CombatGameMode` override) and the fight was checked visually.
+- Phase 2 code: per-team distance maps (integer costs 10/14, ties → lowest ID), targeting by walking distance, route following with path smoothing, separation between all units, and slide/stop so units never end in a blocked cell. Melee now also needs a clear line. Debug drawing via `Combat.Debug`. Choices: all units separate (allies and enemies); the wall scenario is tested in `Arena-01` (`DA_Setup_Wall`); the distance maps are also rebuilt after every death so targets are never stale.
+- `CreateCombatTestAssets.py` no longer overwrites existing assets (it used to reset values tuned in the editor); `FORCE_UPDATE` restores the old behavior.
+- Cost: a 5-unit fight went from 0.07 ms to ~2.4 ms headless. Keep an eye on this for `Combat.Batch` (phase 5).
+- Phase 2 done: the wall is in `Arena-01` (one obstacle at x = 6, y = 0..8; the old obstacles were removed), and the user checked visually that the Krijger in `DA_Setup_Wall` goes for the reachable Brute.

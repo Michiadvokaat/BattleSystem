@@ -50,4 +50,13 @@ struct BATTLESYSTEM_API FCombatGridData
 	/** Out-of-bounds cells are not walkable. */
 	bool IsWalkable(const FIntPoint& Cell) const { return IsInBounds(Cell) && !HasFlags(Cell, ECombatCellFlags::Blocked); }
 	bool BlocksSight(const FIntPoint& Cell) const { return !IsInBounds(Cell) || HasFlags(Cell, ECombatCellFlags::BlocksSight); }
+
+	/** The 8 neighbor directions, in the fixed order used by all grid searches. Diagonals are the last four. */
+	static const FIntPoint NeighborOffsets[8];
+
+	/** Whether a unit may step from Cell to Cell + Offset: the target must be walkable, and a diagonal step also needs both orthogonal neighbors walkable (no corner cutting). */
+	bool CanStep(const FIntPoint& Cell, const FIntPoint& Offset) const;
+
+	/** Whether the straight line between two local positions only crosses walkable cells. Passing exactly through a corner needs both side cells walkable. */
+	bool IsLineWalkable(const FVector2D& From, const FVector2D& To) const;
 };
