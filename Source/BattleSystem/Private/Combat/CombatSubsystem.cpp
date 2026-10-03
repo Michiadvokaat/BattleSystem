@@ -1,0 +1,362 @@
+// Copyright Epic Games, Inc. All Rights Reserved.
+
+#include "Combat/CombatSubsystem.h"
+#include "AssetRegistry/IAssetRegistry.h"
+#include "Combat/CombatGrid.h"
+#include "Combat/CombatSettings.h"
+#include "Combat/CombatSetup.h"
+#include "Combat/CombatUnitActor.h"
+#include "Combat/CombatUnitDefinition.h"
+#include "Engine/Engine.h"
+#include "Engine/World.h"
+#include "HAL/IConsoleManager.h"
+
+DEFINE_LOG_CATEGORY(LogCombat);
+
+void UCombatSubsystem::Tick(float DeltaTime)
+{
+	Super::Tick(DeltaTime);
+
+	if (!Simulation)
+	{
+		return;
+	}
+
+	const double FixedDt = Simulation->GetFixedDt();
+	if (!Simulation->IsFinished())
+	{
+		// Engine DeltaTime only decides how many fixed steps run; it never enters the simulation.
+		Accumulator += DeltaTime;
+		int32 Steps = 0;
+		while (Accumulator >= FixedDt && Steps < MaxStepsPerFrame && !Simulation->IsFinished())
+		{
+			Simulation->Step();
+			DispatchEvents();
+			Accumulator -= FixedDt;
+			++Steps;
+		}
+
+		// Drop any backlog beyond the per-frame maximum instead of catching up later.
+		Accumulator = FMath::Min(Accumulator, FixedDt);
+
+		if (Simulation->IsFinished())
+		{
+			ReportResult();
+			Accumulator = FixedDt;
+		}
+	}
+
+	UpdateActors(FMath::Clamp(static_cast<float>(Accumulator / FixedDt), 0.f, 1.f));
+}
+
+TStatId UCombatSubsystem::GetStatId() const
+{
+	RETURN_QUICK_DECLARE_CYCLE_STAT(UCombatSubsystem, STATGROUP_Tickables);
+}
+
+void UCombatSubsystem::Deinitialize()
+{
+	StopFight();
+	Super::Deinitialize();
+}
+
+bool UCombatSubsystem::DoesSupportWorldType(const EWorldType::Type WorldType) const
+{
+	return WorldType == EWorldType::Game || WorldType == EWorldType::PIE;
+}
+
+bool UCombatSubsystem::StartFight(int32 Seed, const UCombatSetup* Setup)
+{
+	StopFight();
+
+	if (!Setup)
+	{
+		UE_LOG(LogCombat, Error, TEXT("StartFight: no setup."));
+		return false;
+	}
+
+	FCombatSimConfig Config;
+	TArray<const UCombatUnitDefinition*> Definitions;
+	if (!BuildSimConfig(GetWorld(), Seed, *Setup, Config, GridOrigin, &Definitions))
+	{
+		return false;
+	}
+
+	Simulation = MakeUnique<FCombatSimulation>(Config);
+	MaxStepsPerFrame = FMath::Max(GetDefault<UCombatSettings>()->MaxStepsPerFrame, 1);
+	Accumulator = 0.0;
+
+	const UCombatSettings* Settings = GetDefault<UCombatSettings>();
+	FActorSpawnParameters SpawnParams;
+	SpawnParams.SpawnCollisionHandlingOverride = ESpawnActorCollisionHandlingMethod::AlwaysSpawn;
+
+	for (const FCombatUnit& Unit : Simulation->GetUnits())
+	{
+		const UCombatUnitDefinition* Definition = Definitions[Unit.Id];
+		UClass* ActorClass = Definition->ActorClass ? Definition->ActorClass.Get() : ACombatUnitActor::StaticClass();
+
+		ACombatUnitActor* Actor = GetWorld()->SpawnActor<ACombatUnitActor>(ActorClass, SimToWorld(Unit.Position), FRotator::ZeroRotator, SpawnParams);
+		if (Actor)
+		{
+			Actor->InitUnit(Unit.Id, Unit.Team, Unit.Stats.Radius, Settings->GetTeamColor(Unit.Team));
+		}
+		UnitActors.Add(Actor);
+	}
+
+	UE_LOG(LogCombat, Display, TEXT("Fight started: seed %d, setup %s, %d units."), Seed, *Setup->GetName(), UnitActors.Num());
+	return true;
+}
+
+void UCombatSubsystem::StopFight()
+{
+	for (ACombatUnitActor* Actor : UnitActors)
+	{
+		if (IsValid(Actor))
+		{
+			Actor->Destroy();
+		}
+	}
+	UnitActors.Reset();
+	Simulation.Reset();
+}
+
+void UCombatSubsystem::DispatchEvents()
+{
+	const TArray<FCombatUnit>& Units = Simulation->GetUnits();
+	for (const FCombatEvent& Event : Simulation->GetEvents())
+	{
+		switch (Event.Type)
+		{
+		case ECombatEventType::Attack:
+			if (ACombatUnitActor* Actor = UnitActors[Event.SourceId])
+			{
+				Actor->OnAttack(SimToWorld(Units[Event.TargetId].Position));
+			}
+			break;
+		case ECombatEventType::Hit:
+			if (ACombatUnitActor* Actor = UnitActors[Event.TargetId])
+			{
+				Actor->OnHit(Event.Amount);
+			}
+			break;
+		case ECombatEventType::Death:
+			if (ACombatUnitActor* Actor = UnitActors[Event.TargetId])
+			{
+				Actor->OnDeath();
+			}
+			break;
+		}
+	}
+}
+
+void UCombatSubsystem::UpdateActors(float Alpha)
+{
+	const TArray<FCombatUnit>& Units = Simulation->GetUnits();
+	for (const FCombatUnit& Unit : Units)
+	{
+		ACombatUnitActor* Actor = UnitActors[Unit.Id];
+		if (!Actor || !Unit.bAlive)
+		{
+			continue;
+		}
+
+		const FVector2D Position = FMath::Lerp(Unit.PreviousPosition, Unit.Position, Alpha);
+
+		FVector2D Facing = Unit.Velocity;
+		if (Unit.TargetId != INDEX_NONE && Units[Unit.TargetId].bAlive)
+		{
+			const FCombatUnit& Target = Units[Unit.TargetId];
+			Facing = FMath::Lerp(Target.PreviousPosition, Target.Position, Alpha) - Position;
+		}
+
+		Actor->UpdatePresentation(SimToWorld(Position), FVector(Facing.X, Facing.Y, 0.0));
+	}
+}
+
+void UCombatSubsystem::ReportResult() const
+{
+	FString Result = FCombatSimulation::OutcomeToString(Simulation->GetOutcome());
+	if (Simulation->GetOutcome() == ECombatOutcome::TeamWon)
+	{
+		Result += FString::Printf(TEXT(" (team %d)"), Simulation->GetWinningTeam());
+	}
+
+	const FString Message = FString::Printf(TEXT("Fight over: %s after %d ticks, checksum 0x%08X"),
+		*Result, Simulation->GetTick(), Simulation->GetChecksum());
+	UE_LOG(LogCombat, Display, TEXT("%s"), *Message);
+	if (GEngine)
+	{
+		GEngine->AddOnScreenDebugMessage(INDEX_NONE, 10.f, FColor::Green, Message);
+	}
+}
+
+bool UCombatSubsystem::BuildSimConfig(UWorld* World, int32 Seed, const UCombatSetup& Setup, FCombatSimConfig& OutConfig,
+	FVector& OutGridOrigin, TArray<const UCombatUnitDefinition*>* OutDefinitions)
+{
+	const UCombatSettings* Settings = GetDefault<UCombatSettings>();
+
+	if (ACombatGrid* Grid = ACombatGrid::Find(World))
+	{
+		OutConfig.Grid = Grid->GetGridData();
+		OutGridOrigin = Grid->GetActorLocation();
+	}
+	else
+	{
+		OutConfig.Grid.Init(Settings->FallbackGridSize.X, Settings->FallbackGridSize.Y, Settings->FallbackCellSize);
+		OutGridOrigin = FVector::ZeroVector;
+	}
+
+	OutConfig.Seed = Seed;
+	OutConfig.TickRate = Settings->TickRate;
+	OutConfig.MaxTicks = Settings->SecondsToTicks(Settings->FightTimeLimit);
+	OutConfig.MaxFirstAttackDelayTicks = Settings->SecondsToTicks(Settings->MaxFirstAttackDelay);
+
+	OutConfig.Units.Reset();
+	for (int32 Index = 0; Index < Setup.Units.Num(); ++Index)
+	{
+		const FCombatSetupEntry& Entry = Setup.Units[Index];
+		if (!Entry.Definition)
+		{
+			UE_LOG(LogCombat, Warning, TEXT("%s: entry %d has no definition, skipped."), *Setup.GetName(), Index);
+			continue;
+		}
+		if (!OutConfig.Grid.IsWalkable(Entry.StartCell))
+		{
+			UE_LOG(LogCombat, Warning, TEXT("%s: entry %d starts in cell (%d,%d), which is outside the grid or blocked; skipped."),
+				*Setup.GetName(), Index, Entry.StartCell.X, Entry.StartCell.Y);
+			continue;
+		}
+
+		FCombatUnitSpawn& Spawn = OutConfig.Units.AddDefaulted_GetRef();
+		Spawn.Stats = Entry.Definition->ToSimStats(OutConfig.TickRate);
+		Spawn.Team = Entry.Team;
+		Spawn.StartCell = Entry.StartCell;
+		if (OutDefinitions)
+		{
+			OutDefinitions->Add(Entry.Definition);
+		}
+	}
+
+	if (OutConfig.Units.IsEmpty())
+	{
+		UE_LOG(LogCombat, Error, TEXT("%s: no valid units."), *Setup.GetName());
+		return false;
+	}
+	return true;
+}
+
+UCombatSetup* UCombatSubsystem::FindSetup(const FString& NameOrPath)
+{
+	if (NameOrPath.IsEmpty())
+	{
+		return GetDefault<UCombatSettings>()->DefaultSetup.LoadSynchronous();
+	}
+
+	if (NameOrPath.Contains(TEXT("/")))
+	{
+		return LoadObject<UCombatSetup>(nullptr, *NameOrPath);
+	}
+
+	IAssetRegistry& AssetRegistry = IAssetRegistry::GetChecked();
+	AssetRegistry.WaitForCompletion();
+
+	TArray<FAssetData> Assets;
+	AssetRegistry.GetAssetsByClass(UCombatSetup::StaticClass()->GetClassPathName(), Assets);
+	for (const FAssetData& Asset : Assets)
+	{
+		if (Asset.AssetName.ToString().Equals(NameOrPath, ESearchCase::IgnoreCase))
+		{
+			return Cast<UCombatSetup>(Asset.GetAsset());
+		}
+	}
+	return nullptr;
+}
+
+namespace CombatConsole
+{
+	/** Parses "<seed> [setup]". */
+	static bool ParseArgs(const TArray<FString>& Args, int32& OutSeed, UCombatSetup*& OutSetup)
+	{
+		OutSeed = Args.Num() > 0 ? FCString::Atoi(*Args[0]) : GetDefault<UCombatSettings>()->DefaultSeed;
+		const FString SetupArg = Args.Num() > 1 ? Args[1] : FString();
+
+		OutSetup = UCombatSubsystem::FindSetup(SetupArg);
+		if (!OutSetup)
+		{
+			UE_LOG(LogCombat, Error, TEXT("Setup '%s' not found."), SetupArg.IsEmpty() ? TEXT("(default from Combat settings)") : *SetupArg);
+			return false;
+		}
+		return true;
+	}
+
+	static void Start(const TArray<FString>& Args, UWorld* World)
+	{
+		UCombatSubsystem* Subsystem = World ? World->GetSubsystem<UCombatSubsystem>() : nullptr;
+		if (!Subsystem)
+		{
+			UE_LOG(LogCombat, Error, TEXT("Combat.Start needs a running game world."));
+			return;
+		}
+
+		int32 Seed;
+		UCombatSetup* Setup;
+		if (ParseArgs(Args, Seed, Setup))
+		{
+			Subsystem->StartFight(Seed, Setup);
+		}
+	}
+
+	static void Simulate(const TArray<FString>& Args, UWorld* World)
+	{
+		int32 Seed;
+		UCombatSetup* Setup;
+		if (!ParseArgs(Args, Seed, Setup))
+		{
+			return;
+		}
+
+		FCombatSimConfig Config;
+		FVector GridOrigin;
+		if (!UCombatSubsystem::BuildSimConfig(World, Seed, *Setup, Config, GridOrigin))
+		{
+			return;
+		}
+
+		const double StartTime = FPlatformTime::Seconds();
+		FCombatSimulation Simulation(Config);
+		Simulation.RunToEnd();
+		const double ElapsedMs = (FPlatformTime::Seconds() - StartTime) * 1000.0;
+
+		FString Result = FCombatSimulation::OutcomeToString(Simulation.GetOutcome());
+		if (Simulation.GetOutcome() == ECombatOutcome::TeamWon)
+		{
+			Result += FString::Printf(TEXT(" (team %d)"), Simulation.GetWinningTeam());
+		}
+		UE_LOG(LogCombat, Display, TEXT("Combat.Simulate seed %d, setup %s: %s after %d ticks (%.1f s), checksum 0x%08X, %.2f ms."),
+			Seed, *Setup->GetName(), *Result, Simulation.GetTick(), Simulation.GetTick() * Simulation.GetFixedDt(),
+			Simulation.GetChecksum(), ElapsedMs);
+	}
+
+	static void Stop(const TArray<FString>& Args, UWorld* World)
+	{
+		if (UCombatSubsystem* Subsystem = World ? World->GetSubsystem<UCombatSubsystem>() : nullptr)
+		{
+			Subsystem->StopFight();
+		}
+	}
+
+	static FAutoConsoleCommandWithWorldAndArgs StartCommand(
+		TEXT("Combat.Start"),
+		TEXT("Combat.Start <seed> [setup]: starts a fight with presentation in the current level."),
+		FConsoleCommandWithWorldAndArgsDelegate::CreateStatic(&Start));
+
+	static FAutoConsoleCommandWithWorldAndArgs SimulateCommand(
+		TEXT("Combat.Simulate"),
+		TEXT("Combat.Simulate <seed> [setup]: runs a fight headless and prints the outcome, duration and final checksum."),
+		FConsoleCommandWithWorldAndArgsDelegate::CreateStatic(&Simulate));
+
+	static FAutoConsoleCommandWithWorldAndArgs StopCommand(
+		TEXT("Combat.Stop"),
+		TEXT("Combat.Stop: stops the running fight and removes its units."),
+		FConsoleCommandWithWorldAndArgsDelegate::CreateStatic(&Stop));
+}

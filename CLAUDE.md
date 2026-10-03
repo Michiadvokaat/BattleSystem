@@ -32,21 +32,25 @@ $P  = "D:\Unreal\UnrealProjects\BattleSystem\BattleSystem.uproject"
 # Regenerate project files (after adding/removing source files)
 & "$UE\Engine\Build\BatchFiles\Build.bat" -ProjectFiles -Project="$P" -Game
 
-# Headless run, e.g. for the planned Combat.Simulate / Combat.Batch console commands
-& "$UE\Engine\Binaries\Win64\UnrealEditor-Cmd.exe" "$P" -game -nullrhi -unattended -nosplash -ExecCmds="Combat.Simulate 42, Quit" -log
+# Headless fight(s). ExecCmds are comma-separated; in editor mode only QUIT_EDITOR exits (Quit hangs).
+& "$UE\Engine\Binaries\Win64\UnrealEditor-Cmd.exe" "$P" -unattended -nullrhi -nosplash -nosound -ExecCmds="Combat.Simulate 42, Combat.Simulate 42, QUIT_EDITOR" -log
 
-# Automation tests (test names under "BattleSystem.*" once tests exist)
-& "$UE\Engine\Binaries\Win64\UnrealEditor-Cmd.exe" "$P" -unattended -nullrhi -nosplash -ExecCmds="Automation RunTests BattleSystem; Quit" -log
+# Automation tests (all combat tests; a single one: BattleSystem.Combat.Determinism)
+& "$UE\Engine\Binaries\Win64\UnrealEditor-Cmd.exe" "$P" -unattended -nullrhi -nosplash -nosound -ExecCmds="Automation RunTests BattleSystem.Combat; Quit" -TestExit="Automation Test Queue Empty" -log
 
-# Edit binary assets headless with editor Python (editor must be closed)
-& "$UE\Engine\Binaries\Win64\UnrealEditor-Cmd.exe" "$P" -run=pythonscript -script="<path to .py>" -unattended -nullrhi
+# (Re)create the combat test data assets in /Game/Combat (editor must be closed)
+& "$UE\Engine\Binaries\Win64\UnrealEditor-Cmd.exe" "$P" -run=pythonscript -script="D:/Unreal/UnrealProjects/BattleSystem/Scripts/CreateCombatTestAssets.py" -unattended -nullrhi -nosplash
 ```
+
+Output goes to `Saved/Logs/BattleSystem.log`, which each run overwrites. Grep it for `LogCombat`, `Test Completed` or the script's log tag.
+
+Console commands (in PIE or headless): `Combat.Start <seed> [setup]`, `Combat.Simulate <seed> [setup]`, `Combat.Stop`. `setup` is an asset name (`DA_Setup_Test`) or an object path. Without it, the default setup from Project Settings > Game > Combat is used.
 
 New UCLASS/USTRUCT types and header changes need a full build plus an editor restart. Live Coding only covers changes to function bodies in .cpp files.
 
-## Combat architecture (from the design doc)
+## Combat architecture
 
-All combat code goes in `Source/BattleSystem/Public|Private/Combat/`. There are three layers with a strict dependency direction: **grid ← simulation ← presentation**.
+The mechanics of built systems are in `Docs/Architecture.md`; later phases are in the design doc. All combat code goes in `Source/BattleSystem/Public|Private/Combat/`. There are three layers with a strict dependency direction: **grid ← simulation ← presentation**.
 
 - **Grid**: `ACombatGrid`, one per level. `CellSize` defaults to 100 cm, the XY plane, and the origin is the actor location. Each cell has a walkable flag and a blocks-sight flag. `ACombatObstacle` registers its cell footprint with the grid when the level begins. The grid does not change during a fight. Pathfinding is A\* with 8 directions, no corner cutting, and deterministic tie-breaks. Later phases add per-team multi-source Dijkstra distance maps.
 - **Simulation (the source of truth)**: `FCombatSimulation` is a plain C++ class with **no `UWorld`, actors, or timers**, so it can run headless. It runs a fixed 20 Hz `Step()`. Units are `FCombatUnit` structs in a `TArray`. Each step produces an event buffer (`Attack`, `Hit`, `Death`, `ProjectileSpawned`), and a state checksum is computed after every step.
@@ -61,4 +65,4 @@ All combat code goes in `Source/BattleSystem/Public|Private/Combat/`. There are 
 - All randomness comes from one seeded `FRandomStream`. Never use `FMath::Rand`/`FRand`.
 - No `DeltaTime`, wall-clock time, NavMesh, Detour, CharacterMovement, physics, or overlap events in the logic. UE collision is only allowed for mouse picking.
 - Apply damage and effects in two passes: collect everything in the step first, then apply it all at once.
-- Acceptance check: running `Combat.Simulate 42` twice must print the same checksum.
+- Acceptance check: running `Combat.Simulate 42` twice must print the same checksum. `BattleSystem.Combat.Determinism` checks the checksum after every step.

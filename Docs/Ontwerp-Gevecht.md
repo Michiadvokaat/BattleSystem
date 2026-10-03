@@ -1,6 +1,6 @@
 # Ontwerp: autobattle-gevechtssysteem
 
-Status: voorstel, nog niets gebouwd. Dit document is zelfstandig: het gaat uit van een **leeg Unreal Engine 5 C++-project** zonder bestaande gameplaycode. Werk het bij als besluiten veranderen of een fase klaar is (zet dan "Status" en de tabel "Besluiten" bij).
+Status: fase 1 klaar (2026-10-03). Volgende: fase 2. Dit document is zelfstandig: het gaat uit van een **leeg Unreal Engine 5 C++-project** zonder bestaande gameplaycode. Werk het bij als besluiten veranderen of een fase klaar is (zet dan "Status" en de tabel "Besluiten" bij).
 
 In dit document staat `<Module>` voor de naam van de gamemodule van het project. Alle code komt in `Source/<Module>/Public|Private/Combat/`.
 
@@ -185,3 +185,5 @@ Elke fase levert iets op dat je kunt spelen en testen. Nieuwe C++-klassen vereis
 | Afstemming | Eigen `UCombatSettings` | Hardcoded constanten |
 | Weergave | Placeholder-meshes, later skeletal | Direct skeletal met animaties |
 | GAS | Alleen GameplayTags en het datamodel (eigen structs op ticks) | Volledig GAS (vervalt: vaste tick, checksum, headless batch) |
+| Melee-timing | Windup in ticks; hit vervalt als het doel tijdens de windup sterft | Schade direct bij de aanval |
+| Toeval in fase 1 | Willekeurige vertraging (0..`MaxFirstAttackDelay`) van de eerste aanval, pas zodra een unit binnen bereik is | Variatie in schade |

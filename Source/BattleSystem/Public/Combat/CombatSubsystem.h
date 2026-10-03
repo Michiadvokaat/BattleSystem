@@ -1,0 +1,66 @@
+// Copyright Epic Games, Inc. All Rights Reserved.
+
+#pragma once
+
+#include "CoreMinimal.h"
+#include "Subsystems/WorldSubsystem.h"
+#include "Combat/CombatSimulation.h"
+#include "CombatSubsystem.generated.h"
+
+class ACombatUnitActor;
+class UCombatSetup;
+class UCombatUnitDefinition;
+
+BATTLESYSTEM_API DECLARE_LOG_CATEGORY_EXTERN(LogCombat, Log, All);
+
+/**
+ * Thin layer between the world and FCombatSimulation: builds a fight from the level's ACombatGrid and a
+ * UCombatSetup, runs fixed steps from an accumulator, and drives the ACombatUnitActors.
+ * Also registers the console commands Combat.Start, Combat.Simulate and Combat.Stop.
+ */
+UCLASS()
+class BATTLESYSTEM_API UCombatSubsystem : public UTickableWorldSubsystem
+{
+	GENERATED_BODY()
+
+public:
+	virtual void Tick(float DeltaTime) override;
+	virtual TStatId GetStatId() const override;
+	virtual void Deinitialize() override;
+
+	/** Starts a fight with presentation, replacing any running fight. */
+	bool StartFight(int32 Seed, const UCombatSetup* Setup);
+	void StopFight();
+
+	const FCombatSimulation* GetSimulation() const { return Simulation.Get(); }
+
+	/**
+	 * Builds a simulation config from a setup, using the world's ACombatGrid or, without one (or without
+	 * a world), the fallback grid from UCombatSettings. Entries without a definition or outside the grid
+	 * are skipped with a warning. OutDefinitions gets the definition per unit ID.
+	 */
+	static bool BuildSimConfig(UWorld* World, int32 Seed, const UCombatSetup& Setup, FCombatSimConfig& OutConfig,
+		FVector& OutGridOrigin, TArray<const UCombatUnitDefinition*>* OutDefinitions = nullptr);
+
+	/** Finds a setup by asset name or object path. An empty string gives the default setup from UCombatSettings. */
+	static UCombatSetup* FindSetup(const FString& NameOrPath);
+
+protected:
+	virtual bool DoesSupportWorldType(const EWorldType::Type WorldType) const override;
+
+private:
+	void DispatchEvents();
+	void UpdateActors(float Alpha);
+	void ReportResult() const;
+	FVector SimToWorld(const FVector2D& Local) const { return GridOrigin + FVector(Local.X, Local.Y, 0.0); }
+
+	TUniquePtr<FCombatSimulation> Simulation;
+
+	/** Indexed by unit ID. */
+	UPROPERTY(Transient)
+	TArray<TObjectPtr<ACombatUnitActor>> UnitActors;
+
+	FVector GridOrigin = FVector::ZeroVector;
+	double Accumulator = 0.0;
+	int32 MaxStepsPerFrame = 5;
+};

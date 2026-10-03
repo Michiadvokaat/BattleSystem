@@ -1,0 +1,15 @@
+// Copyright Epic Games, Inc. All Rights Reserved.
+
+#pragma once
+
+#include "NativeGameplayTags.h"
+
+/** Native gameplay tags used by the combat simulation and its data. */
+namespace CombatTags
+{
+	BATTLESYSTEM_API UE_DECLARE_GAMEPLAY_TAG_EXTERN(Attack);
+	BATTLESYSTEM_API UE_DECLARE_GAMEPLAY_TAG_EXTERN(Attack_Melee);
+	BATTLESYSTEM_API UE_DECLARE_GAMEPLAY_TAG_EXTERN(Attack_Ranged);
+	BATTLESYSTEM_API UE_DECLARE_GAMEPLAY_TAG_EXTERN(Attack_AoE);
+	BATTLESYSTEM_API UE_DECLARE_GAMEPLAY_TAG_EXTERN(Attack_Taunt);
+}
