@@ -101,6 +101,16 @@ Code: `Source/BattleSystem/{Public,Private}/Combat/`. Layers: grid ← simulatio
   - It hides the placed `ACombatObstacle`s. `GetGridData()` stays the arena's own grid (for setups).
   - `ClearLevel` restores everything when a setup fight starts.
   - The subsystem fits the view camera (keeping its rotation) above the shown grid with a 12% margin, using its FOV and the viewport aspect, and puts the camera back for setups.
+- LevelDesigner (`SCombatLevelDesigner`, bottom left; presentation only, no simulation):
+  - **Edit** enters edit mode (`EnterDesignMode`). It stops the fight and edits the level of the fight on screen if it had one, otherwise the last edited level, otherwise an empty 20×12 level. The arena shows it (`ApplyLevel`, camera fit) with preview unit actors on their cells, without AI. Edit again leaves, and the arena is restored.
+  - Rows: Name + **Save** (`Levels/<name>.json`; the name is cleaned to letters, digits, - and _), a level dropdown + **Load** + **New**, and Size W/H spin boxes (5–40; shrinking drops what falls outside, and the camera refits).
+  - Tool: Wall / Hedge / Water / Unit, with a unit type (all definition assets) and Team 0/1 for Unit.
+  - **Play** (or Start in the control panel while editing) starts a fight from the edited level as it is, saved or not, with the default seed (Play) or the seed field (Start).
+  - Mouse (`ACombatPlayerController` in edit mode):
+    - Left click places with the tool; holding paints a stroke while the cursor moves (`PlayerTick`). Units are only placed on a press, not while dragging.
+    - Right click (and drag) erases both the unit and the cell kind.
+    - Walls and water remove a unit on their cell, and units cannot be placed on walls or water. Placing on a unit replaces it.
+    - The view (blocks, previews) rebuilds only when something changed. Button state is re-checked every tick, because a release over the HUD never reaches the game.
 - `Levels/Demo.json` is Arena-01's wall plus `DA_Setup_Taunt`'s units, with a hedge and water added. It gives the same fight as that setup (`0x7CE33AAB`).
 
 ### Player commands (`FCombatCommand`, `CombatTypes.h`)

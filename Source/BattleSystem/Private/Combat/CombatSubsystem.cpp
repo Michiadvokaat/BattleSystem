@@ -94,6 +94,7 @@ TStatId UCombatSubsystem::GetStatId() const
 
 void UCombatSubsystem::Deinitialize()
 {
+	DestroyDesignPreviews();
 	StopFight();
 	Super::Deinitialize();
 }
@@ -141,6 +142,8 @@ bool UCombatSubsystem::StartFightFromSource(int32 Seed, const FCombatFightSource
 		UE_LOG(LogCombat, Error, TEXT("StartFight: no setup or level."));
 		return false;
 	}
+	bDesignMode = false;
+	DestroyDesignPreviews();
 
 	FCombatSimConfig Config;
 	TArray<const UCombatUnitDefinition*> Definitions;
@@ -1069,6 +1072,277 @@ void UCombatSubsystem::RestoreCamera()
 	}
 	OriginalCameraTransform.Reset();
 	FittedCamera.Reset();
+}
+
+void UCombatSubsystem::EnterDesignMode()
+{
+	if (bDesignMode)
+	{
+		return;
+	}
+
+	// Start from the level of the fight on screen, if it had one; else from what was edited before, else empty.
+	const TOptional<FCombatLevel> LastLevel = Simulation ? CurrentLevel : TOptional<FCombatLevel>();
+	StopFight();
+	bDesignMode = true;
+	if (LastLevel.IsSet())
+	{
+		DesignLevel = LastLevel.GetValue();
+	}
+	else if (DesignLevel.Rows.IsEmpty())
+	{
+		NewDesignLevel();
+		return;
+	}
+	if (DesignUnitType.IsEmpty())
+	{
+		const TArray<FString> Types = GetAllUnitDefinitionNames();
+		DesignUnitType = Types.IsEmpty() ? FString() : Types[0];
+	}
+	RefreshDesignView(true);
+}
+
+void UCombatSubsystem::ExitDesignMode()
+{
+	if (!bDesignMode)
+	{
+		return;
+	}
+	bDesignMode = false;
+	DestroyDesignPreviews();
+	if (ACombatGrid* Grid = ACombatGrid::Find(GetWorld()))
+	{
+		Grid->ClearLevel();
+	}
+	RestoreCamera();
+	++FightSerial;
+}
+
+void UCombatSubsystem::NewDesignLevel()
+{
+	DesignLevel = FCombatLevel::MakeEmpty(TEXT("NewLevel"), 20, 12);
+	if (DesignUnitType.IsEmpty())
+	{
+		const TArray<FString> Types = GetAllUnitDefinitionNames();
+		DesignUnitType = Types.IsEmpty() ? FString() : Types[0];
+	}
+	if (bDesignMode)
+	{
+		RefreshDesignView(true);
+	}
+}
+
+bool UCombatSubsystem::LoadDesignLevel(const FString& Name, FString& OutMessage)
+{
+	FCombatLevel Loaded;
+	if (!CombatLevels::Load(Name, Loaded))
+	{
+		OutMessage = FString::Printf(TEXT("Could not load level %s."), *Name);
+		return false;
+	}
+	DesignLevel = Loaded;
+	if (bDesignMode)
+	{
+		RefreshDesignView(true);
+	}
+	OutMessage = FString::Printf(TEXT("Loaded level %s."), *Name);
+	return true;
+}
+
+bool UCombatSubsystem::SaveDesignLevel(const FString& Name, FString& OutMessage)
+{
+	FString Clean;
+	for (const TCHAR Char : Name)
+	{
+		if (FChar::IsAlnum(Char) || Char == TEXT('_') || Char == TEXT('-'))
+		{
+			Clean.AppendChar(Char);
+		}
+	}
+	if (Clean.IsEmpty())
+	{
+		OutMessage = TEXT("Give the level a name (letters, digits, - or _).");
+		return false;
+	}
+
+	DesignLevel.Name = Clean;
+	if (!CombatLevels::Save(DesignLevel))
+	{
+		OutMessage = FString::Printf(TEXT("Could not save %s."), *Clean);
+		return false;
+	}
+	OutMessage = FString::Printf(TEXT("Saved Levels/%s.json"), *Clean);
+	UE_LOG(LogCombat, Display, TEXT("%s"), *OutMessage);
+	return true;
+}
+
+bool UCombatSubsystem::PlayDesignLevel(int32 Seed)
+{
+	FCombatFightSource Source;
+	Source.Level = DesignLevel;
+	return StartFightFromSource(Seed, Source, GetCurrentSimSettings());
+}
+
+void UCombatSubsystem::SetDesignSize(int32 Width, int32 Height)
+{
+	if (Width == DesignLevel.Width && Height == DesignLevel.Height)
+	{
+		return;
+	}
+	DesignLevel.Resize(Width, Height);
+	if (bDesignMode)
+	{
+		RefreshDesignView(true);
+	}
+}
+
+void UCombatSubsystem::DesignPaint(const FVector& WorldPoint, bool bErase, bool bStroke)
+{
+	if (!bDesignMode)
+	{
+		return;
+	}
+
+	const ACombatGrid* Grid = ACombatGrid::Find(GetWorld());
+	const FVector Origin = Grid ? Grid->GetActorLocation() : FVector::ZeroVector;
+	const FIntPoint Cell(FMath::FloorToInt32((WorldPoint.X - Origin.X) / DesignLevel.CellSize),
+		FMath::FloorToInt32((WorldPoint.Y - Origin.Y) / DesignLevel.CellSize));
+	if (!DesignLevel.IsInBounds(Cell))
+	{
+		return;
+	}
+
+	const int32 UnitIndex = DesignLevel.FindUnitAt(Cell);
+	const TCHAR OldKind = DesignLevel.GetCell(Cell);
+	bool bChanged = false;
+
+	if (bErase)
+	{
+		if (UnitIndex != INDEX_NONE)
+		{
+			DesignLevel.Units.RemoveAt(UnitIndex);
+			bChanged = true;
+		}
+		if (OldKind != FCombatLevel::Open)
+		{
+			DesignLevel.SetCell(Cell, FCombatLevel::Open);
+			bChanged = true;
+		}
+	}
+	else if (DesignTool == ECombatDesignTool::Unit)
+	{
+		// One unit per cell, not on walls or water; placing on a unit replaces it.
+		const bool bWalkable = !EnumHasAnyFlags(FCombatLevel::FlagsFor(OldKind), ECombatCellFlags::Blocked);
+		if (bStroke || !bWalkable || DesignUnitType.IsEmpty())
+		{
+			return;
+		}
+		FCombatLevelUnit Unit;
+		Unit.Type = DesignUnitType;
+		Unit.Team = DesignUnitTeam;
+		Unit.Cell = Cell;
+		if (UnitIndex != INDEX_NONE)
+		{
+			DesignLevel.Units[UnitIndex] = Unit;
+		}
+		else
+		{
+			DesignLevel.Units.Add(Unit);
+		}
+		bChanged = true;
+	}
+	else
+	{
+		const TCHAR Kind = DesignTool == ECombatDesignTool::Wall ? FCombatLevel::Wall
+			: DesignTool == ECombatDesignTool::Hedge ? FCombatLevel::Hedge : FCombatLevel::Water;
+		if (OldKind == Kind)
+		{
+			return;
+		}
+		DesignLevel.SetCell(Cell, Kind);
+		// Walls and water cannot hold a unit.
+		if (UnitIndex != INDEX_NONE && EnumHasAnyFlags(FCombatLevel::FlagsFor(Kind), ECombatCellFlags::Blocked))
+		{
+			DesignLevel.Units.RemoveAt(UnitIndex);
+		}
+		bChanged = true;
+	}
+
+	if (bChanged)
+	{
+		RefreshDesignView(false);
+	}
+}
+
+void UCombatSubsystem::RefreshDesignView(bool bFitCamera)
+{
+	ACombatGrid* Grid = ACombatGrid::Find(GetWorld());
+	if (!Grid)
+	{
+		return;
+	}
+	Grid->ApplyLevel(DesignLevel);
+	GridOrigin = Grid->GetActorLocation();
+	if (bFitCamera)
+	{
+		FitCameraToShownGrid();
+	}
+
+	// Preview units: the unit actors, standing on their cells, facing the other side. No simulation.
+	DestroyDesignPreviews();
+	const UCombatSettings* Settings = GetDefault<UCombatSettings>();
+	FActorSpawnParameters SpawnParams;
+	SpawnParams.SpawnCollisionHandlingOverride = ESpawnActorCollisionHandlingMethod::AlwaysSpawn;
+	for (int32 Index = 0; Index < DesignLevel.Units.Num(); ++Index)
+	{
+		const FCombatLevelUnit& Entry = DesignLevel.Units[Index];
+		const UCombatUnitDefinition* Definition = FindUnitDefinition(Entry.Type);
+		if (!Definition)
+		{
+			continue;
+		}
+
+		const FCombatUnitStats Stats = Definition->ToSimStats(Settings->TickRate);
+		const FVector Location = SimToWorld(DesignLevel.CellSize * FVector2D(Entry.Cell.X + 0.5, Entry.Cell.Y + 0.5));
+		UClass* ActorClass = Definition->ActorClass ? Definition->ActorClass.Get() : ACombatUnitActor::StaticClass();
+		ACombatUnitActor* Actor = GetWorld()->SpawnActor<ACombatUnitActor>(ActorClass, Location, FRotator::ZeroRotator, SpawnParams);
+		if (Actor)
+		{
+			const bool bRanged = Stats.Attacks.ContainsByPredicate([](const FCombatAttackStats& Attack) { return Attack.IsRanged(); });
+			Actor->InitUnit(Index, Entry.Team, Stats.Radius, Settings->GetTeamColor(Entry.Team), bRanged);
+			Actor->SetHealth(1.f);
+			Actor->UpdatePresentation(Location, FVector(Entry.Team == 0 ? 1.0 : -1.0, 0.0, 0.0));
+			DesignPreviews.Add(Actor);
+		}
+	}
+}
+
+void UCombatSubsystem::DestroyDesignPreviews()
+{
+	for (ACombatUnitActor* Actor : DesignPreviews)
+	{
+		if (IsValid(Actor))
+		{
+			Actor->Destroy();
+		}
+	}
+	DesignPreviews.Reset();
+}
+
+TArray<FString> UCombatSubsystem::GetAllUnitDefinitionNames()
+{
+	IAssetRegistry& AssetRegistry = IAssetRegistry::GetChecked();
+	AssetRegistry.WaitForCompletion();
+
+	TArray<FAssetData> Assets;
+	AssetRegistry.GetAssetsByClass(UCombatUnitDefinition::StaticClass()->GetClassPathName(), Assets);
+	TArray<FString> Names;
+	for (const FAssetData& Asset : Assets)
+	{
+		Names.Add(Asset.AssetName.ToString());
+	}
+	Names.Sort();
+	return Names;
 }
 
 UCombatCommandScript* UCombatSubsystem::FindCommandScript(const FString& NameOrPath)

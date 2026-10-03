@@ -77,3 +77,5 @@ Dated history: decisions, bugs, rejected approaches. Newest entries at the botto
   - The arena shows a level (resized floor, instanced blocks, obstacles hidden), and the camera fits the grid.
   - Replay format 3 copies the level. Start, Simulate and Batch accept `level=`, and levels appear in the panel's dropdown.
   - `Levels/Demo.json` reproduces `DA_Setup_Taunt` in Arena-01 exactly (`0x7CE33AAB`). 37/37 tests.
+- LevelDesigner part B: a bottom-left menu with edit mode, name/save, load/new, size, wall/hedge/water/unit tools with type and team, and Play. Mouse painting with drag, erasing with the right button, and preview units. Start in the control panel plays the edited level while editing.
+- LevelDesigner part B done: the user built and played `Levels/TestLevel.json` in PIE.

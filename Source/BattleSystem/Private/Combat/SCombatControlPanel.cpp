@@ -294,6 +294,13 @@ TSharedRef<SWidget> SCombatControlPanel::MakeLabel(const FText& Label)
 FReply SCombatControlPanel::OnStartClicked()
 {
 	UCombatSubsystem* CombatSubsystem = Subsystem.Get();
+	if (CombatSubsystem && CombatSubsystem->IsDesignMode())
+	{
+		// In LevelDesigner edit mode, Start plays the level being edited.
+		CombatSubsystem->PlayDesignLevel(FCString::Atoi(*SeedText.ToString()));
+		return FReply::Handled();
+	}
+
 	FCombatFightSource Source;
 	if (CombatSubsystem && SelectedSetup && UCombatSubsystem::ResolveSource(*SelectedSetup, Source))
 	{

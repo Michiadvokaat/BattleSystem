@@ -19,6 +19,15 @@ class UCombatUnitDefinition;
 
 BATTLESYSTEM_API DECLARE_LOG_CATEGORY_EXTERN(LogCombat, Log, All);
 
+/** LevelDesigner tools: paint a cell kind, or place units. */
+enum class ECombatDesignTool : uint8
+{
+	Wall,
+	Hedge,
+	Water,
+	Unit,
+};
+
 /** What a fight is built from: a setup asset on the arena's own grid, or a level from the LevelDesigner. */
 struct FCombatFightSource
 {
@@ -123,6 +132,39 @@ public:
 	/** The unit's active effects as labels (StatusIcons setting). */
 	static TArray<FCombatStatusDisplay> GetStatusDisplays(const FCombatUnit& Unit);
 
+	/**
+	 * LevelDesigner (presentation only, no simulation): edit mode stops the fight and shows the level being
+	 * edited, with preview units. Play starts a fight from it as it is (saved or not).
+	 */
+	void EnterDesignMode();
+	void ExitDesignMode();
+	bool IsDesignMode() const { return bDesignMode; }
+	const FCombatLevel& GetDesignLevel() const { return DesignLevel; }
+	void NewDesignLevel();
+	/** Loads Levels/<Name>.json for editing. */
+	bool LoadDesignLevel(const FString& Name, FString& OutMessage);
+	/** Saves the edited level as Levels/<Name>.json (the name is cleaned to letters, digits, - and _). */
+	bool SaveDesignLevel(const FString& Name, FString& OutMessage);
+	/** Starts a fight from the edited level (leaves edit mode). */
+	bool PlayDesignLevel(int32 Seed);
+	void SetDesignSize(int32 Width, int32 Height);
+
+	void SetDesignTool(ECombatDesignTool Tool) { DesignTool = Tool; }
+	ECombatDesignTool GetDesignTool() const { return DesignTool; }
+	void SetDesignUnitType(const FString& Type) { DesignUnitType = Type; }
+	const FString& GetDesignUnitType() const { return DesignUnitType; }
+	void SetDesignUnitTeam(int32 Team) { DesignUnitTeam = Team; }
+	int32 GetDesignUnitTeam() const { return DesignUnitTeam; }
+
+	/**
+	 * Mouse on the arena in edit mode. Place: the current tool on the cell (a unit only when bStroke is false,
+	 * so dragging does not drop a row of units). Erase: removes the unit and the cell's wall/hedge/water.
+	 */
+	void DesignPaint(const FVector& WorldPoint, bool bErase, bool bStroke);
+
+	/** Asset names of all UCombatUnitDefinition assets, sorted. */
+	static TArray<FString> GetAllUnitDefinitionNames();
+
 	/** Asset names of all UCombatSetup assets, sorted. */
 	static TArray<FString> GetAllSetupNames();
 
@@ -178,6 +220,9 @@ private:
 	/** Moves the view camera straight above the shown grid, high enough to see all of it. */
 	void FitCameraToShownGrid();
 	void RestoreCamera();
+	/** Shows the edited level in the arena and rebuilds the preview units. */
+	void RefreshDesignView(bool bFitCamera);
+	void DestroyDesignPreviews();
 	FVector SimToWorld(const FVector2D& Local) const { return GridOrigin + FVector(Local.X, Local.Y, 0.0); }
 
 	TUniquePtr<FCombatSimulation> Simulation;
@@ -224,6 +269,15 @@ private:
 	/** Replay: the first checkpoint tick that differed, or INDEX_NONE. */
 	int32 FirstDifferentTick = INDEX_NONE;
 	FString LastBatchSummary;
+
+	bool bDesignMode = false;
+	FCombatLevel DesignLevel;
+	ECombatDesignTool DesignTool = ECombatDesignTool::Wall;
+	FString DesignUnitType;
+	int32 DesignUnitTeam = 0;
+
+	UPROPERTY(Transient)
+	TArray<TObjectPtr<ACombatUnitActor>> DesignPreviews;
 
 	int32 SelectedUnitId = INDEX_NONE;
 	bool bAwaitingMoveTarget = false;
