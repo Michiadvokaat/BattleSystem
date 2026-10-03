@@ -1,6 +1,8 @@
 // Copyright Epic Games, Inc. All Rights Reserved.
 
 #include "Combat/CombatUnitActor.h"
+#include "Components/WidgetComponent.h"
+#include "SCombatUnitWidgets.h"
 #include "Components/StaticMeshComponent.h"
 #include "DrawDebugHelpers.h"
 #include "Engine/StaticMesh.h"
@@ -21,6 +23,18 @@ ACombatUnitActor::ACombatUnitActor()
 	NoseMesh = CreateDefaultSubobject<UStaticMeshComponent>(TEXT("NoseMesh"));
 	NoseMesh->SetupAttachment(RootComponent);
 	NoseMesh->SetCollisionEnabled(ECollisionEnabled::NoCollision);
+
+	// Screen-space widgets always face the camera; they follow the actor's location only.
+	HealthBarWidget = CreateDefaultSubobject<UWidgetComponent>(TEXT("HealthBarWidget"));
+	HealthBarWidget->SetupAttachment(RootComponent);
+	HealthBarWidget->SetWidgetSpace(EWidgetSpace::Screen);
+	HealthBarWidget->SetCollisionEnabled(ECollisionEnabled::NoCollision);
+
+	StatusWidget = CreateDefaultSubobject<UWidgetComponent>(TEXT("StatusWidget"));
+	StatusWidget->SetupAttachment(RootComponent);
+	StatusWidget->SetWidgetSpace(EWidgetSpace::Screen);
+	StatusWidget->SetCollisionEnabled(ECollisionEnabled::NoCollision);
+	StatusWidget->SetDrawSize(FVector2D(120.0, 24.0));
 
 	static ConstructorHelpers::FObjectFinder<UStaticMesh> CylinderMesh(TEXT("/Engine/BasicShapes/Cylinder.Cylinder"));
 	if (CylinderMesh.Succeeded())
@@ -65,6 +79,31 @@ void ACombatUnitActor::InitUnit(int32 InUnitId, int32 InTeam, float InRadius, co
 		? BodyMesh->CreateAndSetMaterialInstanceDynamicFromMaterial(0, BodyMaterialBase)
 		: BodyMesh->CreateAndSetMaterialInstanceDynamic(0);
 	SetBodyColor(TeamColor);
+
+	HealthBar = SNew(SCombatHealthBar).TeamColor(TeamColor);
+	HealthBarWidget->SetSlateWidget(HealthBar);
+	HealthBarWidget->SetDrawSize(HealthBarSize);
+	HealthBarWidget->SetRelativeLocation(FVector(0.0, 0.0, BodyHeight + HealthBarOffset));
+
+	StatusIcons = SNew(SCombatStatusIcons);
+	StatusWidget->SetSlateWidget(StatusIcons);
+	StatusWidget->SetRelativeLocation(FVector(0.0, 0.0, BodyHeight * 0.5));
+}
+
+void ACombatUnitActor::SetHealth(float Fraction)
+{
+	if (HealthBar)
+	{
+		HealthBar->SetFraction(Fraction);
+	}
+}
+
+void ACombatUnitActor::SetStatusEffects(const TArray<FCombatStatusDisplay>& Icons)
+{
+	if (StatusIcons)
+	{
+		StatusIcons->SetIcons(Icons);
+	}
 }
 
 void ACombatUnitActor::UpdatePresentation(const FVector& InLocation, const FVector& FacingDirection)
@@ -89,12 +128,6 @@ void ACombatUnitActor::UpdatePresentation(const FVector& InLocation, const FVect
 	if (!FacingDirection.IsNearlyZero())
 	{
 		SetActorRotation(FacingDirection.Rotation());
-	}
-
-	if (bTaunted)
-	{
-		// One frame of debug text, redrawn every frame while taunted.
-		DrawDebugString(GetWorld(), InLocation + FVector(0.0, 0.0, BodyHeight + 60.0), TauntMarkerText, nullptr, TauntMarkerColor, 0.f, true, 1.6f);
 	}
 
 	const bool bShouldFlash = HitFlashStartTime >= 0.0 && Now - HitFlashStartTime < HitFlashDuration;

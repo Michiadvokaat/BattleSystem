@@ -61,3 +61,5 @@ Dated history: decisions, bugs, rejected approaches. Newest entries at the botto
   - 1000 fights of `DA_Setup_AoE` take 3.4 s. Team 0 wins 86.5% in `DA_Setup_AoE` and 99.7% in `DA_Setup_Mixed`; the Magier and Bijlman almost never survive.
   - Replays reference the setup asset rather than a snapshot of the unit stats: changing a Data Asset makes an old replay DIFFERENT, which the verdict shows.
 - Phase 5 done: the user checked AoE, replay save/play (identical) and Batch 1000 in PIE.
+- Health bar above each unit and status labels for active effects on its center (screen-space widgets, Slate in code; `StatusIcons` setting). They replace the debug "T". Presentation only: checksums unchanged.
+- Health bar stayed green: the default `SProgressBar` style tints its striped fill texture (`PrimaryHover`), which multiplied with our color. The bar now uses its own style: a plain white fill on a dark background, without the fill animation.

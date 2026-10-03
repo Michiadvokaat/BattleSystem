@@ -6,7 +6,10 @@
 #include "GameFramework/Actor.h"
 #include "CombatUnitActor.generated.h"
 
+class SCombatHealthBar;
+class SCombatStatusIcons;
 class UMaterialInstanceDynamic;
+class UWidgetComponent;
 class UMaterialInterface;
 class UStaticMesh;
 class UStaticMeshComponent;
@@ -14,8 +17,18 @@ class UStaticMeshComponent;
 /**
  * Presentation of one simulation unit. Spawned and driven by UCombatSubsystem: it only follows the
  * simulation (interpolated position, events) and contains no gameplay logic.
- * Placeholder look: a cylinder (melee) or cube (ranged) in the team color with a "nose" that shows the facing.
+ * Placeholder look: a cylinder (melee) or cube (ranged) in the team color with a "nose" that shows the facing,
+ * a health bar above it and its active effects as short labels on its center (both screen-space widgets).
  */
+/** One status label shown on a unit, for example "T" in magenta while taunted. */
+struct FCombatStatusDisplay
+{
+	FString Label;
+	FLinearColor Color = FLinearColor::White;
+
+	bool operator==(const FCombatStatusDisplay& Other) const { return Label == Other.Label && Color == Other.Color; }
+};
+
 UCLASS()
 class BATTLESYSTEM_API ACombatUnitActor : public AActor
 {
@@ -33,8 +46,11 @@ public:
 	virtual void OnAttack(const FVector& TargetLocation);
 	virtual void OnHit(float Damage);
 	virtual void OnDeath();
-	/** Whether the unit is taunted (Status.Taunted); shows TauntMarkerText above it while true. */
-	virtual void SetTaunted(bool bInTaunted) { bTaunted = bInTaunted; }
+	/** Health as a fraction of max HP (0..1), shown by the health bar. */
+	virtual void SetHealth(float Fraction);
+
+	/** The unit's active effects as labels, shown on its center. */
+	virtual void SetStatusEffects(const TArray<FCombatStatusDisplay>& Icons);
 
 	/** One of this unit's area attacks went off (the subsystem draws the area); Radius = its reach in cm. */
 	virtual void OnAreaAttack(float Radius);
@@ -60,6 +76,20 @@ protected:
 
 	UPROPERTY(VisibleAnywhere, Category = "Combat")
 	TObjectPtr<UStaticMeshComponent> NoseMesh;
+
+	UPROPERTY(VisibleAnywhere, Category = "Combat")
+	TObjectPtr<UWidgetComponent> HealthBarWidget;
+
+	UPROPERTY(VisibleAnywhere, Category = "Combat")
+	TObjectPtr<UWidgetComponent> StatusWidget;
+
+	/** Health bar size in screen pixels. */
+	UPROPERTY(EditDefaultsOnly, Category = "Combat|Presentation")
+	FVector2D HealthBarSize = FVector2D(60.0, 8.0);
+
+	/** Height of the health bar above the top of the body. */
+	UPROPERTY(EditDefaultsOnly, Category = "Combat|Presentation", meta = (Units = "cm"))
+	float HealthBarOffset = 40.f;
 
 	/** Body shape of melee units (and units without attacks). Default: the engine cylinder. */
 	UPROPERTY(EditDefaultsOnly, Category = "Combat|Presentation")
@@ -94,13 +124,6 @@ protected:
 	UPROPERTY(EditDefaultsOnly, Category = "Combat|Presentation", meta = (Units = "s"))
 	float DamageTextDuration = 1.f;
 
-	/** Shown above the unit while it is taunted. */
-	UPROPERTY(EditDefaultsOnly, Category = "Combat|Presentation")
-	FString TauntMarkerText = TEXT("T");
-
-	UPROPERTY(EditDefaultsOnly, Category = "Combat|Presentation")
-	FColor TauntMarkerColor = FColor::Magenta;
-
 private:
 	void SetBodyColor(const FLinearColor& Color);
 
@@ -115,5 +138,6 @@ private:
 	FVector LungeDirection = FVector::ZeroVector;
 	double HitFlashStartTime = -1.0;
 	bool bFlashing = false;
-	bool bTaunted = false;
+	TSharedPtr<SCombatHealthBar> HealthBar;
+	TSharedPtr<SCombatStatusIcons> StatusIcons;
 };

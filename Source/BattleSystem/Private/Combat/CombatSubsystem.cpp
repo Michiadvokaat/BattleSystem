@@ -390,7 +390,35 @@ void UCombatSubsystem::UpdateActors(float Alpha)
 			Facing = FMath::Lerp(Target.PreviousPosition, Target.Position, Alpha) - Position;
 		}
 
-		Actor->SetTaunted(Unit.Effects.HasGrantedTag(CombatTags::Status_Taunted));
+		Actor->SetHealth(Unit.Stats.MaxHP > 0.f ? Unit.HP / Unit.Stats.MaxHP : 0.f);
+
+		const UCombatSettings* Settings = GetDefault<UCombatSettings>();
+		TArray<FCombatStatusDisplay> StatusIcons;
+		for (const FCombatActiveEffect& Active : Unit.Effects.GetEffects())
+		{
+			FCombatStatusDisplay& Icon = StatusIcons.AddDefaulted_GetRef();
+			const FCombatStatusIcon* Entry = Settings->StatusIcons.FindByPredicate([&Active](const FCombatStatusIcon& Candidate)
+			{
+				return Candidate.EffectTag == Active.Effect.EffectTag;
+			});
+			if (Entry)
+			{
+				Icon.Label = Entry->Label;
+				Icon.Color = Entry->Color;
+			}
+			else
+			{
+				// "Effect.Burn" -> "B"
+				FString Name = Active.Effect.EffectTag.GetTagName().ToString();
+				Name.Split(TEXT("."), nullptr, &Name, ESearchCase::IgnoreCase, ESearchDir::FromEnd);
+				Icon.Label = Name.Left(1).ToUpper();
+			}
+			if (Active.Stacks > 1)
+			{
+				Icon.Label += FString::FromInt(Active.Stacks);
+			}
+		}
+		Actor->SetStatusEffects(StatusIcons);
 		Actor->UpdatePresentation(SimToWorld(Position), FVector(Facing.X, Facing.Y, 0.0));
 	}
 

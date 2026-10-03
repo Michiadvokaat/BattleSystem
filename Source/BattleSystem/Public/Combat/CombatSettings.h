@@ -4,10 +4,28 @@
 
 #include "CoreMinimal.h"
 #include "Engine/DeveloperSettings.h"
+#include "GameplayTagContainer.h"
 #include "CombatSettings.generated.h"
 
 class UCombatCueTable;
 class UCombatSetup;
+
+/** How an active effect is shown on a unit. */
+USTRUCT()
+struct FCombatStatusIcon
+{
+	GENERATED_BODY()
+
+	UPROPERTY(EditAnywhere, Category = "Status", meta = (Categories = "Effect"))
+	FGameplayTag EffectTag;
+
+	/** Short text, for example "T". A stack count is added after it (S2). */
+	UPROPERTY(EditAnywhere, Category = "Status")
+	FString Label;
+
+	UPROPERTY(EditAnywhere, Category = "Status")
+	FLinearColor Color = FLinearColor::White;
+};
 
 /** How threat decreases over time. */
 UENUM()
@@ -117,6 +135,10 @@ public:
 
 	UPROPERTY(Config, EditAnywhere, Category = "Presentation")
 	FLinearColor TauntColor = FLinearColor(1.f, 0.f, 1.f);
+
+	/** Labels for active effects on units. An effect not listed shows the first letter of its tag's last part, in white. */
+	UPROPERTY(Config, EditAnywhere, Category = "Presentation")
+	TArray<FCombatStatusIcon> StatusIcons;
 
 	/** Unit color per team index (wraps around). */
 	UPROPERTY(Config, EditAnywhere, Category = "Presentation")
