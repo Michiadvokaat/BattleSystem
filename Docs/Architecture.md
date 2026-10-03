@@ -149,7 +149,7 @@ Code: `Source/BattleSystem/{Public,Private}/Combat/`. Layers: grid ← simulatio
 - Panel controls (built in code, English labels):
   - Setup dropdown (`UCombatSubsystem::GetAllSetupNames`, default selection from settings), seed field, and a Random seed button.
   - Start / Restart (`StartFight`), Stop, and Pause/Resume.
-  - Speed 0.5× / 1× / 2× / 4×.
+  - Speed 0.05× / 0.1× / 0.25× / 0.5× / 1× / 2× / 4×.
   - Debug Off / Targets / + Distance map, which sets the `Combat.Debug` console variable.
   - Show "Taunt range", which toggles `Combat.ShowRanges`.
   - Replay: Save, a dropdown of the replay files (refreshed when opened, newest first), and Play. The status line shows "Replay: ..." and the verdict.

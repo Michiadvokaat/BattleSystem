@@ -17,7 +17,7 @@
 namespace CombatControlPanel
 {
 	static const FLinearColor ActiveColor(0.2f, 0.8f, 0.3f);
-	static const float Speeds[] = { 0.5f, 1.f, 2.f, 4.f };
+	static const float Speeds[] = { 0.05f, 0.1f, 0.25f, 0.5f, 1.f, 2.f, 4.f };
 
 	/** Taunt range slider: cm, in steps of TauntRangeStep. */
 	static const float MinTauntRange = 100.f;
