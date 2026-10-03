@@ -8,12 +8,13 @@
 
 class UMaterialInstanceDynamic;
 class UMaterialInterface;
+class UStaticMesh;
 class UStaticMeshComponent;
 
 /**
  * Presentation of one simulation unit. Spawned and driven by UCombatSubsystem: it only follows the
  * simulation (interpolated position, events) and contains no gameplay logic.
- * Placeholder look: a cylinder in the team color with a "nose" that shows the facing.
+ * Placeholder look: a cylinder (melee) or cube (ranged) in the team color with a "nose" that shows the facing.
  */
 UCLASS()
 class BATTLESYSTEM_API ACombatUnitActor : public AActor
@@ -23,7 +24,8 @@ class BATTLESYSTEM_API ACombatUnitActor : public AActor
 public:
 	ACombatUnitActor();
 
-	virtual void InitUnit(int32 InUnitId, int32 InTeam, float InRadius, const FLinearColor& InTeamColor);
+	/** bRanged picks the body shape: RangedBodyMesh for units with a ranged attack, MeleeBodyMesh otherwise. */
+	virtual void InitUnit(int32 InUnitId, int32 InTeam, float InRadius, const FLinearColor& InTeamColor, bool bRanged);
 
 	/** Called every frame with the interpolated location and the direction to face (may be zero). */
 	virtual void UpdatePresentation(const FVector& InLocation, const FVector& FacingDirection);
@@ -50,6 +52,14 @@ protected:
 
 	UPROPERTY(VisibleAnywhere, Category = "Combat")
 	TObjectPtr<UStaticMeshComponent> NoseMesh;
+
+	/** Body shape of melee units (and units without attacks). Default: the engine cylinder. */
+	UPROPERTY(EditDefaultsOnly, Category = "Combat|Presentation")
+	TObjectPtr<UStaticMesh> MeleeBodyMesh;
+
+	/** Body shape of units with a ranged attack. Default: the engine cube. */
+	UPROPERTY(EditDefaultsOnly, Category = "Combat|Presentation")
+	TObjectPtr<UStaticMesh> RangedBodyMesh;
 
 	/** Base material for the body; tinted with the team color through BodyColorParameter. */
 	UPROPERTY(EditDefaultsOnly, Category = "Combat|Presentation")

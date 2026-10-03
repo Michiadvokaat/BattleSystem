@@ -8,6 +8,29 @@
 #include "Combat/CombatDistanceMap.h"
 #include "Combat/CombatGridData.h"
 
+/** One attack as the simulation sees it. */
+struct FCombatAttackStats
+{
+	FGameplayTag Type;
+	/** Edge-to-edge distance in cm at which the attack can start. */
+	float Range = 150.f;
+	float Damage = 10.f;
+	/** Ticks between the starts of two uses of this attack. At least 1. */
+	int32 CooldownTicks = 20;
+	/** Ticks from the start of the attack until it hits or fires. 0 = same tick. */
+	int32 WindupTicks = 0;
+	/** Melee: needs a clear walking line to the target. Units with only such attacks are melee units. */
+	bool bNeedsWalkableLine = true;
+	/** Needs line of sight (no sight-blocking cells) to the target. */
+	bool bNeedsLineOfSight = false;
+	/** cm per second of the projectile it fires; 0 = no projectile, the hit lands directly. */
+	float ProjectileSpeed = 0.f;
+	/** Index of this attack in the unit definition's Attacks, for the presentation layer. */
+	int32 SourceIndex = INDEX_NONE;
+
+	bool IsRanged() const { return !bNeedsWalkableLine; }
+};
+
 /** Unit stats as the simulation sees them: copied from a definition at fight start, times in ticks. */
 struct FCombatUnitStats
 {
@@ -17,15 +40,7 @@ struct FCombatUnitStats
 	/** cm. */
 	float Radius = 40.f;
 
-	bool bHasAttack = false;
-	FGameplayTag AttackType;
-	/** Edge-to-edge distance in cm at which the unit can attack. */
-	float AttackRange = 150.f;
-	float AttackDamage = 10.f;
-	/** Ticks between the starts of two attacks. At least 1. */
-	int32 AttackCooldownTicks = 20;
-	/** Ticks from the start of an attack until it hits. 0 = hits in the same tick. */
-	int32 AttackWindupTicks = 0;
+	TArray<FCombatAttackStats, TInlineAllocator<2>> Attacks;
 };
 
 struct FCombatUnitSpawn
@@ -73,23 +88,46 @@ struct FCombatUnit
 	/** The point the unit steered towards in the last step (the target, or a point on its route). For debugging. */
 	FVector2D SteerPoint = FVector2D::ZeroVector;
 
-	/** Ticks until the next attack may start. */
-	int32 CooldownTicks = 0;
+	/** Ticks until each attack (same index as Stats.Attacks) may start again. */
+	TArray<int32, TInlineAllocator<2>> AttackCooldowns;
 	/** Ticks to wait in range before the first attack; drawn from the seed. */
 	int32 FirstAttackDelayTicks = 0;
-	/** Ticks until the current attack hits; 0 = not attacking. */
+	/** Ticks until the current attack hits or fires; 0 = not attacking. */
 	int32 WindupTicks = 0;
 	int32 WindupTargetId = INDEX_NONE;
+	int32 WindupAttackIndex = INDEX_NONE;
+};
+
+/** A projectile in flight. It homes in on its target and is removed when it hits, is blocked, or its target dies. */
+struct FCombatProjectile
+{
+	int32 Id = INDEX_NONE;
+	int32 SourceId = INDEX_NONE;
+	int32 TargetId = INDEX_NONE;
+	/** Index in the source unit's Stats.Attacks. */
+	int32 AttackIndex = INDEX_NONE;
+	int32 Team = 0;
+	/** Grid-local position in cm, at the end of the previous and the current step. */
+	FVector2D PreviousPosition = FVector2D::ZeroVector;
+	FVector2D Position = FVector2D::ZeroVector;
+	/** cm per second. */
+	float Speed = 0.f;
+	float Damage = 0.f;
+	bool bEnded = false;
 };
 
 enum class ECombatEventType : uint8
 {
-	/** SourceId starts an attack on TargetId. */
+	/** SourceId starts attack AttackIndex on TargetId. */
 	Attack,
 	/** SourceId hits TargetId for Amount damage. */
 	Hit,
 	/** TargetId died. */
 	Death,
+	/** SourceId fired projectile ProjectileId (attack AttackIndex) at TargetId. */
+	ProjectileSpawned,
+	/** Projectile ProjectileId is gone: it hit, was blocked, or its target died. */
+	ProjectileEnded,
 };
 
 struct FCombatEvent
@@ -98,6 +136,8 @@ struct FCombatEvent
 	int32 SourceId = INDEX_NONE;
 	int32 TargetId = INDEX_NONE;
 	float Amount = 0.f;
+	int32 AttackIndex = INDEX_NONE;
+	int32 ProjectileId = INDEX_NONE;
 };
 
 enum class ECombatOutcome : uint8
@@ -137,6 +177,8 @@ public:
 	float GetFixedDt() const { return FixedDt; }
 	const FCombatGridData& GetGrid() const { return Config.Grid; }
 	const TArray<FCombatUnit>& GetUnits() const { return Units; }
+	/** Projectiles in flight after the last step, in spawn order. */
+	const TArray<FCombatProjectile>& GetProjectiles() const { return Projectiles; }
 	/** Events of the last step only. */
 	const TArray<FCombatEvent>& GetEvents() const { return Events; }
 	/** CRC32 of the state after the last step. */
@@ -158,6 +200,10 @@ private:
 	void RebuildDistanceMaps();
 	int32 FindNearestEnemy(const FCombatUnit& Unit) const;
 	int32 ChooseTarget(const FCombatUnit& Unit) const;
+	/** For units with a ranged attack: the nearest enemy that attack can hit right now, or INDEX_NONE. */
+	int32 FindVisibleEnemyInRange(const FCombatUnit& Unit) const;
+	/** The attack with the smallest range that can reach the target now (cooldown not considered), or INDEX_NONE. */
+	int32 FindUsableAttack(const FCombatUnit& Unit, double Gap, bool bClearWalkingLine, bool bLineOfSight) const;
 	void UpdateUnit(FCombatUnit& Unit);
 	/** Targeting and attacks; returns the movement the unit wants this step (before separation). */
 	FVector2D UpdateCombat(FCombatUnit& Unit);
@@ -165,7 +211,11 @@ private:
 	FVector2D ComputeSeparation(const FCombatUnit& Unit) const;
 	/** Moves from From towards To without ending in a blocked cell, sliding along one axis if needed. */
 	FVector2D ResolveMove(const FVector2D& From, const FVector2D& To) const;
-	void TryStartAttack(FCombatUnit& Unit, const FCombatUnit& Target);
+	void TryStartAttack(FCombatUnit& Unit, const FCombatUnit& Target, int32 AttackIndex);
+	/** End of the windup: queue the hit, or spawn the projectile. */
+	void FireAttack(const FCombatUnit& Unit, int32 AttackIndex, int32 TargetId);
+	void UpdateProjectiles();
+	void EndProjectile(FCombatProjectile& Projectile);
 	void ApplyPendingHits();
 	void UpdateOutcome();
 	uint32 ComputeChecksum() const;
@@ -177,6 +227,8 @@ private:
 	TArray<FCombatUnit> Units;
 	TArray<FCombatEvent> Events;
 	TArray<FPendingHit> PendingHits;
+	TArray<FCombatProjectile> Projectiles;
+	int32 NextProjectileId = 0;
 
 	/** Team values in order of first appearance, and the distance map towards each team's enemies. */
 	TArray<int32> TeamIds;

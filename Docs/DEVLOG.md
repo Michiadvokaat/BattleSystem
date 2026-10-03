@@ -22,3 +22,15 @@ Dated history: decisions, bugs, rejected approaches. Newest entries at the botto
 - `CreateCombatTestAssets.py` no longer overwrites existing assets (it used to reset values tuned in the editor); `FORCE_UPDATE` restores the old behavior.
 - Cost: a 5-unit fight went from 0.07 ms to ~2.4 ms headless. Keep an eye on this for `Combat.Batch` (phase 5).
 - Phase 2 done: the wall is in `Arena-01` (one obstacle at x = 6, y = 0..8; the old obstacles were removed), and the user checked visually that the Krijger in `DA_Setup_Wall` goes for the reachable Brute.
+- Phase 3 code:
+  - Line of sight (`HasLineOfSight`, the shared `IsLineClear` traversal).
+  - A list of attacks per unit, each with its own cooldown; the shortest-range attack that can reach wins.
+  - Ranged units take a visible enemy in range first.
+  - Homing projectiles as simulation objects (`ProjectileSpawned`/`ProjectileEnded`); `ACombatProjectileActor` shows them.
+  - Test assets `DA_Boogschutter`, `DA_Doelpop`, `DA_Setup_Archer` and `DA_Setup_Mixed`.
+  - Choices: no kiting; mixed units use melee up close.
+- Units without a usable attack now stop at the stop distance instead of creeping 1 cm per tick (only affected units without attacks).
+- `DA_Setup_Test` takes 331 ticks with the wall in Arena-01 (243 with the old obstacles). Fights take ~3.5 ms headless.
+- In-game control panel, built fully in C++ (Slate, at the user's request rather than a Widget Blueprint). `ACombatHUD` shows `SCombatControlPanel` with setup, seed, start/stop, pause, speed and debug-level controls, plus a status line. Pause/speed only scale the presentation accumulator. `bAutoStartFight` is now off, so fights start from the panel. There are no automated UI tests; the user checks it in PIE.
+- Ranged units (any ranged attack) show as a cube, melee units and units without attacks as a cylinder (`MeleeBodyMesh`/`RangedBodyMesh` on `ACombatUnitActor`, overridable per Blueprint).
+- Phase 3 done: the user checked the fights and the control panel in PIE.

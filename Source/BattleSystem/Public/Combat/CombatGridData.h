@@ -3,6 +3,7 @@
 #pragma once
 
 #include "CoreMinimal.h"
+#include "Templates/Function.h"
 
 /** Per-cell flags of the combat grid. A cell without flags is walkable and see-through. */
 enum class ECombatCellFlags : uint8
@@ -59,4 +60,10 @@ struct BATTLESYSTEM_API FCombatGridData
 
 	/** Whether the straight line between two local positions only crosses walkable cells. Passing exactly through a corner needs both side cells walkable. */
 	bool IsLineWalkable(const FVector2D& From, const FVector2D& To) const;
+
+	/** Whether the straight line between two local positions crosses no sight-blocking cells (same corner rule). */
+	bool HasLineOfSight(const FVector2D& From, const FVector2D& To) const;
+
+	/** Whether every cell the segment crosses passes IsCellClear, in order from From to To. */
+	bool IsLineClear(const FVector2D& From, const FVector2D& To, TFunctionRef<bool(const FIntPoint&)> IsCellClear) const;
 };

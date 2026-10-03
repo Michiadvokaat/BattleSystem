@@ -3,6 +3,7 @@
 #include "Combat/CombatUnitActor.h"
 #include "Components/StaticMeshComponent.h"
 #include "DrawDebugHelpers.h"
+#include "Engine/StaticMesh.h"
 #include "Materials/MaterialInstanceDynamic.h"
 #include "Materials/MaterialInterface.h"
 #include "UObject/ConstructorHelpers.h"
@@ -24,12 +25,14 @@ ACombatUnitActor::ACombatUnitActor()
 	static ConstructorHelpers::FObjectFinder<UStaticMesh> CylinderMesh(TEXT("/Engine/BasicShapes/Cylinder.Cylinder"));
 	if (CylinderMesh.Succeeded())
 	{
+		MeleeBodyMesh = CylinderMesh.Object;
 		BodyMesh->SetStaticMesh(CylinderMesh.Object);
 	}
 
 	static ConstructorHelpers::FObjectFinder<UStaticMesh> CubeMesh(TEXT("/Engine/BasicShapes/Cube.Cube"));
 	if (CubeMesh.Succeeded())
 	{
+		RangedBodyMesh = CubeMesh.Object;
 		NoseMesh->SetStaticMesh(CubeMesh.Object);
 	}
 
@@ -41,11 +44,16 @@ ACombatUnitActor::ACombatUnitActor()
 	}
 }
 
-void ACombatUnitActor::InitUnit(int32 InUnitId, int32 InTeam, float InRadius, const FLinearColor& InTeamColor)
+void ACombatUnitActor::InitUnit(int32 InUnitId, int32 InTeam, float InRadius, const FLinearColor& InTeamColor, bool bRanged)
 {
 	UnitId = InUnitId;
 	Team = InTeam;
 	TeamColor = InTeamColor;
+
+	if (UStaticMesh* Shape = bRanged ? RangedBodyMesh : MeleeBodyMesh)
+	{
+		BodyMesh->SetStaticMesh(Shape);
+	}
 
 	// The engine cylinder and cube are 100 cm and centered on their origin.
 	BodyMesh->SetRelativeScale3D(FVector(InRadius * 2.0 / 100.0, InRadius * 2.0 / 100.0, BodyHeight / 100.0));

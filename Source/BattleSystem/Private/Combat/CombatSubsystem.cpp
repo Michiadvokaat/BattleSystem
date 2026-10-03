@@ -3,6 +3,7 @@
 #include "Combat/CombatSubsystem.h"
 #include "AssetRegistry/IAssetRegistry.h"
 #include "Combat/CombatGrid.h"
+#include "Combat/CombatProjectileActor.h"
 #include "Combat/CombatSettings.h"
 #include "Combat/CombatSetup.h"
 #include "Combat/CombatUnitActor.h"
@@ -31,8 +32,11 @@ void UCombatSubsystem::Tick(float DeltaTime)
 	const double FixedDt = Simulation->GetFixedDt();
 	if (!Simulation->IsFinished())
 	{
-		// Engine DeltaTime only decides how many fixed steps run; it never enters the simulation.
-		Accumulator += DeltaTime;
+		// Engine DeltaTime (with pause and speed) only decides how many fixed steps run; it never enters the simulation.
+		if (!bPaused)
+		{
+			Accumulator += DeltaTime * TimeScale;
+		}
 		int32 Steps = 0;
 		while (Accumulator >= FixedDt && Steps < MaxStepsPerFrame && !Simulation->IsFinished())
 		{
@@ -93,6 +97,9 @@ bool UCombatSubsystem::StartFight(int32 Seed, const UCombatSetup* Setup)
 	Simulation = MakeUnique<FCombatSimulation>(Config);
 	MaxStepsPerFrame = FMath::Max(GetDefault<UCombatSettings>()->MaxStepsPerFrame, 1);
 	Accumulator = 0.0;
+	bPaused = false;
+	CurrentSeed = Seed;
+	CurrentSetupName = Setup->GetName();
 
 	const UCombatSettings* Settings = GetDefault<UCombatSettings>();
 	FActorSpawnParameters SpawnParams;
@@ -106,9 +113,11 @@ bool UCombatSubsystem::StartFight(int32 Seed, const UCombatSetup* Setup)
 		ACombatUnitActor* Actor = GetWorld()->SpawnActor<ACombatUnitActor>(ActorClass, SimToWorld(Unit.Position), FRotator::ZeroRotator, SpawnParams);
 		if (Actor)
 		{
-			Actor->InitUnit(Unit.Id, Unit.Team, Unit.Stats.Radius, Settings->GetTeamColor(Unit.Team));
+			const bool bRanged = Unit.Stats.Attacks.ContainsByPredicate([](const FCombatAttackStats& Attack) { return Attack.IsRanged(); });
+			Actor->InitUnit(Unit.Id, Unit.Team, Unit.Stats.Radius, Settings->GetTeamColor(Unit.Team), bRanged);
 		}
 		UnitActors.Add(Actor);
+		UnitDefinitions.Add(const_cast<UCombatUnitDefinition*>(Definition));
 	}
 
 	UE_LOG(LogCombat, Display, TEXT("Fight started: seed %d, setup %s, %d units."), Seed, *Setup->GetName(), UnitActors.Num());
@@ -125,6 +134,17 @@ void UCombatSubsystem::StopFight()
 		}
 	}
 	UnitActors.Reset();
+	UnitDefinitions.Reset();
+
+	for (const TPair<int32, TObjectPtr<ACombatProjectileActor>>& Pair : ProjectileActors)
+	{
+		if (IsValid(Pair.Value))
+		{
+			Pair.Value->Destroy();
+		}
+	}
+	ProjectileActors.Reset();
+
 	Simulation.Reset();
 }
 
@@ -153,7 +173,41 @@ void UCombatSubsystem::DispatchEvents()
 				Actor->OnDeath();
 			}
 			break;
+		case ECombatEventType::ProjectileSpawned:
+			SpawnProjectileActor(Event);
+			break;
+		case ECombatEventType::ProjectileEnded:
+		{
+			TObjectPtr<ACombatProjectileActor> Actor;
+			if (ProjectileActors.RemoveAndCopyValue(Event.ProjectileId, Actor) && IsValid(Actor))
+			{
+				Actor->Destroy();
+			}
+			break;
 		}
+		}
+	}
+}
+
+void UCombatSubsystem::SpawnProjectileActor(const FCombatEvent& Event)
+{
+	// The projectile actor class comes from the attack definition the simulation attack was made from.
+	UClass* ActorClass = ACombatProjectileActor::StaticClass();
+	const FCombatUnit& Source = Simulation->GetUnits()[Event.SourceId];
+	const int32 SourceIndex = Source.Stats.Attacks[Event.AttackIndex].SourceIndex;
+	const UCombatUnitDefinition* Definition = UnitDefinitions[Event.SourceId];
+	if (Definition && Definition->Attacks.IsValidIndex(SourceIndex) && Definition->Attacks[SourceIndex].ProjectileActorClass)
+	{
+		ActorClass = Definition->Attacks[SourceIndex].ProjectileActorClass.Get();
+	}
+
+	FActorSpawnParameters SpawnParams;
+	SpawnParams.SpawnCollisionHandlingOverride = ESpawnActorCollisionHandlingMethod::AlwaysSpawn;
+	ACombatProjectileActor* Actor = GetWorld()->SpawnActor<ACombatProjectileActor>(ActorClass, SimToWorld(Source.Position), FRotator::ZeroRotator, SpawnParams);
+	if (Actor)
+	{
+		Actor->InitProjectile(Event.ProjectileId, GetDefault<UCombatSettings>()->GetTeamColor(Source.Team));
+		ProjectileActors.Add(Event.ProjectileId, Actor);
 	}
 }
 
@@ -178,6 +232,16 @@ void UCombatSubsystem::UpdateActors(float Alpha)
 		}
 
 		Actor->UpdatePresentation(SimToWorld(Position), FVector(Facing.X, Facing.Y, 0.0));
+	}
+
+	for (const FCombatProjectile& Projectile : Simulation->GetProjectiles())
+	{
+		if (const TObjectPtr<ACombatProjectileActor>* Actor = ProjectileActors.Find(Projectile.Id))
+		{
+			const FVector2D Position = FMath::Lerp(Projectile.PreviousPosition, Projectile.Position, Alpha);
+			const FVector2D Direction = Projectile.Position - Projectile.PreviousPosition;
+			(*Actor)->UpdatePresentation(SimToWorld(Position), FVector(Direction.X, Direction.Y, 0.0));
+		}
 	}
 }
 
@@ -335,6 +399,23 @@ UCombatSetup* UCombatSubsystem::FindSetup(const FString& NameOrPath)
 		}
 	}
 	return nullptr;
+}
+
+TArray<FString> UCombatSubsystem::GetAllSetupNames()
+{
+	IAssetRegistry& AssetRegistry = IAssetRegistry::GetChecked();
+	AssetRegistry.WaitForCompletion();
+
+	TArray<FAssetData> Assets;
+	AssetRegistry.GetAssetsByClass(UCombatSetup::StaticClass()->GetClassPathName(), Assets);
+
+	TArray<FString> Names;
+	for (const FAssetData& Asset : Assets)
+	{
+		Names.Add(Asset.AssetName.ToString());
+	}
+	Names.Sort();
+	return Names;
 }
 
 namespace CombatConsole

@@ -14,11 +14,11 @@ namespace CombatTests
 		Stats.MaxHP = MaxHP;
 		Stats.MoveSpeed = 300.f;
 		Stats.Radius = 40.f;
-		Stats.bHasAttack = true;
-		Stats.AttackRange = 100.f;
-		Stats.AttackDamage = Damage;
-		Stats.AttackCooldownTicks = CooldownTicks;
-		Stats.AttackWindupTicks = WindupTicks;
+		FCombatAttackStats& Melee = Stats.Attacks.AddDefaulted_GetRef();
+		Melee.Range = 100.f;
+		Melee.Damage = Damage;
+		Melee.CooldownTicks = CooldownTicks;
+		Melee.WindupTicks = WindupTicks;
 		return Stats;
 	}
 
@@ -198,7 +198,7 @@ namespace CombatTests
 	static FCombatUnitStats MakeDummyStats()
 	{
 		FCombatUnitStats Stats = MakeStats(1000.f, 0.f, 20, 0);
-		Stats.bHasAttack = false;
+		Stats.Attacks.Reset();
 		Stats.MoveSpeed = 0.f;
 		return Stats;
 	}
@@ -318,6 +318,190 @@ bool FCombatSeparationTest::RunTest(const FString& Parameters)
 	const double Distance = FVector2D::Distance(Units[0].Position, Units[1].Position);
 	const double MinDistance = Units[0].Stats.Radius + Units[1].Stats.Radius;
 	TestTrue(TEXT("Two units that start on the same spot are pushed apart"), Distance >= MinDistance * 0.9);
+	return true;
+}
+
+namespace CombatTests
+{
+	static FCombatAttackStats MakeRangedAttack(float Range, float ProjectileSpeed, float Damage)
+	{
+		FCombatAttackStats Ranged;
+		Ranged.Range = Range;
+		Ranged.Damage = Damage;
+		Ranged.CooldownTicks = 20;
+		Ranged.WindupTicks = 0;
+		Ranged.bNeedsWalkableLine = false;
+		Ranged.bNeedsLineOfSight = true;
+		Ranged.ProjectileSpeed = ProjectileSpeed;
+		return Ranged;
+	}
+
+	static FCombatUnitStats MakeArcherStats(float Range = 600.f, float ProjectileSpeed = 1500.f, float Damage = 14.f)
+	{
+		FCombatUnitStats Stats = MakeStats(70.f, 0.f, 20, 0);
+		Stats.Attacks.Reset();
+		Stats.Attacks.Add(MakeRangedAttack(Range, ProjectileSpeed, Damage));
+		return Stats;
+	}
+
+	/** Index of the attack in the first Attack event of a unit, or INDEX_NONE within MaxSteps. */
+	static int32 RunUntilFirstAttack(FCombatSimulation& Simulation, int32 UnitId, int32 MaxSteps)
+	{
+		for (int32 Step = 0; Step < MaxSteps; ++Step)
+		{
+			Simulation.Step();
+			for (const FCombatEvent& Event : Simulation.GetEvents())
+			{
+				if (Event.Type == ECombatEventType::Attack && Event.SourceId == UnitId)
+				{
+					return Event.AttackIndex;
+				}
+			}
+		}
+		return INDEX_NONE;
+	}
+}
+
+IMPLEMENT_SIMPLE_AUTOMATION_TEST(FCombatLineOfSightTest, "BattleSystem.Combat.LineOfSight",
+	EAutomationTestFlags::EditorContext | EAutomationTestFlags::ProductFilter)
+
+bool FCombatLineOfSightTest::RunTest(const FString& Parameters)
+{
+	FCombatGridData Grid;
+	Grid.Init(10, 3, 100.f);
+	Grid.AddFlags(FIntPoint(4, 1), ECombatCellFlags::BlocksSight);
+	Grid.AddFlags(FIntPoint(4, 0), ECombatCellFlags::Blocked | ECombatCellFlags::BlocksSight);
+
+	const FVector2D Left = Grid.CellToLocal(FIntPoint(1, 1));
+	const FVector2D Right = Grid.CellToLocal(FIntPoint(8, 1));
+	TestTrue(TEXT("A sight-only cell can be walked through"), Grid.IsLineWalkable(Left, Right));
+	TestFalse(TEXT("A sight-only cell blocks line of sight"), Grid.HasLineOfSight(Left, Right));
+	TestFalse(TEXT("A wall blocks walking"), Grid.IsLineWalkable(Grid.CellToLocal(FIntPoint(1, 0)), Grid.CellToLocal(FIntPoint(8, 0))));
+	TestFalse(TEXT("A wall blocks sight"), Grid.HasLineOfSight(Grid.CellToLocal(FIntPoint(1, 0)), Grid.CellToLocal(FIntPoint(8, 0))));
+	TestTrue(TEXT("An open row is clear"), Grid.HasLineOfSight(Grid.CellToLocal(FIntPoint(1, 2)), Grid.CellToLocal(FIntPoint(8, 2))));
+	return true;
+}
+
+IMPLEMENT_SIMPLE_AUTOMATION_TEST(FCombatArcherAroundWallTest, "BattleSystem.Combat.ArcherWalksAroundWall",
+	EAutomationTestFlags::EditorContext | EAutomationTestFlags::ProductFilter)
+
+bool FCombatArcherAroundWallTest::RunTest(const FString& Parameters)
+{
+	FCombatSimConfig Config;
+	Config.Grid = CombatTests::MakeWallGrid();
+	Config.MaxFirstAttackDelayTicks = 0;
+	CombatTests::AddUnit(Config, CombatTests::MakeArcherStats(), 0, FIntPoint(3, 2));
+	CombatTests::AddUnit(Config, CombatTests::MakeDummyStats(), 1, FIntPoint(9, 2));
+
+	FCombatSimulation Simulation(Config);
+	bool bFired = false;
+	bool bSightWhenFired = false;
+	bool bHit = false;
+	for (int32 Step = 0; Step < 600 && !bHit; ++Step)
+	{
+		Simulation.Step();
+		for (const FCombatEvent& Event : Simulation.GetEvents())
+		{
+			if (Event.Type == ECombatEventType::ProjectileSpawned && !bFired)
+			{
+				bFired = true;
+				const TArray<FCombatUnit>& Units = Simulation.GetUnits();
+				bSightWhenFired = Config.Grid.HasLineOfSight(Units[0].PreviousPosition, Units[1].PreviousPosition);
+			}
+			bHit |= Event.Type == ECombatEventType::Hit && Event.TargetId == 1;
+		}
+	}
+
+	TestTrue(TEXT("The archer fires"), bFired);
+	TestTrue(TEXT("Only once it has line of sight (after walking around the wall)"), bSightWhenFired);
+	TestTrue(TEXT("The projectile hits"), bHit);
+	return true;
+}
+
+IMPLEMENT_SIMPLE_AUTOMATION_TEST(FCombatVisibleTargetTest, "BattleSystem.Combat.ArcherPrefersVisibleTarget",
+	EAutomationTestFlags::EditorContext | EAutomationTestFlags::ProductFilter)
+
+bool FCombatVisibleTargetTest::RunTest(const FString& Parameters)
+{
+	// A hedge (sight only) at x = 5: enemy A behind it is nearer by walking, enemy B is visible and in range.
+	FCombatSimConfig Config;
+	Config.Grid.Init(20, 12, 100.f);
+	for (int32 Y = 0; Y < 12; ++Y)
+	{
+		Config.Grid.AddFlags(FIntPoint(5, Y), ECombatCellFlags::BlocksSight);
+	}
+	CombatTests::AddUnit(Config, CombatTests::MakeArcherStats(), 0, FIntPoint(3, 2));
+	CombatTests::AddUnit(Config, CombatTests::MakeDummyStats(), 1, FIntPoint(7, 2));
+	CombatTests::AddUnit(Config, CombatTests::MakeDummyStats(), 1, FIntPoint(3, 7));
+
+	FCombatSimulation Simulation(Config);
+	Simulation.Step();
+	TestEqual(TEXT("A is nearest by walking"), Simulation.GetDistanceMap(0)->GetNearestId(FIntPoint(3, 2)), 1);
+	TestEqual(TEXT("The archer targets B, which it can shoot"), Simulation.GetUnits()[0].TargetId, 2);
+	return true;
+}
+
+IMPLEMENT_SIMPLE_AUTOMATION_TEST(FCombatBestAttackTest, "BattleSystem.Combat.BestAttackPerSituation",
+	EAutomationTestFlags::EditorContext | EAutomationTestFlags::ProductFilter)
+
+bool FCombatBestAttackTest::RunTest(const FString& Parameters)
+{
+	// Ranged first in the list, so the choice must come from the range, not the order.
+	FCombatUnitStats Mixed = CombatTests::MakeStats(100.f, 5.f, 20, 0);
+	Mixed.Attacks.Insert(CombatTests::MakeRangedAttack(600.f, 1500.f, 10.f), 0);
+
+	for (const bool bNear : { true, false })
+	{
+		FCombatSimConfig Config;
+		Config.Grid.Init(20, 12, 100.f);
+		Config.MaxFirstAttackDelayTicks = 0;
+		CombatTests::AddUnit(Config, Mixed, 0, FIntPoint(5, 5));
+		CombatTests::AddUnit(Config, CombatTests::MakeDummyStats(), 1, FIntPoint(bNear ? 6 : 10, 5));
+
+		FCombatSimulation Simulation(Config);
+		const int32 AttackIndex = CombatTests::RunUntilFirstAttack(Simulation, 0, 100);
+		TestEqual(bNear ? TEXT("Target close: melee") : TEXT("Target far: ranged"), AttackIndex, bNear ? 1 : 0);
+	}
+	return true;
+}
+
+IMPLEMENT_SIMPLE_AUTOMATION_TEST(FCombatProjectileTargetDiesTest, "BattleSystem.Combat.ProjectileEndsWhenTargetDies",
+	EAutomationTestFlags::EditorContext | EAutomationTestFlags::ProductFilter)
+
+bool FCombatProjectileTargetDiesTest::RunTest(const FString& Parameters)
+{
+	// Two archers fire at once; the near one's shot kills the target, the far one's shot must vanish.
+	FCombatSimConfig Config;
+	Config.Grid.Init(20, 12, 100.f);
+	Config.MaxFirstAttackDelayTicks = 0;
+	CombatTests::AddUnit(Config, CombatTests::MakeArcherStats(900.f, 1000.f, 10.f), 0, FIntPoint(7, 5));
+	CombatTests::AddUnit(Config, CombatTests::MakeArcherStats(900.f, 1000.f, 10.f), 0, FIntPoint(2, 5));
+	FCombatUnitStats Weak = CombatTests::MakeDummyStats();
+	Weak.MaxHP = 10.f;
+	CombatTests::AddUnit(Config, Weak, 1, FIntPoint(10, 5));
+	// Keeps the fight going after the weak target dies; out of range at first.
+	CombatTests::AddUnit(Config, CombatTests::MakeDummyStats(), 1, FIntPoint(19, 11));
+
+	FCombatSimulation Simulation(Config);
+	int32 HitsOnWeak = 0;
+	int32 ProjectilesEnded = 0;
+	for (int32 Step = 0; Step < 30; ++Step)
+	{
+		Simulation.Step();
+		for (const FCombatEvent& Event : Simulation.GetEvents())
+		{
+			HitsOnWeak += Event.Type == ECombatEventType::Hit && Event.TargetId == 2 ? 1 : 0;
+			ProjectilesEnded += Event.Type == ECombatEventType::ProjectileEnded && Event.TargetId == 2 ? 1 : 0;
+		}
+	}
+
+	TestFalse(TEXT("The weak target is dead"), Simulation.GetUnits()[2].bAlive);
+	TestEqual(TEXT("Exactly one hit landed on it"), HitsOnWeak, 1);
+	TestEqual(TEXT("Both projectiles at it have ended"), ProjectilesEnded, 2);
+	TestFalse(TEXT("No projectile still flies at it"), Simulation.GetProjectiles().ContainsByPredicate([](const FCombatProjectile& Projectile)
+	{
+		return Projectile.TargetId == 2;
+	}));
 	return true;
 }
 

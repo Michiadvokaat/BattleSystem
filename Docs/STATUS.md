@@ -4,13 +4,14 @@ _Last updated: 2026-10-03_
 
 ## Current state
 
-- Combat phases 1 and 2 are done. Units take the nearest enemy by walking distance, follow smoothed routes around obstacles, push each other apart, and fight melee with windup. The tests pass (11/11, `BattleSystem.Combat.*`).
-- `Arena-01` has a wall at x = 6, y = 0..8 (gap at y = 9..11). `DA_Setup_Test` is the default fight and `DA_Setup_Wall` is the walking-distance check (`Combat.Start 42 DA_Setup_Wall`, with `Combat.Debug 1`).
+- Combat phases 1–3 are done: melee and ranged units (with homing projectiles and line of sight) find each other by walking distance and fight deterministically. The tests pass (16/16, `BattleSystem.Combat.*`). Ranged units are cubes, melee units cylinders.
+- Deterministic in `Arena-01` (wall at x = 6), seed 42: `DA_Setup_Test` `0x8C92F44D`, `DA_Setup_Archer` `0xB4A9FBB5`, `DA_Setup_Mixed` `0x5B05E540` (each twice the same).
+- In-game control panel (setup, seed, start/stop, pause, speed, debug); auto-start is off.
 - Repo on GitHub (`main`), with Git LFS for binary assets. `Content/ZZ_FAB/` (Fab packs) is local only.
 
 ## Open work
 
-- Phase 3 of the design: ranged attacks, projectiles and line of sight.
-- Balance: with the current test values the Brutes win.
-- Performance: a 5-unit fight takes ~2.4 ms headless; look at it before `Combat.Batch` in phase 5.
+- Phase 4 of the design: aggro (threat, taunt, hysteresis) and the effect model.
+- Balance: the Brutes win `DA_Setup_Test`; `DA_Setup_Mixed` depends on the seed (seed 42: team 0, seed 7: team 1).
+- Performance: ~3.5 ms per 5–6 unit fight headless; look at it before `Combat.Batch` in phase 5.
 - List the Fab packs used in `Content/ZZ_FAB/` in `Docs/Licenses/README.md`.

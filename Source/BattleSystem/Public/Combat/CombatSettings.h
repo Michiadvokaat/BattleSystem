@@ -47,7 +47,7 @@ public:
 
 	/** Start a fight automatically when an arena with ACombatGameMode begins play. */
 	UPROPERTY(Config, EditAnywhere, Category = "Arena")
-	bool bAutoStartFight = true;
+	bool bAutoStartFight = false;
 
 	/** Setup used by the auto-start and by Combat.Start/Combat.Simulate without a setup argument. */
 	UPROPERTY(Config, EditAnywhere, Category = "Arena")

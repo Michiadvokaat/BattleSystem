@@ -54,10 +54,20 @@ bool FCombatGridData::CanStep(const FIntPoint& Cell, const FIntPoint& Offset) co
 
 bool FCombatGridData::IsLineWalkable(const FVector2D& From, const FVector2D& To) const
 {
+	return IsLineClear(From, To, [this](const FIntPoint& Cell) { return IsWalkable(Cell); });
+}
+
+bool FCombatGridData::HasLineOfSight(const FVector2D& From, const FVector2D& To) const
+{
+	return IsLineClear(From, To, [this](const FIntPoint& Cell) { return !BlocksSight(Cell); });
+}
+
+bool FCombatGridData::IsLineClear(const FVector2D& From, const FVector2D& To, TFunctionRef<bool(const FIntPoint&)> IsCellClear) const
+{
 	// Grid traversal (Amanatides & Woo): visit every cell the segment crosses, in order.
 	FIntPoint Cell = LocalToCell(From);
 	const FIntPoint EndCell = LocalToCell(To);
-	if (!IsWalkable(Cell))
+	if (!IsCellClear(Cell))
 	{
 		return false;
 	}
@@ -88,8 +98,8 @@ bool FCombatGridData::IsLineWalkable(const FVector2D& From, const FVector2D& To)
 		}
 		else
 		{
-			// Exactly through a corner: both side cells must be walkable.
-			if (!IsWalkable(FIntPoint(Cell.X + StepX, Cell.Y)) || !IsWalkable(FIntPoint(Cell.X, Cell.Y + StepY)))
+			// Exactly through a corner: both side cells must be clear.
+			if (!IsCellClear(FIntPoint(Cell.X + StepX, Cell.Y)) || !IsCellClear(FIntPoint(Cell.X, Cell.Y + StepY)))
 			{
 				return false;
 			}
@@ -100,7 +110,7 @@ bool FCombatGridData::IsLineWalkable(const FVector2D& From, const FVector2D& To)
 			--StepsLeft;
 		}
 
-		if (!IsWalkable(Cell))
+		if (!IsCellClear(Cell))
 		{
 			return false;
 		}

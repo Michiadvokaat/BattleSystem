@@ -44,7 +44,7 @@ $P  = "D:\Unreal\UnrealProjects\BattleSystem\BattleSystem.uproject"
 
 Output goes to `Saved/Logs/BattleSystem.log`, which each run overwrites. Grep it for `LogCombat`, `Test Completed` or the script's log tag.
 
-Console commands (in PIE or headless): `Combat.Start <seed> [setup]`, `Combat.Simulate <seed> [setup]`, `Combat.Stop`. The console variable `Combat.Debug 1|2` draws targets, steer points and the distance map. `setup` is an asset name (`DA_Setup_Test`) or an object path. Without it, the default setup from Project Settings > Game > Combat is used.
+Console commands (in PIE or headless): `Combat.Start <seed> [setup]`, `Combat.Simulate <seed> [setup]`, `Combat.Stop`. The console variable `Combat.Debug 1|2` draws targets, steer points and the distance map. In PIE the same controls (plus setup, seed, pause and speed) are on the in-game control panel (`ACombatHUD`). `setup` is an asset name (`DA_Setup_Test`) or an object path. Without it, the default setup from Project Settings > Game > Combat is used.
 
 New UCLASS/USTRUCT types and header changes need a full build plus an editor restart. Live Coding only covers changes to function bodies in .cpp files.
 

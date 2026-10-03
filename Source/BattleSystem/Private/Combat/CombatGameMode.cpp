@@ -1,6 +1,7 @@
 // Copyright Epic Games, Inc. All Rights Reserved.
 
 #include "Combat/CombatGameMode.h"
+#include "Combat/CombatHUD.h"
 #include "Combat/CombatSettings.h"
 #include "Combat/CombatSetup.h"
 #include "Combat/CombatSubsystem.h"
@@ -9,6 +10,7 @@
 ACombatGameMode::ACombatGameMode()
 {
 	bStartPlayersAsSpectators = true;
+	HUDClass = ACombatHUD::StaticClass();
 }
 
 void ACombatGameMode::StartPlay()

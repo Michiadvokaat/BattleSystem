@@ -11,19 +11,26 @@ FCombatUnitStats UCombatUnitDefinition::ToSimStats(int32 TickRate) const
 	Stats.MoveSpeed = MoveSpeed;
 	Stats.Radius = Radius;
 
-	const FCombatAttackDefinition* Melee = Attacks.FindByPredicate([](const FCombatAttackDefinition& Attack)
+	for (int32 Index = 0; Index < Attacks.Num(); ++Index)
 	{
-		return Attack.Type.MatchesTagExact(CombatTags::Attack_Melee);
-	});
+		const FCombatAttackDefinition& Definition = Attacks[Index];
+		const bool bMelee = Definition.Type.MatchesTagExact(CombatTags::Attack_Melee);
+		const bool bRanged = Definition.Type.MatchesTagExact(CombatTags::Attack_Ranged);
+		if (!bMelee && !bRanged)
+		{
+			continue;
+		}
 
-	if (Melee)
-	{
-		Stats.bHasAttack = true;
-		Stats.AttackType = Melee->Type;
-		Stats.AttackRange = Melee->Range;
-		Stats.AttackDamage = Melee->Damage;
-		Stats.AttackCooldownTicks = FMath::Max(FMath::RoundToInt32(Melee->Cooldown * TickRate), 1);
-		Stats.AttackWindupTicks = FMath::Max(FMath::RoundToInt32(Melee->Windup * TickRate), 0);
+		FCombatAttackStats& Attack = Stats.Attacks.AddDefaulted_GetRef();
+		Attack.Type = Definition.Type;
+		Attack.Range = Definition.Range;
+		Attack.Damage = Definition.Damage;
+		Attack.CooldownTicks = FMath::Max(FMath::RoundToInt32(Definition.Cooldown * TickRate), 1);
+		Attack.WindupTicks = FMath::Max(FMath::RoundToInt32(Definition.Windup * TickRate), 0);
+		Attack.bNeedsWalkableLine = bMelee;
+		Attack.bNeedsLineOfSight = bRanged && Definition.bRequiresLineOfSight;
+		Attack.ProjectileSpeed = bRanged ? Definition.ProjectileSpeed : 0.f;
+		Attack.SourceIndex = Index;
 	}
 	return Stats;
 }

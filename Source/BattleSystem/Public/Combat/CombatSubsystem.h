@@ -7,6 +7,7 @@
 #include "Combat/CombatSimulation.h"
 #include "CombatSubsystem.generated.h"
 
+class ACombatProjectileActor;
 class ACombatUnitActor;
 class UCombatSetup;
 class UCombatUnitDefinition;
@@ -34,6 +35,19 @@ public:
 
 	const FCombatSimulation* GetSimulation() const { return Simulation.Get(); }
 
+	/** Pause and speed only change how fast fixed steps are taken; the fight itself stays the same. */
+	void SetPaused(bool bInPaused) { bPaused = bInPaused; }
+	bool IsPaused() const { return bPaused; }
+	void SetTimeScale(float InTimeScale) { TimeScale = FMath::Max(InTimeScale, 0.f); }
+	float GetTimeScale() const { return TimeScale; }
+
+	/** Seed and setup name of the current (or last) fight. */
+	int32 GetCurrentSeed() const { return CurrentSeed; }
+	const FString& GetCurrentSetupName() const { return CurrentSetupName; }
+
+	/** Asset names of all UCombatSetup assets, sorted. */
+	static TArray<FString> GetAllSetupNames();
+
 	/**
 	 * Builds a simulation config from a setup, using the world's ACombatGrid or, without one (or without
 	 * a world), the fallback grid from UCombatSettings. Entries without a definition or outside the grid
@@ -50,6 +64,7 @@ protected:
 
 private:
 	void DispatchEvents();
+	void SpawnProjectileActor(const FCombatEvent& Event);
 	void UpdateActors(float Alpha);
 	/** Debug lines and distance-map numbers, depending on the Combat.Debug console variable. */
 	void DrawDebug(float Alpha) const;
@@ -62,7 +77,20 @@ private:
 	UPROPERTY(Transient)
 	TArray<TObjectPtr<ACombatUnitActor>> UnitActors;
 
+	/** Indexed by unit ID; kept for per-attack presentation settings such as the projectile actor class. */
+	UPROPERTY(Transient)
+	TArray<TObjectPtr<UCombatUnitDefinition>> UnitDefinitions;
+
+	/** Projectiles in flight, by projectile ID. */
+	UPROPERTY(Transient)
+	TMap<int32, TObjectPtr<ACombatProjectileActor>> ProjectileActors;
+
 	FVector GridOrigin = FVector::ZeroVector;
 	double Accumulator = 0.0;
 	int32 MaxStepsPerFrame = 5;
+
+	bool bPaused = false;
+	float TimeScale = 1.f;
+	int32 CurrentSeed = 0;
+	FString CurrentSetupName;
 };

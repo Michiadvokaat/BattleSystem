@@ -7,6 +7,7 @@
 #include "GameplayTagContainer.h"
 #include "CombatUnitDefinition.generated.h"
 
+class ACombatProjectileActor;
 class ACombatUnitActor;
 struct FCombatUnitStats;
 
@@ -26,12 +27,24 @@ struct FCombatAttackDefinition
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Attack", meta = (ClampMin = 0, Units = "s"))
 	float Cooldown = 1.f;
 
-	/** Seconds from the start of the attack until it hits. Rounded to simulation ticks. */
+	/** Seconds from the start of the attack until it hits (melee) or fires (ranged). Rounded to simulation ticks. */
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Attack", meta = (ClampMin = 0, Units = "s"))
 	float Windup = 0.3f;
 
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Attack", meta = (ClampMin = 0))
 	float Damage = 10.f;
+
+	/** Ranged: speed of the homing projectile. 0 = the hit lands directly. */
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Attack|Ranged", meta = (ClampMin = 0, Units = "cm/s"))
+	float ProjectileSpeed = 1500.f;
+
+	/** Ranged: only fire with a clear line of sight (no sight-blocking cells) to the target. */
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Attack|Ranged")
+	bool bRequiresLineOfSight = true;
+
+	/** Ranged: actor that shows the projectile. Empty = ACombatProjectileActor. */
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Attack|Ranged")
+	TSubclassOf<ACombatProjectileActor> ProjectileActorClass;
 };
 
 /** A unit type: stats, attacks and the actor class that shows it. Read-only during a fight. */
@@ -53,7 +66,7 @@ public:
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Unit", meta = (ClampMin = 1, Units = "cm"))
 	float Radius = 40.f;
 
-	/** Phase 1 uses the first Attack.Melee entry. */
+	/** Attack.Melee and Attack.Ranged entries are used; the unit picks the shortest-range one that can reach its target. */
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Unit")
 	TArray<FCombatAttackDefinition> Attacks;
 
