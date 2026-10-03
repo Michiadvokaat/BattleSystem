@@ -5,6 +5,28 @@
 #include "Combat/CombatTags.h"
 #include "Misc/Crc.h"
 
+bool FCombatArea::Contains(const FVector2D& Position, float UnitRadius) const
+{
+	const double Distance = FVector2D::Distance(Center, Position);
+	switch (Shape)
+	{
+	case ECombatAreaShape::CircleAroundSelf:
+		return Distance - SourceRadius - UnitRadius <= Radius;
+	case ECombatAreaShape::CircleAtTarget:
+		return Distance - UnitRadius <= Radius;
+	case ECombatAreaShape::Cone:
+		if (Distance - SourceRadius - UnitRadius > Radius)
+		{
+			return false;
+		}
+		// Angle to the unit's center; a unit on top of the attacker counts as inside.
+		return Distance <= UE_KINDA_SMALL_NUMBER || FVector2D::DotProduct(Direction, (Position - Center) / Distance) >= ConeCosHalfAngle;
+	case ECombatAreaShape::None:
+		break;
+	}
+	return false;
+}
+
 float FCombatUnit::GetThreatOn(int32 EnemyId) const
 {
 	const FCombatThreatEntry* Entry = Threat.FindByPredicate([EnemyId](const FCombatThreatEntry& Candidate) { return Candidate.EnemyId == EnemyId; });
@@ -81,6 +103,9 @@ void FCombatSimulation::Step()
 	{
 		RebuildDistanceMaps();
 	}
+
+	// Before the units: areas placed this step only start counting down next step.
+	UpdatePendingAreas();
 
 	for (FCombatUnit& Unit : Units)
 	{
@@ -279,36 +304,47 @@ int32 FCombatSimulation::FindReadyAreaAttack(const FCombatUnit& Unit) const
 	for (int32 Index = 0; Index < Unit.Stats.Attacks.Num(); ++Index)
 	{
 		const FCombatAttackStats& Attack = Unit.Stats.Attacks[Index];
-		if (!Attack.bAreaAroundSelf || Unit.AttackCooldowns[Index] > 0)
+		if (Attack.AreaShape != ECombatAreaShape::CircleAroundSelf || Unit.AttackCooldowns[Index] > 0)
 		{
 			continue;
 		}
 
+		FCombatArea Area;
+		Area.Shape = Attack.AreaShape;
+		Area.Center = Unit.PreviousPosition;
+		Area.Radius = Attack.AreaRadius;
+		Area.SourceRadius = Unit.Stats.Radius;
+
 		for (const FCombatUnit& Other : Units)
 		{
-			if (!Other.bAlive || Other.Team == Unit.Team)
+			if (!AffectsUnit(Attack, Unit, Other) || !Area.Contains(Other.PreviousPosition, Other.Stats.Radius)
+				|| (Attack.bNeedsLineOfSight && !Config.Grid.HasLineOfSight(Unit.PreviousPosition, Other.PreviousPosition)))
 			{
 				continue;
 			}
 
-			const double Gap = FVector2D::Distance(Unit.PreviousPosition, Other.PreviousPosition) - Unit.Stats.Radius - Other.Stats.Radius;
-			if (Gap > Attack.Range || (Attack.bNeedsLineOfSight && !Config.Grid.HasLineOfSight(Unit.PreviousPosition, Other.PreviousPosition)))
-			{
-				continue;
-			}
-
-			// Worth using if it deals damage, or if an enemy in range lacks one of its effects from this unit.
+			// Worth using if it damages an enemy here, or if a unit here lacks one of its effects from this unit.
+			const bool bDamagesEnemy = Attack.Damage > 0.f && Other.Team != Unit.Team;
 			const bool bMissingEffect = Attack.Effects.ContainsByPredicate([&Other, &Unit](const FCombatEffectStats& Effect)
 			{
 				return !Other.Effects.HasEffectFromSource(Effect.EffectTag, Unit.Id);
 			});
-			if (Attack.Damage > 0.f || bMissingEffect)
+			if (bDamagesEnemy || bMissingEffect)
 			{
 				return Index;
 			}
 		}
 	}
 	return INDEX_NONE;
+}
+
+bool FCombatSimulation::AffectsUnit(const FCombatAttackStats& Attack, const FCombatUnit& Source, const FCombatUnit& Other)
+{
+	if (!Other.bAlive)
+	{
+		return false;
+	}
+	return Other.Team == Source.Team ? Attack.bAffectsAllies : Attack.bAffectsEnemies;
 }
 
 int32 FCombatSimulation::FindUsableAttack(const FCombatUnit& Unit, double Gap, bool bClearWalkingLine, bool bLineOfSight) const
@@ -381,7 +417,7 @@ FVector2D FCombatSimulation::UpdateCombat(FCombatUnit& Unit)
 	const FVector2D ToTarget = Target.PreviousPosition - Unit.PreviousPosition;
 	const double Distance = ToTarget.Size();
 	const double Gap = Distance - Unit.Stats.Radius - Target.Stats.Radius;
-	const double MaxStep = Unit.Stats.MoveSpeed * FixedDt;
+	const double MaxStep = Unit.Stats.MoveSpeed * Unit.Effects.GetMoveSpeedMultiplier() * FixedDt;
 	const bool bClearWalkingLine = Config.Grid.IsLineWalkable(Unit.PreviousPosition, Target.PreviousPosition);
 	const bool bLineOfSight = Config.Grid.HasLineOfSight(Unit.PreviousPosition, Target.PreviousPosition);
 
@@ -565,33 +601,16 @@ void FCombatSimulation::StartAttack(FCombatUnit& Unit, int32 TargetId, int32 Att
 void FCombatSimulation::FireAttack(const FCombatUnit& Unit, int32 AttackIndex, int32 TargetId)
 {
 	const FCombatAttackStats& Attack = Unit.Stats.Attacks[AttackIndex];
-	const float Threat = Attack.Damage * Attack.ThreatMultiplier;
-
-	if (Attack.bAreaAroundSelf)
+	if (Attack.IsArea())
 	{
-		// Reach from the center: an enemy is hit when its edge is within Range of this unit's edge.
-		FCombatEvent& Event = Events.Add_GetRef({ ECombatEventType::AreaAttackFired, Unit.Id, INDEX_NONE, Attack.Range + Unit.Stats.Radius });
-		Event.AttackIndex = AttackIndex;
-
-		// Every enemy in range, in ID order.
-		for (const FCombatUnit& Other : Units)
-		{
-			if (!Other.bAlive || Other.Team == Unit.Team)
-			{
-				continue;
-			}
-			const double Gap = FVector2D::Distance(Unit.PreviousPosition, Other.PreviousPosition) - Unit.Stats.Radius - Other.Stats.Radius;
-			if (Gap <= Attack.Range && (!Attack.bNeedsLineOfSight || Config.Grid.HasLineOfSight(Unit.PreviousPosition, Other.PreviousPosition)))
-			{
-				PendingHits.Add({ Unit.Id, Other.Id, AttackIndex, Attack.Damage, Threat });
-			}
-		}
+		PlaceArea(Unit, AttackIndex, TargetId);
 		return;
 	}
 
+	const float Damage = Attack.Damage * Unit.Effects.GetDamageDealtMultiplier();
 	if (Attack.ProjectileSpeed <= 0.f)
 	{
-		PendingHits.Add({ Unit.Id, TargetId, AttackIndex, Attack.Damage, Threat });
+		PendingHits.Add({ Unit.Id, TargetId, AttackIndex, Damage, Attack.ThreatMultiplier });
 		return;
 	}
 
@@ -604,12 +623,95 @@ void FCombatSimulation::FireAttack(const FCombatUnit& Unit, int32 AttackIndex, i
 	Projectile.PreviousPosition = Unit.PreviousPosition;
 	Projectile.Position = Unit.PreviousPosition;
 	Projectile.Speed = Attack.ProjectileSpeed;
-	Projectile.Damage = Attack.Damage;
-	Projectile.Threat = Threat;
+	Projectile.Damage = Damage;
+	Projectile.ThreatMultiplier = Attack.ThreatMultiplier;
 
 	FCombatEvent& Event = Events.Add_GetRef({ ECombatEventType::ProjectileSpawned, Unit.Id, TargetId, 0.f });
 	Event.AttackIndex = AttackIndex;
 	Event.ProjectileId = Projectile.Id;
+}
+
+void FCombatSimulation::PlaceArea(const FCombatUnit& Unit, int32 AttackIndex, int32 TargetId)
+{
+	const FCombatAttackStats& Attack = Unit.Stats.Attacks[AttackIndex];
+
+	FCombatArea Area;
+	Area.Shape = Attack.AreaShape;
+	Area.Radius = Attack.AreaRadius;
+	Area.ConeCosHalfAngle = Attack.ConeCosHalfAngle;
+	Area.SourceRadius = Unit.Stats.Radius;
+	Area.Center = Unit.PreviousPosition;
+
+	const FVector2D TargetPosition = TargetId != INDEX_NONE ? Units[TargetId].PreviousPosition : Unit.PreviousPosition;
+	if (Attack.AreaShape == ECombatAreaShape::CircleAtTarget)
+	{
+		Area.Center = TargetPosition;
+	}
+	else if (Attack.AreaShape == ECombatAreaShape::Cone)
+	{
+		const FVector2D ToTarget = TargetPosition - Unit.PreviousPosition;
+		const double Length = ToTarget.Size();
+		Area.Direction = Length > UE_KINDA_SMALL_NUMBER ? ToTarget / Length : FVector2D(1.0, 0.0);
+	}
+
+	const int32 AreaId = NextAreaId++;
+	const float DamageDealtMultiplier = Unit.Effects.GetDamageDealtMultiplier();
+	if (Attack.TelegraphTicks <= 0)
+	{
+		ResolveArea(Unit.Id, Unit.Team, AttackIndex, Area, AreaId, DamageDealtMultiplier);
+		return;
+	}
+
+	// Telegraph: the area stays where it was placed and goes off after TelegraphTicks.
+	FCombatPendingArea& Pending = PendingAreas.AddDefaulted_GetRef();
+	Pending.Id = AreaId;
+	Pending.SourceId = Unit.Id;
+	Pending.Team = Unit.Team;
+	Pending.AttackIndex = AttackIndex;
+	Pending.Area = Area;
+	Pending.TotalTicks = Attack.TelegraphTicks;
+	Pending.RemainingTicks = Attack.TelegraphTicks;
+	Pending.DamageDealtMultiplier = DamageDealtMultiplier;
+
+	FCombatEvent& Event = Events.Add_GetRef({ ECombatEventType::AreaTelegraphStarted, Unit.Id, TargetId, 0.f });
+	Event.AttackIndex = AttackIndex;
+	Event.AreaId = AreaId;
+	Event.Area = Area;
+}
+
+void FCombatSimulation::ResolveArea(int32 SourceId, int32 Team, int32 AttackIndex, const FCombatArea& Area, int32 AreaId, float DamageDealtMultiplier)
+{
+	const FCombatUnit& Source = Units[SourceId];
+	const FCombatAttackStats& Attack = Source.Stats.Attacks[AttackIndex];
+
+	FCombatEvent& Event = Events.Add_GetRef({ ECombatEventType::AreaAttackFired, SourceId, INDEX_NONE, 0.f });
+	Event.AttackIndex = AttackIndex;
+	Event.AreaId = AreaId;
+	Event.Area = Area;
+	Event.Cue = Attack.ImpactCue;
+
+	// Every affected unit inside, in ID order. Team comes from the area, so it still works after the source died.
+	for (const FCombatUnit& Other : Units)
+	{
+		const bool bAffected = Other.bAlive && (Other.Team == Team ? Attack.bAffectsAllies : Attack.bAffectsEnemies);
+		if (bAffected && Area.Contains(Other.PreviousPosition, Other.Stats.Radius)
+			&& (!Attack.bNeedsLineOfSight || Config.Grid.HasLineOfSight(Area.Center, Other.PreviousPosition)))
+		{
+			PendingHits.Add({ SourceId, Other.Id, AttackIndex, Attack.Damage * DamageDealtMultiplier, Attack.ThreatMultiplier });
+		}
+	}
+}
+
+void FCombatSimulation::UpdatePendingAreas()
+{
+	for (FCombatPendingArea& Pending : PendingAreas)
+	{
+		if (--Pending.RemainingTicks <= 0)
+		{
+			ResolveArea(Pending.SourceId, Pending.Team, Pending.AttackIndex, Pending.Area, Pending.Id, Pending.DamageDealtMultiplier);
+		}
+	}
+	PendingAreas.RemoveAll([](const FCombatPendingArea& Pending) { return Pending.RemainingTicks <= 0; });
 }
 
 void FCombatSimulation::UpdateProjectiles()
@@ -634,7 +736,7 @@ void FCombatSimulation::UpdateProjectiles()
 			if (Grid.HasLineOfSight(Projectile.PreviousPosition, Target.Position))
 			{
 				Projectile.Position = Target.Position;
-				PendingHits.Add({ Projectile.SourceId, Projectile.TargetId, Projectile.AttackIndex, Projectile.Damage, Projectile.Threat });
+				PendingHits.Add({ Projectile.SourceId, Projectile.TargetId, Projectile.AttackIndex, Projectile.Damage, Projectile.ThreatMultiplier });
 			}
 			EndProjectile(Projectile);
 			continue;
@@ -668,9 +770,15 @@ void FCombatSimulation::ApplyPendingHits()
 		if (Hit.Damage > 0.f)
 		{
 			FCombatUnit& Target = Units[Hit.TargetId];
-			Target.HP -= Hit.Damage;
-			AddThreat(Target, Hit.SourceId, Hit.Threat);
-			Events.Add({ ECombatEventType::Hit, Hit.SourceId, Hit.TargetId, Hit.Damage });
+			const float Damage = Hit.Damage * Target.Effects.GetDamageTakenMultiplier();
+			Target.HP -= Damage;
+			Target.DamageTaken += Damage;
+			Units[Hit.SourceId].DamageDealt += Damage;
+			AddThreat(Target, Hit.SourceId, Damage * Hit.ThreatMultiplier);
+
+			FCombatEvent& Event = Events.Add_GetRef({ ECombatEventType::Hit, Hit.SourceId, Hit.TargetId, Damage });
+			Event.AttackIndex = Hit.AttackIndex;
+			Event.Cue = Units[Hit.SourceId].Stats.Attacks[Hit.AttackIndex].ImpactCue;
 		}
 	}
 
@@ -812,6 +920,13 @@ uint32 FCombatSimulation::ComputeChecksum() const
 		Crc = FCrc::MemCrc32(&Projectile.Id, sizeof(Projectile.Id), Crc);
 		Crc = FCrc::MemCrc32(&Projectile.Position, sizeof(Projectile.Position), Crc);
 		Crc = FCrc::MemCrc32(&Projectile.TargetId, sizeof(Projectile.TargetId), Crc);
+	}
+	for (const FCombatPendingArea& Pending : PendingAreas)
+	{
+		Crc = FCrc::MemCrc32(&Pending.Id, sizeof(Pending.Id), Crc);
+		Crc = FCrc::MemCrc32(&Pending.RemainingTicks, sizeof(Pending.RemainingTicks), Crc);
+		Crc = FCrc::MemCrc32(&Pending.Area.Center, sizeof(Pending.Area.Center), Crc);
+		Crc = FCrc::MemCrc32(&Pending.Area.Direction, sizeof(Pending.Area.Direction), Crc);
 	}
 	return Crc;
 }

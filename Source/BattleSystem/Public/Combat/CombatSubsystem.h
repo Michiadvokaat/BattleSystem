@@ -4,10 +4,12 @@
 
 #include "CoreMinimal.h"
 #include "Subsystems/WorldSubsystem.h"
+#include "Combat/CombatReplay.h"
 #include "Combat/CombatSimulation.h"
 #include "CombatSubsystem.generated.h"
 
 class ACombatProjectileActor;
+class UCombatCueTable;
 class ACombatUnitActor;
 class UCombatSetup;
 class UCombatUnitDefinition;
@@ -17,7 +19,7 @@ BATTLESYSTEM_API DECLARE_LOG_CATEGORY_EXTERN(LogCombat, Log, All);
 /**
  * Thin layer between the world and FCombatSimulation: builds a fight from the level's ACombatGrid and a
  * UCombatSetup, runs fixed steps from an accumulator, and drives the ACombatUnitActors.
- * Also registers the console commands Combat.Start, Combat.Simulate and Combat.Stop.
+ * Also saves and plays replays, runs batches, and registers the Combat.* console commands.
  */
 UCLASS()
 class BATTLESYSTEM_API UCombatSubsystem : public UTickableWorldSubsystem
@@ -29,8 +31,28 @@ public:
 	virtual TStatId GetStatId() const override;
 	virtual void Deinitialize() override;
 
-	/** Starts a fight with presentation, replacing any running fight. */
+	/** Starts a fight with presentation, replacing any running fight. Uses the project settings and the taunt range override. */
 	bool StartFight(int32 Seed, const UCombatSetup* Setup);
+	bool StartFightWithSettings(int32 Seed, const UCombatSetup* Setup, const FCombatSimSettings& Settings);
+
+	/** The project settings with this subsystem's taunt range override. */
+	FCombatSimSettings GetCurrentSimSettings() const { return FCombatSimSettings::FromProjectSettings(TauntRangeOverride); }
+
+	/** Saves the finished fight as a replay in Saved/Replays. OutMessage says where, or why not. */
+	bool SaveReplay(FString& OutMessage) const;
+	/** Plays a replay file (a name in Saved/Replays or a path) with its own settings. OutMessage has any warnings. */
+	bool PlayReplay(const FString& FileOrPath, FString& OutMessage);
+	bool IsPlayingReplay() const { return bIsReplay; }
+	/** After a replay finished: whether it came out identical. Empty otherwise. */
+	const FString& GetReplayVerdict() const { return ReplayVerdict; }
+
+	/** Runs Count fights headless (seeds StartSeed...) in this world's arena, with the current settings. */
+	bool RunBatch(const UCombatSetup* Setup, int32 Count, int32 StartSeed, bool bWriteCsv, FString& OutSummary);
+	const FString& GetLastBatchSummary() const { return LastBatchSummary; }
+
+	/** Shared by RunBatch and the Combat.Batch command. Logs and returns the summary. */
+	static bool RunBatchInWorld(UWorld* World, const UCombatSetup& Setup, int32 Count, int32 StartSeed,
+		const FCombatSimSettings& Settings, bool bWriteCsv, FString& OutSummary);
 	void StopFight();
 
 	const FCombatSimulation* GetSimulation() const { return Simulation.Get(); }
@@ -60,8 +82,8 @@ public:
 	 * a world), the fallback grid from UCombatSettings. Entries without a definition or outside the grid
 	 * are skipped with a warning. OutDefinitions gets the definition per unit ID.
 	 */
-	static bool BuildSimConfig(UWorld* World, int32 Seed, const UCombatSetup& Setup, FCombatSimConfig& OutConfig,
-		FVector& OutGridOrigin, TArray<const UCombatUnitDefinition*>* OutDefinitions = nullptr);
+	static bool BuildSimConfig(UWorld* World, int32 Seed, const UCombatSetup& Setup, const FCombatSimSettings& Settings,
+		FCombatSimConfig& OutConfig, FVector& OutGridOrigin, TArray<const UCombatUnitDefinition*>* OutDefinitions = nullptr);
 
 	/** Finds a setup by asset name or object path. An empty string gives the default setup from UCombatSettings. */
 	static UCombatSetup* FindSetup(const FString& NameOrPath);
@@ -77,7 +99,16 @@ private:
 	void DrawDebug(float Alpha) const;
 	/** Range circles of area attacks (taunt), depending on the Combat.ShowRanges console variable. */
 	void DrawAreaRanges(float Alpha) const;
-	void ReportResult() const;
+	/** Outlines of telegraphed areas that have not gone off yet, with an inner circle that grows until they do. */
+	void DrawPendingAreas() const;
+	/** An area attack went off: flash its shape and play its cue. */
+	void OnAreaFired(const FCombatEvent& Event);
+	/** Plays the cue's VFX and sound at a location, if the cue table has them. */
+	void PlayCue(const FGameplayTag& Cue, const FVector& Location) const;
+	/** Draws an area's outline; Scale shrinks it towards the center (telegraph progress). */
+	void DrawArea(const FCombatArea& Area, const FColor& Color, float Duration, float Thickness, float Scale = 1.f) const;
+	/** Logs the result once the fight is over; for a replay also decides the verdict. */
+	void ReportResult();
 	FVector SimToWorld(const FVector2D& Local) const { return GridOrigin + FVector(Local.X, Local.Y, 0.0); }
 
 	TUniquePtr<FCombatSimulation> Simulation;
@@ -94,6 +125,9 @@ private:
 	UPROPERTY(Transient)
 	TMap<int32, TObjectPtr<ACombatProjectileActor>> ProjectileActors;
 
+	UPROPERTY(Transient)
+	TObjectPtr<UCombatCueTable> CueTable;
+
 	FVector GridOrigin = FVector::ZeroVector;
 	double Accumulator = 0.0;
 	int32 MaxStepsPerFrame = 5;
@@ -103,4 +137,11 @@ private:
 	float TauntRangeOverride = 0.f;
 	int32 CurrentSeed = 0;
 	FString CurrentSetupName;
+	FString CurrentSetupPath;
+	FCombatSimSettings CurrentSettings;
+
+	bool bIsReplay = false;
+	FCombatReplay PlayingReplay;
+	FString ReplayVerdict;
+	FString LastBatchSummary;
 };

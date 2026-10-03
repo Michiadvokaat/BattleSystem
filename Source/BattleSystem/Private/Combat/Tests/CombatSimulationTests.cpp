@@ -1,7 +1,9 @@
 // Copyright Epic Games, Inc. All Rights Reserved.
 
 #include "Misc/AutomationTest.h"
+#include "Combat/CombatBatch.h"
 #include "Combat/CombatPathfinding.h"
+#include "Combat/CombatReplay.h"
 #include "Combat/CombatSimulation.h"
 #include "Combat/CombatTags.h"
 
@@ -744,12 +746,12 @@ bool FCombatTauntTest::RunTest(const FString& Parameters)
 
 	FCombatUnitStats Tank = CombatTests::MakeStats(400.f, 12.f, 24, 6);
 	FCombatAttackStats& Taunt = Tank.Attacks.AddDefaulted_GetRef();
-	Taunt.Range = 600.f;
 	Taunt.Damage = 0.f;
 	Taunt.CooldownTicks = 120;
 	Taunt.WindupTicks = 4;
 	Taunt.bNeedsWalkableLine = false;
-	Taunt.bAreaAroundSelf = true;
+	Taunt.AreaShape = ECombatAreaShape::CircleAroundSelf;
+	Taunt.AreaRadius = 600.f;
 	Taunt.Effects.Add(CombatTests::MakeTauntEffect(80));
 
 	FCombatUnitStats Brute = CombatTests::MakeStats(400.f, 20.f, 30, 10);
@@ -772,6 +774,344 @@ bool FCombatTauntTest::RunTest(const FString& Parameters)
 			&& BruteUnit.Effects.HasGrantedTag(CombatTags::Status_Taunted);
 	}
 	TestTrue(TEXT("The taunt pulls the Brute to the tank"), bPulled);
+	return true;
+}
+
+namespace CombatTests
+{
+	/** An area attack with no windup, a long cooldown and the given shape. */
+	static FCombatAttackStats MakeAreaAttack(ECombatAreaShape Shape, float Range, float AreaRadius, float Damage)
+	{
+		FCombatAttackStats Attack;
+		Attack.Range = Range;
+		Attack.Damage = Damage;
+		Attack.CooldownTicks = 1000;
+		Attack.WindupTicks = 0;
+		Attack.AreaShape = Shape;
+		Attack.AreaRadius = AreaRadius;
+		Attack.ConeCosHalfAngle = FMath::Cos(FMath::DegreesToRadians(45.f));
+		return Attack;
+	}
+
+	static FCombatUnitStats MakeUnitWithAttack(const FCombatAttackStats& Attack)
+	{
+		FCombatUnitStats Stats = MakeDummyStats();
+		Stats.Attacks.Add(Attack);
+		return Stats;
+	}
+
+	/** Steps until a step has an AreaAttackFired event (or MaxSteps); returns the IDs hit in that step. */
+	static TArray<int32> RunUntilAreaFired(FCombatSimulation& Simulation, int32 MaxSteps, int32* OutTick = nullptr)
+	{
+		TArray<int32> HitIds;
+		for (int32 Step = 0; Step < MaxSteps; ++Step)
+		{
+			Simulation.Step();
+			const bool bFired = Simulation.GetEvents().ContainsByPredicate([](const FCombatEvent& Event) { return Event.Type == ECombatEventType::AreaAttackFired; });
+			if (bFired)
+			{
+				for (const FCombatEvent& Event : Simulation.GetEvents())
+				{
+					if (Event.Type == ECombatEventType::Hit || Event.Type == ECombatEventType::EffectApplied)
+					{
+						HitIds.AddUnique(Event.TargetId);
+					}
+				}
+				if (OutTick)
+				{
+					*OutTick = Simulation.GetTick();
+				}
+				break;
+			}
+		}
+		return HitIds;
+	}
+}
+
+IMPLEMENT_SIMPLE_AUTOMATION_TEST(FCombatAoECircleTest, "BattleSystem.Combat.AoECircleAtTarget",
+	EAutomationTestFlags::EditorContext | EAutomationTestFlags::ProductFilter)
+
+bool FCombatAoECircleTest::RunTest(const FString& Parameters)
+{
+	FCombatAttackStats Fireball = CombatTests::MakeAreaAttack(ECombatAreaShape::CircleAtTarget, 900.f, 150.f, 10.f);
+	Fireball.bNeedsWalkableLine = false;
+	Fireball.bNeedsLineOfSight = true;
+
+	FCombatSimConfig Config;
+	Config.Grid.Init(20, 12, 100.f);
+	Config.MaxFirstAttackDelayTicks = 0;
+	CombatTests::AddUnit(Config, CombatTests::MakeUnitWithAttack(Fireball), 0, FIntPoint(5, 5));	// 0: caster
+	CombatTests::AddUnit(Config, CombatTests::MakeDummyStats(), 1, FIntPoint(10, 5));				// 1: target (nearest)
+	CombatTests::AddUnit(Config, CombatTests::MakeDummyStats(), 1, FIntPoint(11, 5));				// 2: next to it
+	CombatTests::AddUnit(Config, CombatTests::MakeDummyStats(), 1, FIntPoint(14, 5));				// 3: far away
+	CombatTests::AddUnit(Config, CombatTests::MakeDummyStats(), 0, FIntPoint(10, 6));				// 4: ally in the area
+
+	FCombatSimulation Simulation(Config);
+	const TArray<int32> Hit = CombatTests::RunUntilAreaFired(Simulation, 50);
+	TestTrue(TEXT("The target is hit"), Hit.Contains(1));
+	TestTrue(TEXT("The enemy next to it is hit"), Hit.Contains(2));
+	TestFalse(TEXT("The far enemy is not hit"), Hit.Contains(3));
+	TestFalse(TEXT("The ally in the area is not hit (no friendly fire)"), Hit.Contains(4));
+	return true;
+}
+
+IMPLEMENT_SIMPLE_AUTOMATION_TEST(FCombatAoEConeTest, "BattleSystem.Combat.AoECone",
+	EAutomationTestFlags::EditorContext | EAutomationTestFlags::ProductFilter)
+
+bool FCombatAoEConeTest::RunTest(const FString& Parameters)
+{
+	// 90 degree cleave to the right (+X): hits in front, not behind or to the side.
+	FCombatSimConfig Config;
+	Config.Grid.Init(20, 12, 100.f);
+	Config.MaxFirstAttackDelayTicks = 0;
+	CombatTests::AddUnit(Config, CombatTests::MakeUnitWithAttack(CombatTests::MakeAreaAttack(ECombatAreaShape::Cone, 100.f, 150.f, 10.f)), 0, FIntPoint(5, 5));
+	CombatTests::AddUnit(Config, CombatTests::MakeDummyStats(), 1, FIntPoint(6, 5));	// 1: target, in front
+	CombatTests::AddUnit(Config, CombatTests::MakeDummyStats(), 1, FIntPoint(7, 5));	// 2: further in front
+	CombatTests::AddUnit(Config, CombatTests::MakeDummyStats(), 1, FIntPoint(4, 5));	// 3: behind
+	CombatTests::AddUnit(Config, CombatTests::MakeDummyStats(), 1, FIntPoint(5, 7));	// 4: to the side
+
+	FCombatSimulation Simulation(Config);
+	const TArray<int32> Hit = CombatTests::RunUntilAreaFired(Simulation, 50);
+	TestTrue(TEXT("The target is hit"), Hit.Contains(1));
+	TestTrue(TEXT("The enemy behind the target is hit"), Hit.Contains(2));
+	TestFalse(TEXT("The enemy behind the attacker is not hit"), Hit.Contains(3));
+	TestFalse(TEXT("The enemy to the side is not hit"), Hit.Contains(4));
+	return true;
+}
+
+IMPLEMENT_SIMPLE_AUTOMATION_TEST(FCombatTelegraphTest, "BattleSystem.Combat.AoETelegraph",
+	EAutomationTestFlags::EditorContext | EAutomationTestFlags::ProductFilter)
+
+bool FCombatTelegraphTest::RunTest(const FString& Parameters)
+{
+	// The area is placed on the dummy; a walker inside it at cast time walks out before it goes off.
+	FCombatAttackStats Fireball = CombatTests::MakeAreaAttack(ECombatAreaShape::CircleAtTarget, 900.f, 100.f, 10.f);
+	Fireball.bNeedsWalkableLine = false;
+	Fireball.bNeedsLineOfSight = true;
+	Fireball.TelegraphTicks = 20;
+
+	FCombatSimConfig Config;
+	Config.Grid.Init(20, 12, 100.f);
+	Config.MaxFirstAttackDelayTicks = 0;
+	CombatTests::AddUnit(Config, CombatTests::MakeUnitWithAttack(Fireball), 0, FIntPoint(5, 5));
+	CombatTests::AddUnit(Config, CombatTests::MakeDummyStats(), 1, FIntPoint(10, 5));
+	FCombatUnitStats Walker = CombatTests::MakeDummyStats();
+	Walker.MoveSpeed = 300.f;
+	CombatTests::AddUnit(Config, Walker, 1, FIntPoint(10, 6));
+
+	FCombatSimulation Simulation(Config);
+	Simulation.Step();
+	TestEqual(TEXT("The area is placed on the first step"), Simulation.GetPendingAreas().Num(), 1);
+	const FVector2D PlacedAt = Simulation.GetPendingAreas().Num() > 0 ? Simulation.GetPendingAreas()[0].Area.Center : FVector2D::ZeroVector;
+	TestTrue(TEXT("Placed on the dummy"), PlacedAt.Equals(Simulation.GetUnits()[1].PreviousPosition));
+
+	int32 FiredTick = 0;
+	const TArray<int32> Hit = CombatTests::RunUntilAreaFired(Simulation, 100, &FiredTick);
+	TestEqual(TEXT("Goes off TelegraphTicks after it was placed"), FiredTick, 1 + 20);
+	TestTrue(TEXT("The dummy that stayed is hit"), Hit.Contains(1));
+	TestFalse(TEXT("The walker that left is not hit"), Hit.Contains(2));
+	TestEqual(TEXT("No areas left"), Simulation.GetPendingAreas().Num(), 0);
+	return true;
+}
+
+IMPLEMENT_SIMPLE_AUTOMATION_TEST(FCombatAllyAuraTest, "BattleSystem.Combat.AoEAllyAura",
+	EAutomationTestFlags::EditorContext | EAutomationTestFlags::ProductFilter)
+
+bool FCombatAllyAuraTest::RunTest(const FString& Parameters)
+{
+	// An allies-only aura around the bearer: the bearer and the ally get the buff, the enemy does not.
+	FCombatEffectStats Rally;
+	Rally.EffectTag = CombatTags::Effect_Rally;
+	Rally.DurationTicks = 60;
+	Rally.DamageDealtMultiplier = 1.5f;
+
+	FCombatAttackStats Aura = CombatTests::MakeAreaAttack(ECombatAreaShape::CircleAroundSelf, 0.f, 300.f, 0.f);
+	Aura.bNeedsWalkableLine = false;
+	Aura.bAffectsEnemies = false;
+	Aura.bAffectsAllies = true;
+	Aura.Effects.Add(Rally);
+
+	FCombatSimConfig Config;
+	Config.Grid.Init(20, 12, 100.f);
+	CombatTests::AddUnit(Config, CombatTests::MakeUnitWithAttack(Aura), 0, FIntPoint(5, 5));
+	CombatTests::AddUnit(Config, CombatTests::MakeDummyStats(), 0, FIntPoint(6, 5));
+	CombatTests::AddUnit(Config, CombatTests::MakeDummyStats(), 1, FIntPoint(5, 7));
+
+	FCombatSimulation Simulation(Config);
+	CombatTests::RunUntilAreaFired(Simulation, 20);
+	const TArray<FCombatUnit>& Units = Simulation.GetUnits();
+	TestEqual(TEXT("The bearer is buffed"), Units[0].Effects.GetDamageDealtMultiplier(), 1.5f);
+	TestEqual(TEXT("The ally is buffed"), Units[1].Effects.GetDamageDealtMultiplier(), 1.5f);
+	TestEqual(TEXT("The enemy is not"), Units[2].Effects.GetDamageDealtMultiplier(), 1.f);
+	return true;
+}
+
+IMPLEMENT_SIMPLE_AUTOMATION_TEST(FCombatModifiersTest, "BattleSystem.Combat.EffectModifiers",
+	EAutomationTestFlags::EditorContext | EAutomationTestFlags::ProductFilter)
+
+bool FCombatModifiersTest::RunTest(const FString& Parameters)
+{
+	// Stacked multipliers multiply.
+	FCombatEffectStats Slow;
+	Slow.EffectTag = CombatTags::Effect_Slow;
+	Slow.DurationTicks = 100;
+	Slow.Stacking = ECombatEffectStacking::Stack;
+	Slow.MaxStacks = 3;
+	Slow.MoveSpeedMultiplier = 0.5f;
+	FCombatEffectList List;
+	List.Apply(Slow, 1, 0, 0, FGameplayTagContainer());
+	List.Apply(Slow, 1, 0, 0, FGameplayTagContainer());
+	TestEqual(TEXT("Two stacks of 0.5 = 0.25"), List.GetMoveSpeedMultiplier(), 0.25f);
+
+	// In a fight: a slowing AoE (landing in the first step) halves the walker's speed from the next step on.
+	FCombatAttackStats SlowBlast = CombatTests::MakeAreaAttack(ECombatAreaShape::CircleAtTarget, 900.f, 50.f, 0.f);
+	SlowBlast.bNeedsWalkableLine = false;
+	Slow.Stacking = ECombatEffectStacking::Refresh;
+	SlowBlast.Effects.Add(Slow);
+
+	FCombatSimConfig Config;
+	Config.Grid.Init(20, 12, 100.f);
+	Config.MaxFirstAttackDelayTicks = 0;
+	CombatTests::AddUnit(Config, CombatTests::MakeUnitWithAttack(SlowBlast), 0, FIntPoint(2, 5));
+	FCombatUnitStats Walker = CombatTests::MakeDummyStats();
+	Walker.MoveSpeed = 200.f;
+	CombatTests::AddUnit(Config, Walker, 1, FIntPoint(10, 5));
+
+	FCombatSimulation Simulation(Config);
+	Simulation.Step();
+	const double SlowedStep = FVector2D::Distance(Simulation.GetUnits()[1].PreviousPosition, Simulation.GetUnits()[1].Position);
+	Simulation.Step();
+	const double NextStep = FVector2D::Distance(Simulation.GetUnits()[1].PreviousPosition, Simulation.GetUnits()[1].Position);
+	TestTrue(TEXT("The walker is slowed"), Simulation.GetUnits()[1].Effects.GetMoveSpeedMultiplier() == 0.5f);
+	TestEqual(TEXT("Moves 200 * 0.5 / 20 = 5 cm per step"), NextStep, 5.0, 0.01);
+	TestTrue(TEXT("The first step was before the slow landed"), SlowedStep > NextStep);
+
+	// Damage dealt and taken: a self-buff (x2 dealt) and a melee hit that leaves the target vulnerable (x1.5 taken).
+	FCombatEffectStats Rally;
+	Rally.EffectTag = CombatTags::Effect_Rally;
+	Rally.DurationTicks = 200;
+	Rally.DamageDealtMultiplier = 2.f;
+	FCombatAttackStats SelfBuff = CombatTests::MakeAreaAttack(ECombatAreaShape::CircleAroundSelf, 0.f, 10.f, 0.f);
+	SelfBuff.bAffectsEnemies = false;
+	SelfBuff.bAffectsAllies = true;
+	SelfBuff.Effects.Add(Rally);
+
+	FCombatEffectStats Vulnerable;
+	Vulnerable.EffectTag = CombatTags::Effect_Slow;
+	Vulnerable.DurationTicks = 200;
+	Vulnerable.DamageTakenMultiplier = 1.5f;
+	FCombatUnitStats Fighter = CombatTests::MakeStats(100.f, 10.f, 5, 0);
+	Fighter.Attacks[0].Effects.Add(Vulnerable);
+	Fighter.Attacks.Add(SelfBuff);
+
+	FCombatSimConfig DamageConfig;
+	DamageConfig.Grid.Init(20, 12, 100.f);
+	DamageConfig.MaxFirstAttackDelayTicks = 0;
+	CombatTests::AddUnit(DamageConfig, Fighter, 0, FIntPoint(5, 5));
+	CombatTests::AddUnit(DamageConfig, CombatTests::MakeDummyStats(), 1, FIntPoint(6, 5));
+
+	FCombatSimulation DamageSimulation(DamageConfig);
+	TArray<float> HitAmounts;
+	for (int32 Step = 0; Step < 30 && HitAmounts.Num() < 2; ++Step)
+	{
+		DamageSimulation.Step();
+		for (const FCombatEvent& Event : DamageSimulation.GetEvents())
+		{
+			if (Event.Type == ECombatEventType::Hit && Event.TargetId == 1)
+			{
+				HitAmounts.Add(Event.Amount);
+			}
+		}
+	}
+	TestEqual(TEXT("Two hits"), HitAmounts.Num(), 2);
+	if (HitAmounts.Num() == 2)
+	{
+		TestEqual(TEXT("First hit: 10 x 2 (dealt)"), HitAmounts[0], 20.f);
+		TestEqual(TEXT("Second hit: 10 x 2 x 1.5 (target now vulnerable)"), HitAmounts[1], 30.f);
+	}
+	return true;
+}
+
+IMPLEMENT_SIMPLE_AUTOMATION_TEST(FCombatReplayRoundTripTest, "BattleSystem.Combat.ReplayRoundTrip",
+	EAutomationTestFlags::EditorContext | EAutomationTestFlags::ProductFilter)
+
+bool FCombatReplayRoundTripTest::RunTest(const FString& Parameters)
+{
+	// Settings with awkward floats (a half-life factor) must survive JSON exactly, or a replay would drift.
+	FCombatSimSettings Settings;
+	Settings.ThreatDecayFactorPerTick = FMath::Pow(0.5f, 1.f / 80.f);
+	Settings.ThreatSwitchRatio = 1.2f;
+	Settings.SeparationStrength = 0.37f;
+	Settings.MaxFirstAttackDelayTicks = 7;
+
+	FCombatReplay Replay;
+	Replay.Seed = 1234;
+	Replay.SetupPath = TEXT("/Game/Combat/DA_Setup_Test.DA_Setup_Test");
+	Replay.Settings = Settings;
+	Replay.FinalChecksum = CombatReplay::ChecksumToString(0xDEADBEEF);
+
+	FString Json;
+	TestTrue(TEXT("Writes JSON"), CombatReplay::ToJson(Replay, Json));
+	FCombatReplay Loaded;
+	TestTrue(TEXT("Reads JSON"), CombatReplay::FromJson(Json, Loaded));
+	TestEqual(TEXT("Seed"), Loaded.Seed, 1234);
+	TestEqual(TEXT("Setup"), Loaded.SetupPath, Replay.SetupPath);
+	TestEqual(TEXT("Checksum text"), Loaded.FinalChecksum, FString(TEXT("0xDEADBEEF")));
+	TestTrue(TEXT("Float settings are bit-exact"),
+		Loaded.Settings.ThreatDecayFactorPerTick == Settings.ThreatDecayFactorPerTick
+		&& Loaded.Settings.ThreatSwitchRatio == Settings.ThreatSwitchRatio
+		&& Loaded.Settings.SeparationStrength == Settings.SeparationStrength);
+
+	// The same fight with the original and the loaded settings ends the same.
+	auto RunWith = [](const FCombatSimSettings& SimSettings)
+	{
+		FCombatSimConfig Config = CombatTests::MakeSkirmish(1234);
+		SimSettings.ApplyTo(Config);
+		FCombatSimulation Simulation(Config);
+		Simulation.RunToEnd();
+		return Simulation.GetChecksum();
+	};
+	TestTrue(TEXT("Same checksum after a JSON round trip"), RunWith(Loaded.Settings) == RunWith(Settings));
+	return true;
+}
+
+IMPLEMENT_SIMPLE_AUTOMATION_TEST(FCombatBatchTest, "BattleSystem.Combat.BatchStatistics",
+	EAutomationTestFlags::EditorContext | EAutomationTestFlags::ProductFilter)
+
+bool FCombatBatchTest::RunTest(const FString& Parameters)
+{
+	const FCombatSimConfig Base = CombatTests::MakeSkirmish(0);
+	TArray<FString> Names;
+	for (int32 Index = 0; Index < Base.Units.Num(); ++Index)
+	{
+		Names.Add(Base.Units[Index].Team == 0 ? TEXT("Blue") : TEXT("Red"));
+	}
+
+	const FCombatBatchResult Result = CombatBatch::Run(Base, Names, 5, 10);
+	TestEqual(TEXT("Five fights"), Result.Fights.Num(), 5);
+
+	int32 Outcomes = Result.Draws + Result.TimeLimits;
+	for (const FCombatBatchTeam& Team : Result.Teams)
+	{
+		Outcomes += Team.Wins;
+	}
+	TestEqual(TEXT("Wins + draws + time limits = fights"), Outcomes, 5);
+	TestEqual(TEXT("Two teams"), Result.Teams.Num(), 2);
+	TestEqual(TEXT("Two unit types"), Result.UnitTypes.Num(), 2);
+	TestEqual(TEXT("3 units per type per fight"), Result.UnitTypes.Num() == 2 ? Result.UnitTypes[0].Units : 0, 15);
+
+	// Every fight in the batch is the same as running that seed on its own.
+	bool bSameAsSingle = true;
+	for (const FCombatBatchFight& Fight : Result.Fights)
+	{
+		FCombatSimConfig Config = Base;
+		Config.Seed = Fight.Seed;
+		FCombatSimulation Simulation(Config);
+		Simulation.RunToEnd();
+		bSameAsSingle &= Simulation.GetChecksum() == Fight.Checksum;
+	}
+	TestTrue(TEXT("Batch fights match single runs"), bSameAsSingle);
+	TestEqual(TEXT("Seeds count up from the start seed"), Result.Fights[4].Seed, 14);
 	return true;
 }
 

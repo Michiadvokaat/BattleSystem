@@ -130,8 +130,6 @@ void ACombatUnitActor::OnDeath()
 
 void ACombatUnitActor::OnAreaAttack(float Radius)
 {
-	DrawDebugCircle(GetWorld(), GetActorLocation() + FVector(0.0, 0.0, 15.0), Radius, 64, AreaPulseColor, false, AreaPulseDuration, 0, 6.f,
-		FVector(1.0, 0.0, 0.0), FVector(0.0, 1.0, 0.0), false);
 	ReceiveUnitAreaAttack(Radius);
 }
 

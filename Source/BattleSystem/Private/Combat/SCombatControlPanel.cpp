@@ -40,6 +40,7 @@ void SCombatControlPanel::Construct(const FArguments& InArgs)
 		}
 	}
 	SeedText = FText::AsNumber(Settings->DefaultSeed, &FNumberFormattingOptions::DefaultNoGrouping());
+	RefreshReplayOptions();
 
 	TSharedRef<SHorizontalBox> SpeedRow = SNew(SHorizontalBox);
 	for (const float Speed : CombatControlPanel::Speeds)
@@ -197,9 +198,74 @@ void SCombatControlPanel::Construct(const FArguments& InArgs)
 				]
 			]
 
+			+ SVerticalBox::Slot().AutoHeight().Padding(0.f, 6.f, 0.f, 2.f)
+			[
+				SNew(SHorizontalBox)
+				+ SHorizontalBox::Slot().AutoWidth().VAlign(VAlign_Center)[ MakeLabel(INVTEXT("Replay")) ]
+				+ SHorizontalBox::Slot().AutoWidth().Padding(0.f, 0.f, 4.f, 0.f)
+				[
+					MakeButton(INVTEXT("Save"), FOnClicked::CreateSP(this, &SCombatControlPanel::OnSaveReplayClicked))
+				]
+				+ SHorizontalBox::Slot().FillWidth(1.f).Padding(0.f, 0.f, 4.f, 0.f)
+				[
+					SAssignNew(ReplayCombo, SComboBox<TSharedPtr<FString>>)
+					.OptionsSource(&ReplayOptions)
+					.OnComboBoxOpening_Lambda([this]() { RefreshReplayOptions(); })
+					.OnGenerateWidget_Lambda([](TSharedPtr<FString> Item)
+					{
+						return SNew(STextBlock).Text(FText::FromString(*Item));
+					})
+					.OnSelectionChanged_Lambda([this](TSharedPtr<FString> Item, ESelectInfo::Type)
+					{
+						SelectedReplay = Item;
+					})
+					[
+						SNew(STextBlock).Text_Lambda([this]()
+						{
+							return SelectedReplay ? FText::FromString(*SelectedReplay) : INVTEXT("(no replays)");
+						})
+					]
+				]
+				+ SHorizontalBox::Slot().AutoWidth()
+				[
+					MakeButton(INVTEXT("Play"), FOnClicked::CreateSP(this, &SCombatControlPanel::OnPlayReplayClicked))
+				]
+			]
+
+			+ SVerticalBox::Slot().AutoHeight().Padding(0.f, 2.f)
+			[
+				SNew(SHorizontalBox)
+				+ SHorizontalBox::Slot().AutoWidth().VAlign(VAlign_Center)[ MakeLabel(INVTEXT("Batch")) ]
+				+ SHorizontalBox::Slot().AutoWidth().Padding(0.f, 0.f, 4.f, 0.f)
+				[
+					MakeButton(INVTEXT("100"), FOnClicked::CreateSP(this, &SCombatControlPanel::OnBatchClicked, 100))
+				]
+				+ SHorizontalBox::Slot().AutoWidth().Padding(0.f, 0.f, 4.f, 0.f)
+				[
+					MakeButton(INVTEXT("1000"), FOnClicked::CreateSP(this, &SCombatControlPanel::OnBatchClicked, 1000))
+				]
+				+ SHorizontalBox::Slot().AutoWidth()
+				[
+					MakeButton(INVTEXT("CSV"), FOnClicked::CreateSP(this, &SCombatControlPanel::OnBatchCsvClicked),
+						TAttribute<FSlateColor>::CreateSP(this, &SCombatControlPanel::GetBatchCsvColor))
+				]
+			]
+
 			+ SVerticalBox::Slot().AutoHeight().Padding(0.f, 8.f, 0.f, 0.f)
 			[
 				SNew(STextBlock).Text(this, &SCombatControlPanel::GetStatusText)
+			]
+
+			+ SVerticalBox::Slot().AutoHeight().Padding(0.f, 6.f, 0.f, 0.f)
+			[
+				SNew(SBox)
+				.MaxDesiredWidth(420.f)
+				[
+					SNew(STextBlock)
+					.Text(this, &SCombatControlPanel::GetMessageText)
+					.AutoWrapText(true)
+					.Font(FCoreStyle::GetDefaultFontStyle("Mono", 9))
+				]
 			]
 		]
 	];
@@ -287,6 +353,74 @@ FReply SCombatControlPanel::OnShowRangesClicked()
 	return FReply::Handled();
 }
 
+void SCombatControlPanel::RefreshReplayOptions()
+{
+	const FString Previous = SelectedReplay ? *SelectedReplay : FString();
+	ReplayOptions.Reset();
+	SelectedReplay.Reset();
+	for (const FString& File : CombatReplay::FindReplayFiles())
+	{
+		ReplayOptions.Add(MakeShared<FString>(File));
+		if (File == Previous || !SelectedReplay)
+		{
+			SelectedReplay = ReplayOptions.Last();
+		}
+	}
+	if (ReplayCombo)
+	{
+		ReplayCombo->RefreshOptions();
+		ReplayCombo->SetSelectedItem(SelectedReplay);
+	}
+}
+
+FReply SCombatControlPanel::OnSaveReplayClicked()
+{
+	if (const UCombatSubsystem* CombatSubsystem = Subsystem.Get())
+	{
+		CombatSubsystem->SaveReplay(Message);
+		RefreshReplayOptions();
+	}
+	return FReply::Handled();
+}
+
+FReply SCombatControlPanel::OnPlayReplayClicked()
+{
+	UCombatSubsystem* CombatSubsystem = Subsystem.Get();
+	if (CombatSubsystem && SelectedReplay)
+	{
+		CombatSubsystem->PlayReplay(*SelectedReplay, Message);
+	}
+	return FReply::Handled();
+}
+
+FReply SCombatControlPanel::OnBatchClicked(int32 Count)
+{
+	UCombatSubsystem* CombatSubsystem = Subsystem.Get();
+	UCombatSetup* Setup = SelectedSetup ? UCombatSubsystem::FindSetup(*SelectedSetup) : nullptr;
+	if (CombatSubsystem && Setup)
+	{
+		// Seeds start at the seed field; the screen freezes while the batch runs.
+		CombatSubsystem->RunBatch(Setup, Count, FCString::Atoi(*SeedText.ToString()), bBatchCsv, Message);
+	}
+	return FReply::Handled();
+}
+
+FReply SCombatControlPanel::OnBatchCsvClicked()
+{
+	bBatchCsv = !bBatchCsv;
+	return FReply::Handled();
+}
+
+FText SCombatControlPanel::GetMessageText() const
+{
+	return FText::FromString(Message);
+}
+
+FSlateColor SCombatControlPanel::GetBatchCsvColor() const
+{
+	return bBatchCsv ? CombatControlPanel::ActiveColor : FLinearColor::White;
+}
+
 FReply SCombatControlPanel::OnTauntRangeAssetClicked()
 {
 	if (UCombatSubsystem* CombatSubsystem = Subsystem.Get())
@@ -335,7 +469,8 @@ FText SCombatControlPanel::GetStatusText() const
 		return INVTEXT("No fight. Press Start.");
 	}
 
-	const FString Fight = FString::Printf(TEXT("%s, seed %d"), *CombatSubsystem->GetCurrentSetupName(), CombatSubsystem->GetCurrentSeed());
+	const FString Fight = FString::Printf(TEXT("%s%s, seed %d"), CombatSubsystem->IsPlayingReplay() ? TEXT("Replay: ") : TEXT(""),
+		*CombatSubsystem->GetCurrentSetupName(), CombatSubsystem->GetCurrentSeed());
 	if (!Simulation->IsFinished())
 	{
 		return FText::FromString(FString::Printf(TEXT("%s\nTick %d - %s"), *Fight, Simulation->GetTick(),
@@ -347,8 +482,13 @@ FText SCombatControlPanel::GetStatusText() const
 	{
 		Result += FString::Printf(TEXT(" (team %d)"), Simulation->GetWinningTeam());
 	}
-	return FText::FromString(FString::Printf(TEXT("%s\nOver: %s after %d ticks\nChecksum 0x%08X"),
-		*Fight, *Result, Simulation->GetTick(), Simulation->GetChecksum()));
+	FString Over = FString::Printf(TEXT("%s\nOver: %s after %d ticks\nChecksum 0x%08X"),
+		*Fight, *Result, Simulation->GetTick(), Simulation->GetChecksum());
+	if (!CombatSubsystem->GetReplayVerdict().IsEmpty())
+	{
+		Over += TEXT("\n") + CombatSubsystem->GetReplayVerdict();
+	}
+	return FText::FromString(Over);
 }
 
 FText SCombatControlPanel::GetPauseText() const

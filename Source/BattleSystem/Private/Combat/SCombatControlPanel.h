@@ -30,6 +30,11 @@ private:
 	FReply OnDebugClicked(int32 Level);
 	FReply OnShowRangesClicked();
 	FReply OnTauntRangeAssetClicked();
+	FReply OnSaveReplayClicked();
+	FReply OnPlayReplayClicked();
+	FReply OnBatchClicked(int32 Count);
+	FReply OnBatchCsvClicked();
+	void RefreshReplayOptions();
 	void OnTauntRangeChanged(float Value);
 
 	FText GetStatusText() const;
@@ -40,6 +45,8 @@ private:
 	FSlateColor GetTauntRangeAssetColor() const;
 	float GetTauntRangeSliderValue() const;
 	FText GetTauntRangeText() const;
+	FText GetMessageText() const;
+	FSlateColor GetBatchCsvColor() const;
 
 	static int32 GetDebugLevel();
 	static bool AreRangesShown();
@@ -51,5 +58,13 @@ private:
 
 	TArray<TSharedPtr<FString>> SetupOptions;
 	TSharedPtr<FString> SelectedSetup;
+
+	TArray<TSharedPtr<FString>> ReplayOptions;
+	TSharedPtr<FString> SelectedReplay;
+	TSharedPtr<SComboBox<TSharedPtr<FString>>> ReplayCombo;
+
+	/** Result of the last save/load/batch action. */
+	FString Message;
+	bool bBatchCsv = false;
 	FText SeedText;
 };

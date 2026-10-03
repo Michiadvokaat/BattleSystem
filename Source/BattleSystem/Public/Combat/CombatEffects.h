@@ -30,6 +30,11 @@ struct FCombatEffectStats
 	FGameplayTagContainer GrantedTags;
 	/** The effect is not applied to a unit that has any of these tags (innate or granted). */
 	FGameplayTagContainer BlockedByTags;
+
+	/** Multipliers while active, applied once per stack (0.5 with 2 stacks = 0.25). */
+	float MoveSpeedMultiplier = 1.f;
+	float DamageDealtMultiplier = 1.f;
+	float DamageTakenMultiplier = 1.f;
 };
 
 struct FCombatActiveEffect
@@ -66,8 +71,15 @@ public:
 
 	const TArray<FCombatActiveEffect>& GetEffects() const { return Effects; }
 
+	/** Product of all active effects' multipliers, each to the power of its stacks. */
+	float GetMoveSpeedMultiplier() const { return GetMultiplier(&FCombatEffectStats::MoveSpeedMultiplier); }
+	float GetDamageDealtMultiplier() const { return GetMultiplier(&FCombatEffectStats::DamageDealtMultiplier); }
+	float GetDamageTakenMultiplier() const { return GetMultiplier(&FCombatEffectStats::DamageTakenMultiplier); }
+
 	uint32 AppendChecksum(uint32 Crc) const;
 
 private:
+	float GetMultiplier(float FCombatEffectStats::* Member) const;
+
 	TArray<FCombatActiveEffect> Effects;
 };

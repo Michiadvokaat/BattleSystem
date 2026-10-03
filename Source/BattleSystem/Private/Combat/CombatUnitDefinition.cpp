@@ -18,7 +18,8 @@ FCombatUnitStats UCombatUnitDefinition::ToSimStats(int32 TickRate) const
 		const bool bMelee = Definition.Type.MatchesTagExact(CombatTags::Attack_Melee);
 		const bool bRanged = Definition.Type.MatchesTagExact(CombatTags::Attack_Ranged);
 		const bool bTaunt = Definition.Type.MatchesTagExact(CombatTags::Attack_Taunt);
-		if (!bMelee && !bRanged && !bTaunt)
+		const bool bAoE = Definition.Type.MatchesTagExact(CombatTags::Attack_AoE);
+		if (!bMelee && !bRanged && !bTaunt && !bAoE)
 		{
 			continue;
 		}
@@ -29,12 +30,26 @@ FCombatUnitStats UCombatUnitDefinition::ToSimStats(int32 TickRate) const
 		Attack.Damage = Definition.Damage;
 		Attack.CooldownTicks = FMath::Max(FMath::RoundToInt32(Definition.Cooldown * TickRate), 1);
 		Attack.WindupTicks = FMath::Max(FMath::RoundToInt32(Definition.Windup * TickRate), 0);
-		Attack.bNeedsWalkableLine = bMelee;
-		Attack.bNeedsLineOfSight = bRanged && Definition.bRequiresLineOfSight;
+		Attack.bNeedsWalkableLine = bMelee || (bAoE && !Definition.bRequiresLineOfSight);
+		Attack.bNeedsLineOfSight = (bRanged || bAoE) && Definition.bRequiresLineOfSight;
 		Attack.ProjectileSpeed = bRanged ? Definition.ProjectileSpeed : 0.f;
 		Attack.SourceIndex = Index;
 		Attack.ThreatMultiplier = Definition.ThreatMultiplier;
-		Attack.bAreaAroundSelf = bTaunt;
+		Attack.ImpactCue = Definition.ImpactCue;
+		Attack.bAffectsEnemies = Definition.bAffectsEnemies;
+		Attack.bAffectsAllies = Definition.bAffectsAllies;
+		if (bTaunt)
+		{
+			Attack.AreaShape = ECombatAreaShape::CircleAroundSelf;
+			Attack.AreaRadius = Definition.Range;
+		}
+		else if (bAoE)
+		{
+			Attack.AreaShape = Definition.AreaShape != ECombatAreaShape::None ? Definition.AreaShape : ECombatAreaShape::CircleAtTarget;
+			Attack.AreaRadius = Definition.AreaRadius;
+			Attack.ConeCosHalfAngle = FMath::Cos(FMath::DegreesToRadians(FMath::Clamp(Definition.ConeAngle, 1.f, 360.f) * 0.5f));
+			Attack.TelegraphTicks = FMath::Max(FMath::RoundToInt32(Definition.TelegraphDelay * TickRate), 0);
+		}
 
 		for (const FCombatEffectDefinition& EffectDefinition : Definition.Effects)
 		{
@@ -45,6 +60,9 @@ FCombatUnitStats UCombatUnitDefinition::ToSimStats(int32 TickRate) const
 			Effect.MaxStacks = FMath::Max(EffectDefinition.MaxStacks, 1);
 			Effect.GrantedTags = EffectDefinition.GrantedTags;
 			Effect.BlockedByTags = EffectDefinition.BlockedByTags;
+			Effect.MoveSpeedMultiplier = EffectDefinition.MoveSpeedMultiplier;
+			Effect.DamageDealtMultiplier = EffectDefinition.DamageDealtMultiplier;
+			Effect.DamageTakenMultiplier = EffectDefinition.DamageTakenMultiplier;
 		}
 	}
 	return Stats;

@@ -6,6 +6,7 @@
 #include "Engine/DataAsset.h"
 #include "GameplayTagContainer.h"
 #include "Combat/CombatEffects.h"
+#include "Combat/CombatTypes.h"
 #include "CombatUnitDefinition.generated.h"
 
 class ACombatProjectileActor;
@@ -39,6 +40,18 @@ struct FCombatEffectDefinition
 	/** Not applied to a target that has any of these tags (innate or from another effect). */
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Effect")
 	FGameplayTagContainer BlockedByTags;
+
+	/** Multiplies movement speed while active, per stack (0.5 = half speed). */
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Effect|Modifiers", meta = (ClampMin = 0))
+	float MoveSpeedMultiplier = 1.f;
+
+	/** Multiplies damage the unit deals while active, per stack. */
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Effect|Modifiers", meta = (ClampMin = 0))
+	float DamageDealtMultiplier = 1.f;
+
+	/** Multiplies damage the unit takes while active, per stack. */
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Effect|Modifiers", meta = (ClampMin = 0))
+	float DamageTakenMultiplier = 1.f;
 };
 
 USTRUCT(BlueprintType)
@@ -80,9 +93,37 @@ struct FCombatAttackDefinition
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Attack", meta = (ClampMin = 0))
 	float ThreatMultiplier = 1.f;
 
-	/** Applied to the target when the attack lands. For Attack.Taunt: to every enemy within Range. */
+	/** Applied to the target when the attack lands. For area attacks: to every affected unit in the area. */
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Attack")
 	TArray<FCombatEffectDefinition> Effects;
+
+	/** Presentation cue when it lands (hit or area going off); see UCombatCueTable. */
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Attack", meta = (Categories = "Cue"))
+	FGameplayTag ImpactCue;
+
+	/** Attack.AoE: the shape. Range is how far the target may be to start the attack (not used by CircleAroundSelf). */
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Attack|Area")
+	ECombatAreaShape AreaShape = ECombatAreaShape::CircleAtTarget;
+
+	/** Attack.AoE: size of the area in cm (circle radius, or cone length). */
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Attack|Area", meta = (ClampMin = 0, Units = "cm"))
+	float AreaRadius = 150.f;
+
+	/** Attack.AoE with Cone: full angle of the fan. */
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Attack|Area", meta = (ClampMin = 1, ClampMax = 360, Units = "deg"))
+	float ConeAngle = 90.f;
+
+	/** Attack.AoE: seconds between firing and going off; the area stays where it was placed (0 = right away). */
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Attack|Area", meta = (ClampMin = 0, Units = "s"))
+	float TelegraphDelay = 0.f;
+
+	/** Area attacks (AoE, taunt): hit enemies. */
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Attack|Area")
+	bool bAffectsEnemies = true;
+
+	/** Area attacks (AoE, taunt): hit allies, including the attacker itself (for example a buff aura). */
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Attack|Area")
+	bool bAffectsAllies = false;
 };
 
 /** A unit type: stats, attacks and the actor class that shows it. Read-only during a fight. */
@@ -106,6 +147,7 @@ public:
 
 	/**
 	 * Attack.Melee and Attack.Ranged are aimed at the target: the unit picks the shortest-range one that can reach it.
+	 * Attack.AoE hits an area (AreaShape); with bRequiresLineOfSight it acts as ranged (needs sight), otherwise as melee.
 	 * Attack.Taunt is an area around the unit (Range = radius, edge to edge) that applies its effects to every enemy in it.
 	 */
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Unit")

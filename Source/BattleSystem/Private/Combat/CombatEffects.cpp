@@ -93,6 +93,20 @@ bool FCombatEffectList::HasEffectFromSource(const FGameplayTag& EffectTag, int32
 	});
 }
 
+float FCombatEffectList::GetMultiplier(float FCombatEffectStats::* Member) const
+{
+	// In effect order, so the float result is the same every run.
+	float Result = 1.f;
+	for (const FCombatActiveEffect& Active : Effects)
+	{
+		for (int32 Stack = 0; Stack < Active.Stacks; ++Stack)
+		{
+			Result *= Active.Effect.*Member;
+		}
+	}
+	return Result;
+}
+
 uint32 FCombatEffectList::AppendChecksum(uint32 Crc) const
 {
 	for (const FCombatActiveEffect& Active : Effects)

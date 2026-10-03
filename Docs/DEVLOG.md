@@ -46,3 +46,18 @@ Dated history: decisions, bugs, rejected approaches. Newest entries at the botto
 - Taunt visibility: a short magenta circle when an area attack (taunt) goes off (`AreaAttackFired` event → `ACombatUnitActor::OnAreaAttack`), and a permanent range circle via `Combat.ShowRanges` / the panel button "Taunt range".
 - Taunt range slider in the panel (an override applied at the next Start; "Asset" uses the Data Asset), and a magenta "T" above every unit with `Status.Taunted`.
 - Phase 4 done: the user checked taunt, the range circle, the slider and the T marker in PIE.
+- Phase 5 part A:
+  - `Attack.AoE` with `CircleAtTarget`, `CircleAroundSelf` and `Cone`, and telegraphs (fixed place, no dodging). Friendly fire is set per attack (`bAffectsEnemies` / `bAffectsAllies`).
+  - Effect modifiers (move speed, damage dealt, damage taken).
+  - Cue tags on events, and `UCombatCueTable` (Niagara, sound, debug color).
+  - Taunt now uses the same area mechanism. The checksums of `DA_Setup_Taunt` (`0x7CE33AAB`) and `DA_Setup_Mixed` (`0x32F7C942`) are unchanged, so behavior is identical.
+  - The area flash moved from the unit actor to the subsystem (its color comes from the cue table).
+  - New assets: `DA_Magier`, `DA_Bijlman`, `DA_Vaandeldrager`, `DA_Setup_AoE`, `DA_CueTable`.
+  - Fights take ~3.5–4.5 ms headless.
+- Phase 5 part B:
+  - `FCombatSimSettings` is the one place for fight-relevant settings. `BuildSimConfig` and `ApplyTo` replace the old inline conversion; the checksums are unchanged.
+  - JSON replays with build, map and grid checks and a checksum verdict.
+  - `Combat.Batch` and the panel's Batch 100/1000 report win rates, durations and per-type damage and survival, with optional CSV.
+  - 1000 fights of `DA_Setup_AoE` take 3.4 s. Team 0 wins 86.5% in `DA_Setup_AoE` and 99.7% in `DA_Setup_Mixed`; the Magier and Bijlman almost never survive.
+  - Replays reference the setup asset rather than a snapshot of the unit stats: changing a Data Asset makes an old replay DIFFERENT, which the verdict shows.
+- Phase 5 done: the user checked AoE, replay save/play (identical) and Batch 1000 in PIE.

@@ -8,6 +8,7 @@
 #include "Combat/CombatDistanceMap.h"
 #include "Combat/CombatEffects.h"
 #include "Combat/CombatGridData.h"
+#include "Combat/CombatTypes.h"
 
 /** One attack as the simulation sees it. */
 struct FCombatAttackStats
@@ -30,14 +31,59 @@ struct FCombatAttackStats
 	int32 SourceIndex = INDEX_NONE;
 	/** Threat the target gets on the attacker per point of damage. */
 	float ThreatMultiplier = 1.f;
-	/** Area around the unit itself (taunt): hits every enemy whose edge is within Range; needs no target. */
-	bool bAreaAroundSelf = false;
 	/** Applied to the target(s) when the attack lands. */
 	TArray<FCombatEffectStats> Effects;
 
-	bool IsRanged() const { return !bNeedsWalkableLine && !bAreaAroundSelf; }
-	/** Attacks aimed at the unit's target (not area attacks). */
-	bool IsTargeted() const { return !bAreaAroundSelf; }
+	/** Area attacks (AoE, taunt): which units are hit when it goes off. None = only the target. */
+	ECombatAreaShape AreaShape = ECombatAreaShape::None;
+	/** cm; see ECombatAreaShape for how each shape measures it. */
+	float AreaRadius = 0.f;
+	/** Cone: cosine of half the cone angle (a unit is inside when the angle to it is at most half the cone angle). */
+	float ConeCosHalfAngle = 0.f;
+	/** Ticks between the attack firing and the area going off (telegraph). The area stays where it was placed. */
+	int32 TelegraphTicks = 0;
+	bool bAffectsEnemies = true;
+	/** Includes the attacker itself. */
+	bool bAffectsAllies = false;
+	/** Presentation cue for the impact (hit or area going off). */
+	FGameplayTag ImpactCue;
+
+	/** Ranged = needs no walking line (a ranged or line-of-sight AoE attack), and aimed at a target. */
+	bool IsRanged() const { return !bNeedsWalkableLine && IsTargeted(); }
+	/** Aimed at the unit's target (everything except an area around the attacker itself). */
+	bool IsTargeted() const { return AreaShape != ECombatAreaShape::CircleAroundSelf; }
+	bool IsArea() const { return AreaShape != ECombatAreaShape::None; }
+};
+
+/** A placed area: where an area attack goes off. */
+struct FCombatArea
+{
+	ECombatAreaShape Shape = ECombatAreaShape::None;
+	/** Grid-local cm: the target position (CircleAtTarget) or the attacker position (CircleAroundSelf, Cone). */
+	FVector2D Center = FVector2D::ZeroVector;
+	/** Cone: unit direction from the attacker towards the target. */
+	FVector2D Direction = FVector2D(1.0, 0.0);
+	float Radius = 0.f;
+	float ConeCosHalfAngle = 0.f;
+	/** Radius of the attacker, for the edge-to-edge shapes (CircleAroundSelf, Cone). */
+	float SourceRadius = 0.f;
+
+	/** Whether a unit of the given radius at Position is inside the area. */
+	bool Contains(const FVector2D& Position, float UnitRadius) const;
+};
+
+/** An area attack waiting to go off (telegraph). */
+struct FCombatPendingArea
+{
+	int32 Id = INDEX_NONE;
+	int32 SourceId = INDEX_NONE;
+	int32 Team = 0;
+	int32 AttackIndex = INDEX_NONE;
+	FCombatArea Area;
+	int32 TotalTicks = 0;
+	int32 RemainingTicks = 0;
+	/** The attacker's damage-dealt multiplier when it fired. */
+	float DamageDealtMultiplier = 1.f;
 };
 
 /** Unit stats as the simulation sees them: copied from a definition at fight start, times in ticks. */
@@ -143,6 +189,10 @@ struct FCombatUnit
 	TArray<FCombatThreatEntry, TInlineAllocator<8>> Threat;
 	FCombatEffectList Effects;
 
+	/** Totals for statistics (Combat.Batch); not part of the checksum. */
+	float DamageDealt = 0.f;
+	float DamageTaken = 0.f;
+
 	/** Own A* route (start to goal cell) when the target is not the one the team's distance map leads to. */
 	TArray<FIntPoint> Path;
 
@@ -165,8 +215,9 @@ struct FCombatProjectile
 	FVector2D Position = FVector2D::ZeroVector;
 	/** cm per second. */
 	float Speed = 0.f;
+	/** Damage including the attacker's damage-dealt multiplier when it fired. */
 	float Damage = 0.f;
-	float Threat = 0.f;
+	float ThreatMultiplier = 1.f;
 	bool bEnded = false;
 };
 
@@ -184,7 +235,9 @@ enum class ECombatEventType : uint8
 	ProjectileEnded,
 	/** SourceId's attack AttackIndex applied an effect to TargetId. */
 	EffectApplied,
-	/** SourceId's area attack AttackIndex went off; Amount = its reach in cm from the unit's center. */
+	/** SourceId placed a telegraphed area (AreaId, Area) that goes off later. */
+	AreaTelegraphStarted,
+	/** SourceId's area attack AttackIndex went off (AreaId, Area). */
 	AreaAttackFired,
 };
 
@@ -196,6 +249,11 @@ struct FCombatEvent
 	float Amount = 0.f;
 	int32 AttackIndex = INDEX_NONE;
 	int32 ProjectileId = INDEX_NONE;
+	/** Area events only. */
+	int32 AreaId = INDEX_NONE;
+	FCombatArea Area;
+	/** Presentation cue (the attack's ImpactCue) for Hit and AreaAttackFired. */
+	FGameplayTag Cue;
 };
 
 enum class ECombatOutcome : uint8
@@ -237,6 +295,8 @@ public:
 	const TArray<FCombatUnit>& GetUnits() const { return Units; }
 	/** Projectiles in flight after the last step, in spawn order. */
 	const TArray<FCombatProjectile>& GetProjectiles() const { return Projectiles; }
+	/** Telegraphed areas that have not gone off yet, in placement order. */
+	const TArray<FCombatPendingArea>& GetPendingAreas() const { return PendingAreas; }
 	/** Events of the last step only. */
 	const TArray<FCombatEvent>& GetEvents() const { return Events; }
 	/** CRC32 of the state after the last step. */
@@ -253,8 +313,9 @@ private:
 		int32 SourceId;
 		int32 TargetId;
 		int32 AttackIndex;
+		/** Including the attacker's damage-dealt multiplier; the target's damage-taken multiplier is applied on landing. */
 		float Damage;
-		float Threat;
+		float ThreatMultiplier;
 	};
 
 	void RebuildDistanceMaps();
@@ -264,8 +325,15 @@ private:
 	void ChooseTarget(FCombatUnit& Unit) const;
 	int32 FindNearestByWalking(const FCombatUnit& Unit) const;
 	bool CanShootNow(const FCombatUnit& Unit, const FCombatUnit& Other) const;
-	/** An area attack that is off cooldown and would reach an enemy that does not have its effects from this unit yet. */
+	/** An area-around-self attack that is off cooldown and worth using now (see FindReadyAreaAttack in the .cpp). */
 	int32 FindReadyAreaAttack(const FCombatUnit& Unit) const;
+	/** Whether an area attack of Source affects Other (team flags), ignoring the shape. */
+	static bool AffectsUnit(const FCombatAttackStats& Attack, const FCombatUnit& Source, const FCombatUnit& Other);
+	/** Places an area for an area attack: now, or as a telegraph that goes off later. */
+	void PlaceArea(const FCombatUnit& Unit, int32 AttackIndex, int32 TargetId);
+	/** Queues hits on every affected unit inside the area, using the positions at the start of this step. */
+	void ResolveArea(int32 SourceId, int32 Team, int32 AttackIndex, const FCombatArea& Area, int32 AreaId, float DamageDealtMultiplier);
+	void UpdatePendingAreas();
 	/** For units with a ranged attack: the nearest enemy that attack can hit right now, or INDEX_NONE. */
 	int32 FindVisibleEnemyInRange(const FCombatUnit& Unit) const;
 	/** The attack with the smallest range that can reach the target now (cooldown not considered), or INDEX_NONE. */
@@ -299,6 +367,8 @@ private:
 	TArray<FPendingHit> PendingHits;
 	TArray<FCombatProjectile> Projectiles;
 	int32 NextProjectileId = 0;
+	TArray<FCombatPendingArea> PendingAreas;
+	int32 NextAreaId = 0;
 
 	/** Team values in order of first appearance, and the distance map towards each team's enemies. */
 	TArray<int32> TeamIds;

@@ -2,6 +2,8 @@
 
 #include "Combat/CombatSubsystem.h"
 #include "AssetRegistry/IAssetRegistry.h"
+#include "Combat/CombatBatch.h"
+#include "Combat/CombatCueTable.h"
 #include "Combat/CombatGrid.h"
 #include "Combat/CombatProjectileActor.h"
 #include "Combat/CombatSettings.h"
@@ -13,6 +15,10 @@
 #include "Engine/Engine.h"
 #include "Engine/World.h"
 #include "HAL/IConsoleManager.h"
+#include "Kismet/GameplayStatics.h"
+#include "Misc/App.h"
+#include "Misc/Paths.h"
+#include "NiagaraFunctionLibrary.h"
 
 DEFINE_LOG_CATEGORY(LogCombat);
 
@@ -67,6 +73,7 @@ void UCombatSubsystem::Tick(float DeltaTime)
 	UpdateActors(Alpha);
 	DrawDebug(Alpha);
 	DrawAreaRanges(Alpha);
+	DrawPendingAreas();
 }
 
 TStatId UCombatSubsystem::GetStatId() const
@@ -87,7 +94,14 @@ bool UCombatSubsystem::DoesSupportWorldType(const EWorldType::Type WorldType) co
 
 bool UCombatSubsystem::StartFight(int32 Seed, const UCombatSetup* Setup)
 {
+	return StartFightWithSettings(Seed, Setup, GetCurrentSimSettings());
+}
+
+bool UCombatSubsystem::StartFightWithSettings(int32 Seed, const UCombatSetup* Setup, const FCombatSimSettings& SimSettings)
+{
 	StopFight();
+	bIsReplay = false;
+	ReplayVerdict.Reset();
 
 	if (!Setup)
 	{
@@ -97,31 +111,20 @@ bool UCombatSubsystem::StartFight(int32 Seed, const UCombatSetup* Setup)
 
 	FCombatSimConfig Config;
 	TArray<const UCombatUnitDefinition*> Definitions;
-	if (!BuildSimConfig(GetWorld(), Seed, *Setup, Config, GridOrigin, &Definitions))
+	if (!BuildSimConfig(GetWorld(), Seed, *Setup, SimSettings, Config, GridOrigin, &Definitions))
 	{
 		return false;
 	}
 
-	if (TauntRangeOverride > 0.f)
-	{
-		for (FCombatUnitSpawn& Spawn : Config.Units)
-		{
-			for (FCombatAttackStats& Attack : Spawn.Stats.Attacks)
-			{
-				if (Attack.Type.MatchesTagExact(CombatTags::Attack_Taunt))
-				{
-					Attack.Range = TauntRangeOverride;
-				}
-			}
-		}
-	}
-
 	Simulation = MakeUnique<FCombatSimulation>(Config);
+	CueTable = GetDefault<UCombatSettings>()->CueTable.LoadSynchronous();
 	MaxStepsPerFrame = FMath::Max(GetDefault<UCombatSettings>()->MaxStepsPerFrame, 1);
 	Accumulator = 0.0;
 	bPaused = false;
 	CurrentSeed = Seed;
 	CurrentSetupName = Setup->GetName();
+	CurrentSetupPath = Setup->GetPathName();
+	CurrentSettings = SimSettings;
 
 	const UCombatSettings* Settings = GetDefault<UCombatSettings>();
 	FActorSpawnParameters SpawnParams;
@@ -143,6 +146,131 @@ bool UCombatSubsystem::StartFight(int32 Seed, const UCombatSetup* Setup)
 	}
 
 	UE_LOG(LogCombat, Display, TEXT("Fight started: seed %d, setup %s, %d units."), Seed, *Setup->GetName(), UnitActors.Num());
+	return true;
+}
+
+bool UCombatSubsystem::SaveReplay(FString& OutMessage) const
+{
+	if (!Simulation || !Simulation->IsFinished())
+	{
+		OutMessage = TEXT("No finished fight to save.");
+		return false;
+	}
+
+	FCombatReplay Replay;
+	Replay.SavedAt = FDateTime::Now().ToString();
+	Replay.BuildVersion = FApp::GetBuildVersion();
+	Replay.MapName = UWorld::RemovePIEPrefix(GetWorld()->GetMapName());
+	Replay.GridChecksum = CombatReplay::ChecksumToString(Simulation->GetGrid().ComputeChecksum());
+	Replay.SetupPath = CurrentSetupPath;
+	Replay.Seed = CurrentSeed;
+	Replay.Settings = CurrentSettings;
+	Replay.Ticks = Simulation->GetTick();
+	Replay.Outcome = FCombatSimulation::OutcomeToString(Simulation->GetOutcome());
+	Replay.WinningTeam = Simulation->GetWinningTeam();
+	Replay.FinalChecksum = CombatReplay::ChecksumToString(Simulation->GetChecksum());
+
+	const FString FileName = FString::Printf(TEXT("%s_%s_%d.json"), *FDateTime::Now().ToString(TEXT("%Y%m%d_%H%M%S")), *CurrentSetupName, CurrentSeed);
+	const FString Path = CombatReplay::GetReplayDirectory() / FileName;
+	if (!CombatReplay::SaveToFile(Replay, Path))
+	{
+		OutMessage = FString::Printf(TEXT("Could not write %s."), *Path);
+		return false;
+	}
+
+	OutMessage = FString::Printf(TEXT("Saved replay %s"), *FileName);
+	UE_LOG(LogCombat, Display, TEXT("%s"), *OutMessage);
+	return true;
+}
+
+bool UCombatSubsystem::PlayReplay(const FString& FileOrPath, FString& OutMessage)
+{
+	FCombatReplay Replay;
+	const FString Path = CombatReplay::ResolvePath(FileOrPath);
+	if (!CombatReplay::LoadFromFile(Path, Replay))
+	{
+		OutMessage = FString::Printf(TEXT("Could not read replay %s."), *Path);
+		UE_LOG(LogCombat, Error, TEXT("%s"), *OutMessage);
+		return false;
+	}
+
+	UCombatSetup* Setup = LoadObject<UCombatSetup>(nullptr, *Replay.SetupPath);
+	if (!Setup || !StartFightWithSettings(Replay.Seed, Setup, Replay.Settings))
+	{
+		OutMessage = FString::Printf(TEXT("Could not start the replay (setup %s)."), *Replay.SetupPath);
+		UE_LOG(LogCombat, Error, TEXT("%s"), *OutMessage);
+		return false;
+	}
+
+	bIsReplay = true;
+	PlayingReplay = Replay;
+
+	TArray<FString> Warnings;
+	if (Replay.BuildVersion != FApp::GetBuildVersion())
+	{
+		Warnings.Add(FString::Printf(TEXT("other build (%s)"), *Replay.BuildVersion));
+	}
+	if (Replay.MapName != UWorld::RemovePIEPrefix(GetWorld()->GetMapName()))
+	{
+		Warnings.Add(FString::Printf(TEXT("other map (%s)"), *Replay.MapName));
+	}
+	if (Replay.GridChecksum != CombatReplay::ChecksumToString(Simulation->GetGrid().ComputeChecksum()))
+	{
+		Warnings.Add(TEXT("the arena grid changed"));
+	}
+
+	OutMessage = FString::Printf(TEXT("Playing replay %s, seed %d"), *Setup->GetName(), Replay.Seed);
+	if (!Warnings.IsEmpty())
+	{
+		OutMessage += TEXT(" - warning: ") + FString::Join(Warnings, TEXT(", "));
+	}
+	UE_LOG(LogCombat, Display, TEXT("%s"), *OutMessage);
+	return true;
+}
+
+bool UCombatSubsystem::RunBatch(const UCombatSetup* Setup, int32 Count, int32 StartSeed, bool bWriteCsv, FString& OutSummary)
+{
+	if (!Setup)
+	{
+		OutSummary = TEXT("No setup for the batch.");
+		return false;
+	}
+	const bool bOk = RunBatchInWorld(GetWorld(), *Setup, Count, StartSeed, GetCurrentSimSettings(), bWriteCsv, OutSummary);
+	LastBatchSummary = OutSummary;
+	return bOk;
+}
+
+bool UCombatSubsystem::RunBatchInWorld(UWorld* World, const UCombatSetup& Setup, int32 Count, int32 StartSeed,
+	const FCombatSimSettings& Settings, bool bWriteCsv, FString& OutSummary)
+{
+	FCombatSimConfig Config;
+	FVector GridOrigin;
+	TArray<const UCombatUnitDefinition*> Definitions;
+	if (!BuildSimConfig(World, StartSeed, Setup, Settings, Config, GridOrigin, &Definitions))
+	{
+		OutSummary = FString::Printf(TEXT("Could not build setup %s."), *Setup.GetName());
+		return false;
+	}
+
+	TArray<FString> UnitTypeNames;
+	for (const UCombatUnitDefinition* Definition : Definitions)
+	{
+		UnitTypeNames.Add(Definition->GetName());
+	}
+
+	const FCombatBatchResult Result = CombatBatch::Run(Config, UnitTypeNames, FMath::Max(Count, 1), StartSeed);
+	OutSummary = Result.ToSummary(Setup.GetName(), Settings.TickRate);
+
+	if (bWriteCsv)
+	{
+		const FString BasePath = FPaths::ProjectSavedDir() / TEXT("CombatBatch")
+			/ FString::Printf(TEXT("%s_%s"), *Setup.GetName(), *FDateTime::Now().ToString(TEXT("%Y%m%d_%H%M%S")));
+		OutSummary += Result.WriteCsv(BasePath, Settings.TickRate)
+			? FString::Printf(TEXT("  CSV: %s_fights.csv / _units.csv\n"), *FPaths::GetCleanFilename(BasePath))
+			: TEXT("  CSV could not be written.\n");
+	}
+
+	UE_LOG(LogCombat, Display, TEXT("%s"), *OutSummary);
 	return true;
 }
 
@@ -188,6 +316,11 @@ void UCombatSubsystem::DispatchEvents()
 			if (ACombatUnitActor* Actor = UnitActors[Event.TargetId])
 			{
 				Actor->OnHit(Event.Amount);
+				// Area attacks play their cue once, where the area goes off.
+				if (!Units[Event.SourceId].Stats.Attacks[Event.AttackIndex].IsArea())
+				{
+					PlayCue(Event.Cue, Actor->GetActorLocation());
+				}
 			}
 			break;
 		case ECombatEventType::Death:
@@ -197,10 +330,7 @@ void UCombatSubsystem::DispatchEvents()
 			}
 			break;
 		case ECombatEventType::AreaAttackFired:
-			if (ACombatUnitActor* Actor = UnitActors[Event.SourceId])
-			{
-				Actor->OnAreaAttack(Event.Amount);
-			}
+			OnAreaFired(Event);
 			break;
 		case ECombatEventType::ProjectileSpawned:
 			SpawnProjectileActor(Event);
@@ -356,17 +486,104 @@ void UCombatSubsystem::DrawAreaRanges(float Alpha) const
 		const FVector Center = SimToWorld(FMath::Lerp(Unit.PreviousPosition, Unit.Position, Alpha)) + FVector(0.0, 0.0, 10.0);
 		for (const FCombatAttackStats& Attack : Unit.Stats.Attacks)
 		{
-			if (Attack.bAreaAroundSelf)
+			if (Attack.AreaShape == ECombatAreaShape::CircleAroundSelf)
 			{
-				// Reach from the center: an enemy is hit when its edge is inside this circle.
-				DrawDebugCircle(World, Center, Attack.Range + Unit.Stats.Radius, 64, RangeColor, false, -1.f, 0, 2.f,
+				// Reach from the center: a unit is hit when its edge is inside this circle.
+				DrawDebugCircle(World, Center, Attack.AreaRadius + Unit.Stats.Radius, 64, RangeColor, false, -1.f, 0, 2.f,
 					FVector(1.0, 0.0, 0.0), FVector(0.0, 1.0, 0.0), false);
 			}
 		}
 	}
 }
 
-void UCombatSubsystem::ReportResult() const
+void UCombatSubsystem::DrawPendingAreas() const
+{
+	const FColor Color = GetDefault<UCombatSettings>()->TelegraphColor.ToFColor(true);
+	for (const FCombatPendingArea& Pending : Simulation->GetPendingAreas())
+	{
+		DrawArea(Pending.Area, Color, -1.f, 3.f);
+		const float Progress = 1.f - static_cast<float>(Pending.RemainingTicks) / FMath::Max(Pending.TotalTicks, 1);
+		DrawArea(Pending.Area, Color, -1.f, 1.5f, Progress);
+	}
+}
+
+void UCombatSubsystem::OnAreaFired(const FCombatEvent& Event)
+{
+	const UCombatSettings* Settings = GetDefault<UCombatSettings>();
+	const FCombatAttackStats& Attack = Simulation->GetUnits()[Event.SourceId].Stats.Attacks[Event.AttackIndex];
+
+	FLinearColor Color = Settings->DefaultAreaColor;
+	if (const FCombatCue* Cue = CueTable ? CueTable->FindCue(Event.Cue) : nullptr)
+	{
+		Color = Cue->DebugColor;
+	}
+	else if (Attack.Type.MatchesTagExact(CombatTags::Attack_Taunt))
+	{
+		Color = Settings->TauntColor;
+	}
+
+	DrawArea(Event.Area, Color.ToFColor(true), Settings->AreaPulseDuration, 6.f);
+	PlayCue(Event.Cue, SimToWorld(Event.Area.Center));
+
+	if (ACombatUnitActor* Actor = UnitActors[Event.SourceId])
+	{
+		Actor->OnAreaAttack(Event.Area.Radius + (Event.Area.Shape == ECombatAreaShape::CircleAtTarget ? 0.f : Event.Area.SourceRadius));
+	}
+}
+
+void UCombatSubsystem::PlayCue(const FGameplayTag& Cue, const FVector& Location) const
+{
+	const FCombatCue* Entry = CueTable ? CueTable->FindCue(Cue) : nullptr;
+	if (!Entry)
+	{
+		return;
+	}
+	if (Entry->Niagara)
+	{
+		UNiagaraFunctionLibrary::SpawnSystemAtLocation(GetWorld(), Entry->Niagara, Location);
+	}
+	if (Entry->Sound)
+	{
+		UGameplayStatics::PlaySoundAtLocation(GetWorld(), Entry->Sound, Location);
+	}
+}
+
+void UCombatSubsystem::DrawArea(const FCombatArea& Area, const FColor& Color, float Duration, float Thickness, float Scale) const
+{
+	UWorld* World = GetWorld();
+	const FVector Center = SimToWorld(Area.Center) + FVector(0.0, 0.0, 15.0);
+	const FVector XAxis(1.0, 0.0, 0.0);
+	const FVector YAxis(0.0, 1.0, 0.0);
+
+	// Edge-to-edge shapes reach from the attacker's edge, so draw them from its center with its radius added.
+	const float Reach = (Area.Radius + (Area.Shape == ECombatAreaShape::CircleAtTarget ? 0.f : Area.SourceRadius)) * Scale;
+	if (Reach <= 1.f)
+	{
+		return;
+	}
+
+	if (Area.Shape != ECombatAreaShape::Cone)
+	{
+		DrawDebugCircle(World, Center, Reach, 64, Color, false, Duration, 0, Thickness, XAxis, YAxis, false);
+		return;
+	}
+
+	const float HalfAngle = FMath::Acos(FMath::Clamp(Area.ConeCosHalfAngle, -1.f, 1.f));
+	const float Facing = FMath::Atan2(Area.Direction.Y, Area.Direction.X);
+	constexpr int32 Segments = 24;
+	FVector Previous = Center + FVector(FMath::Cos(Facing - HalfAngle), FMath::Sin(Facing - HalfAngle), 0.0) * Reach;
+	DrawDebugLine(World, Center, Previous, Color, false, Duration, 0, Thickness);
+	for (int32 Segment = 1; Segment <= Segments; ++Segment)
+	{
+		const float Angle = Facing - HalfAngle + 2.f * HalfAngle * Segment / Segments;
+		const FVector Point = Center + FVector(FMath::Cos(Angle), FMath::Sin(Angle), 0.0) * Reach;
+		DrawDebugLine(World, Previous, Point, Color, false, Duration, 0, Thickness);
+		Previous = Point;
+	}
+	DrawDebugLine(World, Center, Previous, Color, false, Duration, 0, Thickness);
+}
+
+void UCombatSubsystem::ReportResult()
 {
 	FString Result = FCombatSimulation::OutcomeToString(Simulation->GetOutcome());
 	if (Simulation->GetOutcome() == ECombatOutcome::TeamWon)
@@ -374,17 +591,28 @@ void UCombatSubsystem::ReportResult() const
 		Result += FString::Printf(TEXT(" (team %d)"), Simulation->GetWinningTeam());
 	}
 
-	const FString Message = FString::Printf(TEXT("Fight over: %s after %d ticks, checksum 0x%08X"),
-		*Result, Simulation->GetTick(), Simulation->GetChecksum());
+	const FString Checksum = CombatReplay::ChecksumToString(Simulation->GetChecksum());
+	FString Message = FString::Printf(TEXT("Fight over: %s after %d ticks, checksum %s"), *Result, Simulation->GetTick(), *Checksum);
+
+	if (bIsReplay)
+	{
+		const bool bIdentical = Checksum == PlayingReplay.FinalChecksum && Simulation->GetTick() == PlayingReplay.Ticks;
+		ReplayVerdict = bIdentical
+			? FString::Printf(TEXT("Replay identical (checksum %s)"), *Checksum)
+			: FString::Printf(TEXT("Replay DIFFERENT: recorded %s after %d ticks, now %s after %d ticks"),
+				*PlayingReplay.FinalChecksum, PlayingReplay.Ticks, *Checksum, Simulation->GetTick());
+		Message += TEXT(". ") + ReplayVerdict;
+	}
+
 	UE_LOG(LogCombat, Display, TEXT("%s"), *Message);
 	if (GEngine)
 	{
-		GEngine->AddOnScreenDebugMessage(INDEX_NONE, 10.f, FColor::Green, Message);
+		GEngine->AddOnScreenDebugMessage(INDEX_NONE, 10.f, bIsReplay && !ReplayVerdict.StartsWith(TEXT("Replay identical")) ? FColor::Red : FColor::Green, Message);
 	}
 }
 
-bool UCombatSubsystem::BuildSimConfig(UWorld* World, int32 Seed, const UCombatSetup& Setup, FCombatSimConfig& OutConfig,
-	FVector& OutGridOrigin, TArray<const UCombatUnitDefinition*>* OutDefinitions)
+bool UCombatSubsystem::BuildSimConfig(UWorld* World, int32 Seed, const UCombatSetup& Setup, const FCombatSimSettings& SimSettings,
+	FCombatSimConfig& OutConfig, FVector& OutGridOrigin, TArray<const UCombatUnitDefinition*>* OutDefinitions)
 {
 	const UCombatSettings* Settings = GetDefault<UCombatSettings>();
 
@@ -400,26 +628,7 @@ bool UCombatSubsystem::BuildSimConfig(UWorld* World, int32 Seed, const UCombatSe
 	}
 
 	OutConfig.Seed = Seed;
-	OutConfig.TickRate = Settings->TickRate;
-	OutConfig.MaxTicks = Settings->SecondsToTicks(Settings->FightTimeLimit);
-	OutConfig.MaxFirstAttackDelayTicks = Settings->SecondsToTicks(Settings->MaxFirstAttackDelay);
-	OutConfig.RetargetIntervalTicks = FMath::Max(Settings->SecondsToTicks(Settings->RetargetInterval), 1);
-	OutConfig.PathLookaheadCells = Settings->PathLookaheadCells;
-	OutConfig.SeparationStrength = Settings->SeparationStrength;
-
-	if (Settings->ThreatDecayMode == ECombatThreatDecayMode::HalfLife)
-	{
-		OutConfig.ThreatDecayFactorPerTick = FMath::Pow(0.5f, 1.f / (FMath::Max(Settings->ThreatHalfLife, 0.1f) * OutConfig.TickRate));
-		OutConfig.ThreatDecayAmountPerTick = 0.f;
-	}
-	else
-	{
-		OutConfig.ThreatDecayFactorPerTick = 1.f;
-		OutConfig.ThreatDecayAmountPerTick = Settings->ThreatDecayPerSecond / OutConfig.TickRate;
-	}
-	OutConfig.ThreatThreshold = Settings->ThreatThreshold;
-	OutConfig.ThreatSwitchRatio = Settings->ThreatSwitchRatio;
-	OutConfig.RetargetDistanceMargin = Settings->RetargetDistanceMargin;
+	OutConfig.TickRate = SimSettings.TickRate;
 
 	OutConfig.Units.Reset();
 	for (int32 Index = 0; Index < Setup.Units.Num(); ++Index)
@@ -452,6 +661,8 @@ bool UCombatSubsystem::BuildSimConfig(UWorld* World, int32 Seed, const UCombatSe
 		UE_LOG(LogCombat, Error, TEXT("%s: no valid units."), *Setup.GetName());
 		return false;
 	}
+
+	SimSettings.ApplyTo(OutConfig);
 	return true;
 }
 
@@ -501,6 +712,13 @@ TArray<FString> UCombatSubsystem::GetAllSetupNames()
 
 namespace CombatConsole
 {
+	/** Project settings, with the taunt range override of the world's subsystem if there is one. */
+	static FCombatSimSettings GetSimSettings(UWorld* World)
+	{
+		const UCombatSubsystem* Subsystem = World ? World->GetSubsystem<UCombatSubsystem>() : nullptr;
+		return Subsystem ? Subsystem->GetCurrentSimSettings() : FCombatSimSettings::FromProjectSettings();
+	}
+
 	/** Parses "<seed> [setup]". */
 	static bool ParseArgs(const TArray<FString>& Args, int32& OutSeed, UCombatSetup*& OutSetup)
 	{
@@ -544,7 +762,7 @@ namespace CombatConsole
 
 		FCombatSimConfig Config;
 		FVector GridOrigin;
-		if (!UCombatSubsystem::BuildSimConfig(World, Seed, *Setup, Config, GridOrigin))
+		if (!UCombatSubsystem::BuildSimConfig(World, Seed, *Setup, GetSimSettings(World), Config, GridOrigin))
 		{
 			return;
 		}
@@ -571,6 +789,73 @@ namespace CombatConsole
 			Subsystem->StopFight();
 		}
 	}
+
+	/** Combat.Batch <count> [setup] [startseed] [csv] */
+	static void Batch(const TArray<FString>& Args, UWorld* World)
+	{
+		TArray<FString> Positional;
+		bool bCsv = false;
+		for (const FString& Arg : Args)
+		{
+			if (Arg.Equals(TEXT("csv"), ESearchCase::IgnoreCase))
+			{
+				bCsv = true;
+			}
+			else
+			{
+				Positional.Add(Arg);
+			}
+		}
+
+		const int32 Count = Positional.Num() > 0 ? FCString::Atoi(*Positional[0]) : 100;
+		UCombatSetup* Setup = UCombatSubsystem::FindSetup(Positional.Num() > 1 ? Positional[1] : FString());
+		const int32 StartSeed = Positional.Num() > 2 ? FCString::Atoi(*Positional[2]) : 1;
+		if (!Setup)
+		{
+			UE_LOG(LogCombat, Error, TEXT("Combat.Batch: setup not found."));
+			return;
+		}
+
+		FString Summary;
+		UCombatSubsystem::RunBatchInWorld(World, *Setup, Count, StartSeed, GetSimSettings(World), bCsv, Summary);
+	}
+
+	static void SaveReplay(const TArray<FString>& Args, UWorld* World)
+	{
+		const UCombatSubsystem* Subsystem = World ? World->GetSubsystem<UCombatSubsystem>() : nullptr;
+		FString Message = TEXT("Combat.SaveReplay needs a running game world.");
+		if (Subsystem && !Subsystem->SaveReplay(Message))
+		{
+			UE_LOG(LogCombat, Warning, TEXT("%s"), *Message);
+		}
+	}
+
+	static void Replay(const TArray<FString>& Args, UWorld* World)
+	{
+		UCombatSubsystem* Subsystem = World ? World->GetSubsystem<UCombatSubsystem>() : nullptr;
+		if (!Subsystem || Args.IsEmpty())
+		{
+			UE_LOG(LogCombat, Error, TEXT("Combat.Replay <file> needs a running game world and a file in Saved/Replays (or a path)."));
+			return;
+		}
+		FString Message;
+		Subsystem->PlayReplay(Args[0], Message);
+	}
+
+	static FAutoConsoleCommandWithWorldAndArgs BatchCommand(
+		TEXT("Combat.Batch"),
+		TEXT("Combat.Batch <count> [setup] [startseed] [csv]: runs fights headless and reports win rates, durations and per unit type statistics."),
+		FConsoleCommandWithWorldAndArgsDelegate::CreateStatic(&Batch));
+
+	static FAutoConsoleCommandWithWorldAndArgs SaveReplayCommand(
+		TEXT("Combat.SaveReplay"),
+		TEXT("Combat.SaveReplay: saves the finished fight as a replay in Saved/Replays."),
+		FConsoleCommandWithWorldAndArgsDelegate::CreateStatic(&SaveReplay));
+
+	static FAutoConsoleCommandWithWorldAndArgs ReplayCommand(
+		TEXT("Combat.Replay"),
+		TEXT("Combat.Replay <file>: plays a replay from Saved/Replays (or a path) and checks that it ends the same."),
+		FConsoleCommandWithWorldAndArgsDelegate::CreateStatic(&Replay));
 
 	static FAutoConsoleCommandWithWorldAndArgs StartCommand(
 		TEXT("Combat.Start"),

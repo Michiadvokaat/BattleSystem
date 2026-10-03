@@ -36,7 +36,7 @@ public:
 	/** Whether the unit is taunted (Status.Taunted); shows TauntMarkerText above it while true. */
 	virtual void SetTaunted(bool bInTaunted) { bTaunted = bInTaunted; }
 
-	/** An area attack (taunt) went off; Radius = its reach from the unit's center in cm. */
+	/** One of this unit's area attacks went off (the subsystem draws the area); Radius = its reach in cm. */
 	virtual void OnAreaAttack(float Radius);
 
 	int32 GetUnitId() const { return UnitId; }
@@ -93,13 +93,6 @@ protected:
 	/** How long damage numbers stay visible. */
 	UPROPERTY(EditDefaultsOnly, Category = "Combat|Presentation", meta = (Units = "s"))
 	float DamageTextDuration = 1.f;
-
-	/** How long the circle shown when an area attack (taunt) goes off stays visible. */
-	UPROPERTY(EditDefaultsOnly, Category = "Combat|Presentation", meta = (Units = "s"))
-	float AreaPulseDuration = 0.4f;
-
-	UPROPERTY(EditDefaultsOnly, Category = "Combat|Presentation")
-	FColor AreaPulseColor = FColor::Magenta;
 
 	/** Shown above the unit while it is taunted. */
 	UPROPERTY(EditDefaultsOnly, Category = "Combat|Presentation")

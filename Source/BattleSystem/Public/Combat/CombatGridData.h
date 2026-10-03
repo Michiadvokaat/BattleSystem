@@ -64,6 +64,9 @@ struct BATTLESYSTEM_API FCombatGridData
 	/** Whether the straight line between two local positions crosses no sight-blocking cells (same corner rule). */
 	bool HasLineOfSight(const FVector2D& From, const FVector2D& To) const;
 
+	/** CRC32 of the size, cell size and cell flags; replays use it to see whether the arena changed. */
+	uint32 ComputeChecksum() const;
+
 	/** Whether every cell the segment crosses passes IsCellClear, in order from From to To. */
 	bool IsLineClear(const FVector2D& From, const FVector2D& To, TFunctionRef<bool(const FIntPoint&)> IsCellClear) const;
 };

@@ -1,6 +1,7 @@
 // Copyright Epic Games, Inc. All Rights Reserved.
 
 #include "Combat/CombatGridData.h"
+#include "Misc/Crc.h"
 
 void FCombatGridData::Init(int32 InWidth, int32 InHeight, float InCellSize)
 {
@@ -18,6 +19,14 @@ FIntPoint FCombatGridData::LocalToCell(const FVector2D& Local) const
 FVector2D FCombatGridData::CellToLocal(const FIntPoint& Cell) const
 {
 	return FVector2D((Cell.X + 0.5) * CellSize, (Cell.Y + 0.5) * CellSize);
+}
+
+uint32 FCombatGridData::ComputeChecksum() const
+{
+	uint32 Crc = FCrc::MemCrc32(&Width, sizeof(Width));
+	Crc = FCrc::MemCrc32(&Height, sizeof(Height), Crc);
+	Crc = FCrc::MemCrc32(&CellSize, sizeof(CellSize), Crc);
+	return FCrc::MemCrc32(Cells.GetData(), Cells.Num() * sizeof(ECombatCellFlags), Crc);
 }
 
 bool FCombatGridData::HasFlags(const FIntPoint& Cell, ECombatCellFlags Flags) const

@@ -6,6 +6,7 @@
 #include "Engine/DeveloperSettings.h"
 #include "CombatSettings.generated.h"
 
+class UCombatCueTable;
 class UCombatSetup;
 
 /** How threat decreases over time. */
@@ -97,6 +98,25 @@ public:
 
 	UPROPERTY(Config, EditAnywhere, Category = "Arena", meta = (ClampMin = 10, Units = "cm"))
 	float FallbackCellSize = 100.f;
+
+	/** Maps cue tags to VFX, sound and debug colors. */
+	UPROPERTY(Config, EditAnywhere, Category = "Presentation")
+	TSoftObjectPtr<UCombatCueTable> CueTable;
+
+	/** How long the flash of an area attack going off stays visible. */
+	UPROPERTY(Config, EditAnywhere, Category = "Presentation", meta = (ClampMin = 0, Units = "s"))
+	float AreaPulseDuration = 0.4f;
+
+	/** Outline of a telegraphed area until it goes off. */
+	UPROPERTY(Config, EditAnywhere, Category = "Presentation")
+	FLinearColor TelegraphColor = FLinearColor(1.f, 0.5f, 0.f);
+
+	/** Flash color of an area attack without a cue in the cue table (taunts use TauntColor). */
+	UPROPERTY(Config, EditAnywhere, Category = "Presentation")
+	FLinearColor DefaultAreaColor = FLinearColor(1.f, 0.15f, 0.f);
+
+	UPROPERTY(Config, EditAnywhere, Category = "Presentation")
+	FLinearColor TauntColor = FLinearColor(1.f, 0.f, 1.f);
 
 	/** Unit color per team index (wraps around). */
 	UPROPERTY(Config, EditAnywhere, Category = "Presentation")

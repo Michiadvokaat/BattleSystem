@@ -34,6 +34,34 @@ UNITS = {
             dict(effect_tag="Effect.Taunt", duration=4.0, stacking="REFRESH", granted_tags=["Status.Taunted"]),
         ]),
     ]),
+    # Fireball on the target (telegraphed 0.6 s) that also slows, plus a weak staff hit.
+    "DA_Magier": dict(name="Magier", max_hp=80.0, move_speed=280.0, radius=35.0, attacks=[
+        dict(type="Attack.AoE", area_shape="CIRCLE_AT_TARGET", range=500.0, area_radius=150.0, telegraph_delay=0.6,
+             cooldown=3.0, windup=0.4, damage=25.0, requires_line_of_sight=True, impact_cue="Cue.Fire", effects=[
+                 dict(effect_tag="Effect.Slow", duration=2.0, stacking="REFRESH", move_speed_multiplier=0.5),
+             ]),
+        dict(type="Attack.Melee", range=50.0, cooldown=1.0, windup=0.2, damage=4.0),
+    ]),
+    # 100 degree cleave in front of it.
+    "DA_Bijlman": dict(name="Bijlman", max_hp=180.0, move_speed=240.0, radius=50.0, attacks=[
+        dict(type="Attack.AoE", area_shape="CONE", range=70.0, area_radius=160.0, cone_angle=100.0,
+             cooldown=1.5, windup=0.4, damage=20.0, requires_line_of_sight=False, impact_cue="Cue.Cleave"),
+    ]),
+    # Allies-only aura: +25% damage for 3 s; and a light melee hit.
+    "DA_Vaandeldrager": dict(name="Vaandeldrager", max_hp=120.0, move_speed=280.0, radius=40.0, attacks=[
+        dict(type="Attack.AoE", area_shape="CIRCLE_AROUND_SELF", area_radius=400.0, cooldown=4.0, windup=0.2,
+             damage=0.0, affects_enemies=False, affects_allies=True, requires_line_of_sight=False, impact_cue="Cue.Rally",
+             effects=[dict(effect_tag="Effect.Rally", duration=3.0, stacking="REFRESH", damage_dealt_multiplier=1.25)]),
+        dict(type="Attack.Melee", range=50.0, cooldown=1.0, windup=0.2, damage=8.0),
+    ]),
+}
+
+# Cue tag -> debug color (R, G, B). VFX and sound can be set in the editor later.
+CUES = {
+    "Cue.Fire": (1.0, 0.45, 0.0),
+    "Cue.Cleave": (1.0, 0.1, 0.1),
+    "Cue.Rally": (1.0, 0.85, 0.1),
+    "Cue.Taunt": (1.0, 0.0, 1.0),
 }
 
 # Setup asset -> [(unit asset, team, start cell)], on a 20x12 grid.
@@ -65,6 +93,17 @@ SETUPS = {
         ("DA_Brute", 1, (17, 2)),
         ("DA_Brute", 1, (17, 6)),
         ("DA_Brute", 1, (17, 10)),
+    ],
+    # Phase 5 check: a mage's telegraphed fireball, a cleaving axeman and a rallying banner bearer.
+    "DA_Setup_AoE": [
+        ("DA_Krijger", 0, (11, 4)),
+        ("DA_Krijger", 0, (11, 6)),
+        ("DA_Krijger", 0, (11, 8)),
+        ("DA_Vaandeldrager", 0, (9, 6)),
+        ("DA_Boogschutter", 0, (8, 3)),
+        ("DA_Magier", 1, (18, 6)),
+        ("DA_Bijlman", 1, (16, 5)),
+        ("DA_Brute", 1, (16, 8)),
     ],
     "DA_Setup_Mixed": [
         ("DA_Krijger", 0, (2, 3)),
@@ -123,6 +162,18 @@ def make_effect(values):
     return effect
 
 
+def make_cue_table(should_fill, table):
+    if not should_fill:
+        return
+    cues = []
+    for tag_name, (r, g, b) in CUES.items():
+        cue = unreal.CombatCue()
+        cue.set_editor_property("cue_tag", make_tag(tag_name))
+        cue.set_editor_property("debug_color", unreal.LinearColor(r, g, b, 1.0))
+        cues.append(cue)
+    table.set_editor_property("cues", cues)
+
+
 def main():
     definitions = {}
     to_save = []
@@ -144,6 +195,10 @@ def main():
             for key, value in attack_values.items():
                 if key == "effects":
                     attack.set_editor_property("effects", [make_effect(effect) for effect in value])
+                elif key == "impact_cue":
+                    attack.set_editor_property(key, make_tag(value))
+                elif key == "area_shape":
+                    attack.set_editor_property(key, getattr(unreal.CombatAreaShape, value))
                 elif key != "type":
                     attack.set_editor_property(key, value)
             attacks.append(attack)
@@ -164,6 +219,11 @@ def main():
             entries.append(entry)
         setup.set_editor_property("units", entries)
         to_save.append(setup)
+
+    cue_table, should_fill = load_or_create("DA_CueTable", unreal.CombatCueTable)
+    make_cue_table(should_fill, cue_table)
+    if should_fill:
+        to_save.append(cue_table)
 
     for asset in to_save:
         if not unreal.EditorAssetLibrary.save_loaded_asset(asset, only_if_is_dirty=False):

@@ -2,7 +2,7 @@
 
 Mechanics per system, as built. Read the relevant section before changing a system, and keep it current. Planned work for later phases is in `Docs/Ontwerp-Gevecht.md`.
 
-## Combat (phases 1–4)
+## Combat (phases 1–5)
 
 Code: `Source/BattleSystem/{Public,Private}/Combat/`. Layers: grid ← simulation ← presentation. Only the presentation layer touches actors during a fight.
 
@@ -34,26 +34,33 @@ Code: `Source/BattleSystem/{Public,Private}/Combat/`. Layers: grid ← simulatio
   - `Stacking`: `Refresh` restarts the duration and takes the newest source; `Stack` does the same and adds a stack up to `MaxStacks`; `Ignore` keeps the existing effect.
   - `GrantedTags` and `BlockedByTags`.
 - `Apply` refuses an effect if the unit's innate tags or any active effect's granted tags match its `BlockedByTags`. `Tick` counts all effects down and removes those at 0.
+- Modifiers: `MoveSpeedMultiplier`, `DamageDealtMultiplier` and `DamageTakenMultiplier`, applied once per stack. `GetMoveSpeedMultiplier()` (and the others) multiply over the effects in order. Movement uses the move-speed factor. Damage is base × the attacker's dealt factor (at the moment it fires) × the target's taken factor (when it lands). Threat uses the final damage.
 - `FindSourceOfTag` returns the source of the effect that grants a tag, choosing the most ticks left and then the lowest source ID. The checksum uses the source, attack and effect indices, never tag names (FName indices can differ between runs).
 
 ### Simulation (`FCombatSimulation`)
 
 - Input is an `FCombatSimConfig`: the grid copy, `FCombatUnitSpawn`s (stats, team, start cell; unit ID = index), seed, tick rate, `MaxTicks`, `MaxFirstAttackDelayTicks`, `RetargetIntervalTicks`, `PathLookaheadCells`, `SeparationStrength`, and the threat settings: `ThreatDecayFactorPerTick` and `ThreatDecayAmountPerTick` (each tick threat = threat × factor − amount, which covers both half-life and linear decay), `ThreatThreshold`, `ThreatSwitchRatio` and `RetargetDistanceMargin`. The simulation never sees UObjects; `UCombatUnitDefinition::ToSimStats` converts seconds to ticks once.
-- Stats: `FCombatUnitStats` has `Attacks` (`FCombatAttackStats`: range, damage, cooldown and windup in ticks, `bNeedsWalkableLine` for melee, `bNeedsLineOfSight`, `ProjectileSpeed` (0 = direct hit), `SourceIndex` into the definition, `ThreatMultiplier`, `bAreaAroundSelf`, and `Effects`). `IsRanged()` = no walking line needed and not an area attack; `IsTargeted()` = not an area attack. Innate `Tags` come from the definition. Each unit has one cooldown per attack (`AttackCooldowns`).
+- Stats: `FCombatUnitStats` has `Attacks` (`FCombatAttackStats`: range, damage, cooldown and windup in ticks, `bNeedsWalkableLine` for melee, `bNeedsLineOfSight`, `ProjectileSpeed` (0 = direct hit), `SourceIndex` into the definition, `ThreatMultiplier`, `Effects`, and for area attacks `AreaShape`, `AreaRadius`, `ConeCosHalfAngle`, `TelegraphTicks`, `bAffectsEnemies`, `bAffectsAllies` and `ImpactCue`). `IsTargeted()` = not `CircleAroundSelf`. `IsRanged()` = targeted and needs no walking line. `IsArea()` = has a shape. Innate `Tags` come from the definition. Each unit has one cooldown per attack (`AttackCooldowns`).
+- `FCombatArea::Contains(Position, Radius)`:
+  - `CircleAroundSelf`: edge to edge from the attacker, within `Radius`.
+  - `CircleAtTarget`: the unit's edge within `Radius` of the center.
+  - `Cone`: edge to edge within `Radius`, and the angle to the unit's center at most half the cone angle (a dot product against `ConeCosHalfAngle`).
 - The constructor places units at their start-cell centers. It draws each unit's `FirstAttackDelayTicks` (0..Max) from the seeded `FRandomStream`, in ID order. This is the only randomness so far. It also collects the team values in order of first appearance; each team has one distance map towards its enemies.
 - `Step()`:
   1. Copy `Position` to `PreviousPosition` for all units and projectiles. All decisions in this step read `PreviousPosition`, so the processing order cannot matter.
   2. For every living unit: tick its effects, and decay its threat. Entries at ≤ 0 or on dead enemies are removed.
   3. Rebuild the distance maps if `(Tick - 1) % RetargetIntervalTicks == 0` or a unit died in the previous step. The sources are the cells of all living enemies.
-  4. Each living unit, in ID order (`UpdateUnit`):
+  4. `UpdatePendingAreas`: count telegraphed areas down. At 0 an area goes off (`ResolveArea`) using the positions at the start of this step. Areas placed during this step only start counting next step, so an area goes off exactly `TelegraphTicks` steps after it was placed.
+  5. Each living unit, in ID order (`UpdateUnit`):
      - Decrease every attack cooldown.
      - `UpdateCombat` decides the desired move:
        - If the unit is winding up an attack: no move. When the windup reaches 0 and the windup target is still alive (or the attack is an area attack), `FireAttack` does one of three things:
          - queues the hit (no projectile);
          - spawns a projectile at the unit (`ProjectileSpawned`);
-         - for an area attack, emits `AreaAttackFired` (`Amount` = `Range` + the unit's radius) and queues a hit on every enemy whose edge is within `Range`.
+         - for an area attack, `PlaceArea` fixes an `FCombatArea`: the target's position for `CircleAtTarget`, or the attacker's position and the direction to the target for `CircleAroundSelf` and `Cone`. Without a telegraph it goes off right away (`ResolveArea`). With one it becomes an `FCombatPendingArea` (`AreaTelegraphStarted`) and stays where it was placed.
+         - `ResolveArea` emits `AreaAttackFired` (with the area and the cue). It then queues a hit for every living unit inside the area (`FCombatArea::Contains`) that the team flags allow (`bAffectsEnemies` / `bAffectsAllies`; allies include the attacker), in ID order. Line of sight from the area's center is checked if the attack needs it.
          Every queued hit carries damage, threat (damage × `ThreatMultiplier`) and the attack index.
-       - Area attacks first (`FindReadyAreaAttack`): an off-cooldown area attack starts (no target, `TargetId` = `INDEX_NONE`) if an enemy in range lacks one of its effects from this unit, or if it deals damage. That is the taunt; it ignores the first-attack delay.
+       - Areas around the unit first (`FindReadyAreaAttack`, `CircleAroundSelf`: taunt, auras). One starts when it is off cooldown (no target, `TargetId` = `INDEX_NONE`) and an affected unit inside it either is an enemy it would damage or lacks one of its effects from this unit. It ignores the first-attack delay. Targeted AoE (`CircleAtTarget`, `Cone`) goes through `FindUsableAttack` like any other attack: it needs line of sight if `bRequiresLineOfSight` is set, otherwise a walking line like melee.
        - `UpdateTarget`: if the unit has `Status.Taunted`, the source of that effect becomes the target right away (`Taunt`). Otherwise `ChooseTarget` runs on retarget ticks (`(Tick - 1) % RetargetIntervalTicks == 0`), when there is no living target, or when a taunt has just ended. In order of priority, with hysteresis:
          1. **Threat**: the highest threat entry (lowest ID on ties) if it is ≥ `ThreatThreshold`. The current target is kept while its own threat is ≥ the threshold and the best is below current × `ThreatSwitchRatio`.
          2. **Visible** (units with a ranged attack): the nearest enemy that the longest ranged attack can hit now (`CanShootNow`). The current target is kept while it can still be shot.
@@ -68,22 +75,23 @@ Code: `Source/BattleSystem/{Public,Private}/Combat/`. Layers: grid ← simulatio
      - `ComputeSeparation`: each living unit, ally or enemy, that overlaps (center distance < sum of radii) pushes by `overlap * 0.5 * SeparationStrength`. Units exactly on top of each other split along X: the lower ID goes to -X.
      - `ResolveMove`: the new position is previous + move + push. If it lands in an unwalkable cell (blocked or out of bounds), the unit tries X only, then Y only, else stays. So units never end in a blocked cell.
      - `SteerPoint` stores what the unit steered at, for debugging.
-  5. `UpdateProjectiles`, in spawn order:
+  6. `UpdateProjectiles`, in spawn order:
      - If the target is dead, the projectile ends.
      - Otherwise it flies at the target's new position (homing) by `Speed * FixedDt`. If it reaches the target (distance − radius ≤ step) with line of sight, it queues a hit and ends.
      - If the step crosses a sight-blocking cell, it ends without a hit.
      - Each end emits `ProjectileEnded`; ended projectiles are removed.
-  6. `ApplyPendingHits`, in three passes so the processing order cannot matter:
-     1. Apply all damage (`Hit` events, damage > 0 only), adding threat on the source to the victim's list. The list holds at most 8 entries; when full, the lowest is replaced only by more threat.
+  7. `ApplyPendingHits`, in three passes so the processing order cannot matter:
+     1. Apply all damage (`Hit` events with the attack's cue, damage > 0 only; damage × the target's taken factor), adding threat on the source to the victim's list. The list holds at most 8 entries; when full, the lowest is replaced only by more threat.
      2. Apply the attack's effects to every hit target that is still alive (`EffectApplied` events), in hit order and then effect order.
      3. Mark every unit with HP ≤ 0 dead (`Death` events; its threat, effects and path are cleared, and the distance maps are marked dirty). Units that hit each other in the same step both die.
-  7. Outcome: no team left → `Draw`, one team left → `TeamWon`, `Tick >= MaxTicks` → `TimeLimit`.
-  8. Checksum: CRC32 over the tick and each unit's position, HP, target, attack cooldowns, windup attack, first-attack delay, windup, alive flag, target reason, threat entries and effects, plus each projectile's ID, position and target.
+  8. Outcome: no team left → `Draw`, one team left → `TeamWon`, `Tick >= MaxTicks` → `TimeLimit`.
+  9. Checksum: CRC32 over the tick and each unit's position, HP, target, attack cooldowns, windup attack, first-attack delay, windup, alive flag, target reason, threat entries and effects, plus each projectile's ID, position and target, and each pending area's ID, remaining ticks, center and direction.
 - Events (`GetEvents()`) are valid until the next `Step()`.
 
 ### Subsystem (`UCombatSubsystem`, game/PIE worlds only)
 
-- `BuildSimConfig` takes the world's first `ACombatGrid`, or the fallback grid from settings at origin (0,0,0). It skips setup entries without a definition or with a start cell that is out of bounds or blocked, with a warning.
+- `FCombatSimSettings` (`CombatReplay.h`) is every setting that changes a fight, in simulation units: tick rate, max ticks, first-attack delay, retarget interval, lookahead, separation, the threat factor/amount/threshold/ratio/margin, and the taunt range override. `FromProjectSettings(TauntOverride)` converts the project settings (seconds → ticks, half-life or linear → factor/amount). `ApplyTo(Config)` writes them into a config, including the taunt override on every `Attack.Taunt`.
+- `BuildSimConfig(World, Seed, Setup, Settings, ...)` takes the world's first `ACombatGrid`, or the fallback grid from settings at origin (0,0,0). It skips setup entries without a definition or with a start cell that is out of bounds or blocked, with a warning, and then applies the settings. `StartFight` uses `GetCurrentSimSettings()` (the project settings plus the panel's taunt range); `StartFightWithSettings` takes them explicitly (replays).
 - `StartFight` replaces any running fight. It spawns one actor per unit: the definition's `ActorClass`, or `ACombatUnitActor`. It keeps the definitions (`UnitDefinitions`) for per-attack presentation settings.
 - Projectiles: on `ProjectileSpawned` it spawns the attack definition's `ProjectileActorClass` (or `ACombatProjectileActor`), found through `FCombatAttackStats::SourceIndex`, into `ProjectileActors` (by projectile ID). On `ProjectileEnded` it destroys that actor. Every frame, projectiles are interpolated like units.
 - `Tick`:
@@ -93,13 +101,29 @@ Code: `Source/BattleSystem/{Public,Private}/Combat/`. Layers: grid ← simulatio
   - When the fight ends, log and show the result once.
   - `Combat.Debug` (console variable): `1` draws a line from each unit to its target in the team color, and a yellow line to its steer point when that is not the target. `2` also prints team 0's distance map per cell (in cells). The target line's color is the reason: team color = nearest, cyan = visible, orange = threat, magenta = taunt.
   - An `Attack` event without a target (area attack) gives the unit's lunge no direction.
+  - Areas:
+    - Telegraphs (`GetPendingAreas`) are drawn every frame as a `TelegraphColor` outline, with an inner outline that grows until the area goes off.
+    - `AreaAttackFired` flashes the shape for `AreaPulseDuration`. The color comes from the cue's `DebugColor` in the cue table, else `TauntColor` for taunts, else `DefaultAreaColor`. The cue's Niagara system and sound play at the area's center, and the source actor's `OnAreaAttack` Blueprint hook is called.
+    - Circles and cones are drawn from the attacker's center, with its radius added for the edge-to-edge shapes.
+  - Cues: on a `Hit` of a non-area attack, the cue table entry for its `ImpactCue` plays at the hit unit. `UCombatCueTable` (`DA_CueTable`, set in settings `CueTable`) holds entries of cue tag, Niagara system, sound and debug color; everything is optional.
   - `Combat.ShowRanges` (console variable, also the panel's "Taunt range" button): a circle around every unit with an area attack, with radius `Range` + the unit's radius. An enemy whose edge is inside the circle is hit.
-- Console commands: `Combat.Start`, `Combat.Simulate` (headless; uses the grid of the current world if there is one), `Combat.Stop`. Setups are found by asset name through the Asset Registry, or by object path.
+- Replays (`FCombatReplay`, JSON through `FJsonObjectConverter`, in `Saved/Replays/<timestamp>_<setup>_<seed>.json`):
+  - `SaveReplay` (only after the fight is over) stores the build version, map, grid checksum (`FCombatGridData::ComputeChecksum`), setup path, seed, the `FCombatSimSettings` used, and the recorded ticks, outcome and final checksum.
+  - `PlayReplay` starts the fight with the replay's settings (not the current ones) and warns about another build, map or grid.
+  - When the fight ends, `ReportResult` compares ticks and checksum and sets `GetReplayVerdict()` ("identical" or "DIFFERENT").
+  - The float settings survive JSON bit for bit (tested).
+- Batch (`CombatBatch::Run`, `CombatBatch.h`):
+  - It runs N copies of one config with seeds `StartSeed...` and collects, per fight, the seed, outcome, winner, ticks and checksum.
+  - It also collects wins per team (in order of first appearance), draws and time limits, and per unit type (definition name) the units, damage dealt, damage taken and survivors. The simulation tracks `FCombatUnit::DamageDealt/DamageTaken` after the taken multiplier; they are not in the checksum.
+  - `ToSummary` gives win rates, duration avg/min/max, and averages per unit. `WriteCsv` writes `<base>_fights.csv` and `<base>_units.csv` to `Saved/CombatBatch/`.
+  - `RunBatchInWorld` builds the config once from the world's arena; batch fights are exactly the single runs of those seeds (tested).
+  - 1000 fights of `DA_Setup_AoE` (8 units) take ~3.4 s headless.
+- Console commands: `Combat.Start`, `Combat.Simulate` (headless; uses the grid of the current world if there is one, and the subsystem's taunt override if there is a subsystem), `Combat.Stop`, `Combat.Batch <count> [setup] [startseed] [csv]`, `Combat.SaveReplay`, and `Combat.Replay <file>`. Setups are found by asset name through the Asset Registry, or by object path.
 
 ### Presentation (`ACombatUnitActor`)
 
 - Placeholder look: a body mesh (diameter = 2 × radius, height `BodyHeight`). It is `RangedBodyMesh` (default the engine cube) for units with a ranged attack and `MeleeBodyMesh` (default the engine cylinder) otherwise; the subsystem passes `bRanged` to `InitUnit`. The body has a dynamic material in the team color (made from `BodyMaterialBase`, default `BasicShapeMaterial`, through the `BodyColorParameter` `Color`; the cylinder's own `DefaultMaterial` has no color parameter), and a small cube "nose" for the facing. No collision.
-- `OnAttack` lunges towards the target (sine over `LungeDuration`). `OnHit` flashes white and shows the damage as debug text. `OnDeath` shows "X" and hides the actor. While a unit has `Status.Taunted`, the subsystem calls `SetTaunted(true)` and the actor draws `TauntMarkerText` ("T") in `TauntMarkerColor` (magenta) above it, as one-frame debug text. `OnAreaAttack` (on `AreaAttackFired`) draws a short circle of the area's reach (`AreaPulseDuration`, `AreaPulseColor`, magenta by default). Each one also calls a Blueprint event (`On Unit Attack/Hit/Death`) for subclasses.
+- `OnAttack` lunges towards the target (sine over `LungeDuration`). `OnHit` flashes white and shows the damage as debug text. `OnDeath` shows "X" and hides the actor. While a unit has `Status.Taunted`, the subsystem calls `SetTaunted(true)` and the actor draws `TauntMarkerText` ("T") in `TauntMarkerColor` (magenta) above it, as one-frame debug text. `OnAreaAttack` is only a Blueprint hook (`On Unit Area Attack`); the subsystem draws the area. Each one also calls a Blueprint event (`On Unit Attack/Hit/Death`) for subclasses.
 
 ### Control panel (`ACombatHUD`, `SCombatControlPanel`)
 
@@ -110,6 +134,8 @@ Code: `Source/BattleSystem/{Public,Private}/Combat/`. Layers: grid ← simulatio
   - Speed 0.5× / 1× / 2× / 4×.
   - Debug Off / Targets / + Distance map, which sets the `Combat.Debug` console variable.
   - Show "Taunt range", which toggles `Combat.ShowRanges`.
+  - Replay: Save, a dropdown of the replay files (refreshed when opened, newest first), and Play. The status line shows "Replay: ..." and the verdict.
+  - Batch: 100 / 1000 (seeds start at the seed field; the screen freezes during the run) and a CSV toggle. The summary appears below the status line.
   - Taunt: "Asset" or a slider of 1–10 m in steps of 0.5 m. It sets `UCombatSubsystem::SetTauntRangeOverride`, which `StartFight` applies to every `Attack.Taunt` before the simulation is created, so it takes effect at the next Start and a running fight never changes. `Combat.Simulate` does not use the override; it always uses the asset.
   - A status line with setup, seed, tick and running/paused, or after the fight the outcome and checksum.
 - The active speed and debug level are tinted green. Nothing is saved: the panel starts from the defaults each time.
@@ -120,16 +146,16 @@ Code: `Source/BattleSystem/{Public,Private}/Combat/`. Layers: grid ← simulatio
 
 ### Data and settings
 
-- `UCombatUnitDefinition`: HP, speed (cm/s), radius, `Attacks`, and `ActorClass`. `FCombatAttackDefinition` has type, range, cooldown, windup and damage, plus for ranged: `ProjectileSpeed`, `bRequiresLineOfSight` and `ProjectileActorClass`. `ToSimStats` keeps the `Attack.Melee`, `Attack.Ranged` and `Attack.Taunt` entries (`Attack.AoE` is skipped until phase 5). Melee needs a walking line, ranged needs sight if required, and taunt becomes an area around the unit (`Range` = radius). Attacks also have `ThreatMultiplier` and `Effects` (`FCombatEffectDefinition`: effect tag, duration in seconds, stacking, max stacks, granted and blocked-by tags). Units have innate `Tags`.
-- Native tags also include `Status.Taunted` and `Effect.Taunt`.
+- `UCombatUnitDefinition`: HP, speed (cm/s), radius, `Attacks`, and `ActorClass`. `FCombatAttackDefinition` has type, range, cooldown, windup and damage, plus for ranged: `ProjectileSpeed`, `bRequiresLineOfSight` and `ProjectileActorClass`. `ToSimStats` keeps the `Attack.Melee`, `Attack.Ranged`, `Attack.Taunt` and `Attack.AoE` entries. Melee needs a walking line, and ranged needs sight if required. Taunt becomes `CircleAroundSelf` with `AreaRadius` = `Range`. AoE takes `AreaShape`, `AreaRadius`, `ConeAngle` (full angle, stored as the cosine of half of it) and `TelegraphDelay`; it needs sight with `bRequiresLineOfSight` and a walking line without it. Every attack has `ImpactCue`, `bAffectsEnemies` and `bAffectsAllies`; effects have the three multipliers. Attacks also have `ThreatMultiplier` and `Effects` (`FCombatEffectDefinition`: effect tag, duration in seconds, stacking, max stacks, granted and blocked-by tags). Units have innate `Tags`.
+- Native tags also include `Status.Taunted`, `Effect.Taunt/Slow/Rally` and `Cue.Fire/Cleave/Rally/Taunt`.
 - `UCombatSetup`: entries of (definition, team, start cell).
-- Test assets (`/Game/Combat/DA_Krijger`, `DA_Brute`, `DA_Boogschutter` (ranged + dagger), `DA_Doelpop` (stands still, no attacks), `DA_Tank` (melee with threat ×3, and a 6 m taunt with a 6 s cooldown that applies `Effect.Taunt` → `Status.Taunted` for 4 s), `DA_Setup_Test`, `DA_Setup_Wall`, `DA_Setup_Archer`, `DA_Setup_Mixed`, `DA_Setup_Taunt`) are created by `Scripts/CreateCombatTestAssets.py`. The script only fills assets it creates, so values tuned in the editor are kept; `FORCE_UPDATE = True` overwrites them.
-- `UCombatSettings` (`[/Script/BattleSystem.CombatSettings]` in `DefaultGame.ini`) holds the tick rate, max steps per frame, fight time limit, max first-attack delay, retarget interval, path lookahead, separation strength, threat decay (`ThreatDecayMode` HalfLife/Linear, with `ThreatHalfLife` or `ThreatDecayPerSecond`, converted to the per-tick factor/amount), threat threshold, threat switch ratio, retarget distance margin, auto-start (off: fights start from the control panel), default setup and seed, fallback grid, and team colors.
+- Test assets (`/Game/Combat/DA_Krijger`, `DA_Brute`, `DA_Boogschutter` (ranged + dagger), `DA_Doelpop` (stands still, no attacks), `DA_Tank` (melee with threat ×3, and a 6 m taunt with a 6 s cooldown that applies `Effect.Taunt` → `Status.Taunted` for 4 s), `DA_Magier` (a fireball on the target: 1.5 m radius, 0.6 s telegraph, a slow of ×0.5 for 2 s), `DA_Bijlman` (a 100° cone cleave, 1.6 m), `DA_Vaandeldrager` (an allies-only aura of 4 m: ×1.25 damage for 3 s), `DA_CueTable` (debug colors for the four cues), `DA_Setup_Test`, `DA_Setup_Wall`, `DA_Setup_Archer`, `DA_Setup_Mixed`, `DA_Setup_Taunt`, `DA_Setup_AoE`) are created by `Scripts/CreateCombatTestAssets.py`. The script only fills assets it creates, so values tuned in the editor are kept; `FORCE_UPDATE = True` overwrites them.
+- `UCombatSettings` (`[/Script/BattleSystem.CombatSettings]` in `DefaultGame.ini`) holds the tick rate, max steps per frame, fight time limit, max first-attack delay, retarget interval, path lookahead, separation strength, threat decay (`ThreatDecayMode` HalfLife/Linear, with `ThreatHalfLife` or `ThreatDecayPerSecond`, converted to the per-tick factor/amount), threat threshold, threat switch ratio, retarget distance margin, auto-start (off: fights start from the control panel), default setup and seed, fallback grid, team colors, the cue table, the area flash duration, and the telegraph, default-area and taunt colors.
 - Native tags (`CombatTags`): `Attack.Melee/Ranged/AoE/Taunt`.
 - `ACombatGameMode`: players start as spectators. In `StartPlay`, after all actors have begun play, it auto-starts the default setup if enabled (`bAutoStartFight`, off by default).
 
 ### Tests
 
-`Private/Combat/Tests/CombatSimulationTests.cpp` (`BattleSystem.Combat.*`) builds its own stats in code: GridData, Determinism (per-step checksums), SeedChangesFight, StrongerTeamWins, SimultaneousHits (two-phase damage → Draw), TimeLimit, LineWalkable, DistanceMap, TargetNearestByWalking, PathAroundWall (never in a blocked cell), Separation, LineOfSight, ArcherWalksAroundWall, ArcherPrefersVisibleTarget, BestAttackPerSituation, ProjectileEndsWhenTargetDies, AStarPath, EffectStacking, ThreatRedirectsTarget, ThreatDecay (half-life and linear), TargetHysteresis, TauntPullsEnemy.
+`Private/Combat/Tests/CombatSimulationTests.cpp` (`BattleSystem.Combat.*`) builds its own stats in code: GridData, Determinism (per-step checksums), SeedChangesFight, StrongerTeamWins, SimultaneousHits (two-phase damage → Draw), TimeLimit, LineWalkable, DistanceMap, TargetNearestByWalking, PathAroundWall (never in a blocked cell), Separation, LineOfSight, ArcherWalksAroundWall, ArcherPrefersVisibleTarget, BestAttackPerSituation, ProjectileEndsWhenTargetDies, AStarPath, EffectStacking, ThreatRedirectsTarget, ThreatDecay (half-life and linear), TargetHysteresis, TauntPullsEnemy, AoECircleAtTarget, AoECone, AoETelegraph, AoEAllyAura, EffectModifiers, ReplayRoundTrip, BatchStatistics.
 
 Performance: `Combat.Simulate` takes ~3.5 ms with `DA_Setup_Test` (5 units, 331 ticks, in Arena-01 with the wall) and with `DA_Setup_Mixed` (6 units). Phase 1 took 0.07 ms; the difference is the distance maps and line checks.
