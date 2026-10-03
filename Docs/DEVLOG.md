@@ -81,3 +81,4 @@ Dated history: decisions, bugs, rejected approaches. Newest entries at the botto
 - LevelDesigner part B done: the user built and played `Levels/TestLevel.json` in PIE.
 - Camera orientation for levels: Arena-01's camera has yaw 0, so grid X (width) ran upwards on screen. When fitting a level the camera is now set to (pitch -90, yaw -90): width to the right, height downwards. Setups get the original camera back.
 - Units are flat board pieces: `BodyHeight` is 10 cm (was 180), the nose scales with the body (at most 25 cm), and projectiles fly at 15 cm (`FlightHeight`, was 110).
+- Level blocks are low like the pieces: walls 30 cm (was 200), hedges 20 cm (was 120), water 6 cm, as properties on `ACombatGrid`. The obstacles placed in Arena-01 keep their own size.

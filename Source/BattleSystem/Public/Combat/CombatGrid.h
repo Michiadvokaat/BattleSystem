@@ -91,6 +91,16 @@ private:
 	UPROPERTY(EditDefaultsOnly, Category = "Grid|Level")
 	TObjectPtr<UMaterialInterface> BlockMaterialBase;
 
+	/** Block heights in a level; low, so they read like a game board next to the 10 cm units. */
+	UPROPERTY(EditAnywhere, Category = "Grid|Level", meta = (ClampMin = 1, Units = "cm"))
+	float WallHeight = 30.f;
+
+	UPROPERTY(EditAnywhere, Category = "Grid|Level", meta = (ClampMin = 1, Units = "cm"))
+	float HedgeHeight = 20.f;
+
+	UPROPERTY(EditAnywhere, Category = "Grid|Level", meta = (ClampMin = 1, Units = "cm"))
+	float WaterHeight = 6.f;
+
 	UPROPERTY(EditDefaultsOnly, Category = "Grid|Level")
 	FLinearColor WallColor = FLinearColor(0.3f, 0.3f, 0.32f);
 

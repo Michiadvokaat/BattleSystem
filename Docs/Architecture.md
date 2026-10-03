@@ -97,7 +97,7 @@ Code: `Source/BattleSystem/{Public,Private}/Combat/`. Layers: grid ← simulatio
 - `FCombatFightSource` (subsystem) is a setup asset (on the arena's own grid) or a level. `BuildSimConfigFromSource`, `StartFightFromSource`, `RunBatchInWorld` and replays all take it.
 - Arena (`ACombatGrid::ApplyLevel`):
   - It resizes the floor and redraws the debug cells for the level.
-  - It fills three instanced meshes with blocks: walls grey and 2 m tall, hedges green and 1.2 m, water blue and flat.
+  - It fills three instanced meshes with blocks: walls grey, hedges green and water blue and flat, with heights `WallHeight` 30, `HedgeHeight` 20 and `WaterHeight` 6 cm (editable on the grid actor).
   - It hides the placed `ACombatObstacle`s. `GetGridData()` stays the arena's own grid (for setups).
   - `ClearLevel` restores everything when a setup fight starts.
   - The subsystem points the view camera straight down with grid X (width) to the right and Y (height) downwards, like the rows of a level file. It fits it above the shown grid with a 12% margin, using its FOV and the viewport aspect, and puts the camera back for setups.

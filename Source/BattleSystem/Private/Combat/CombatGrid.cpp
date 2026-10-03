@@ -79,7 +79,7 @@ void ACombatGrid::ApplyLevel(const FCombatLevel& Level)
 	SetObstaclesHidden(true);
 	ShowGrid(LevelGridData);
 
-	// One block per wall (tall), hedge (lower) and water (flat) cell; the engine cube is 100 cm.
+	// One block per wall, hedge and water cell (WallHeight, HedgeHeight, WaterHeight); the engine cube is 100 cm.
 	struct FBlockKind
 	{
 		UInstancedStaticMeshComponent* Blocks;
@@ -89,9 +89,9 @@ void ACombatGrid::ApplyLevel(const FCombatLevel& Level)
 	};
 	const FBlockKind Kinds[] =
 	{
-		{ WallBlocks, FCombatLevel::Wall, 200.f, WallColor },
-		{ HedgeBlocks, FCombatLevel::Hedge, 120.f, HedgeColor },
-		{ WaterBlocks, FCombatLevel::Water, 6.f, WaterColor },
+		{ WallBlocks, FCombatLevel::Wall, WallHeight, WallColor },
+		{ HedgeBlocks, FCombatLevel::Hedge, HedgeHeight, HedgeColor },
+		{ WaterBlocks, FCombatLevel::Water, WaterHeight, WaterColor },
 	};
 	const float Size = Level.CellSize;
 	for (const FBlockKind& Kind : Kinds)
