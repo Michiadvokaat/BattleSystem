@@ -62,6 +62,10 @@ struct FCombatAttackDefinition
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Attack", meta = (Categories = "Attack"))
 	FGameplayTag Type;
 
+	/** Name in the UI (the unit list's ability buttons). Empty = the last part of Type, for example "Taunt". */
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Attack")
+	FText DisplayName;
+
 	/** Edge-to-edge distance in cm at which the attack can start. */
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Attack", meta = (ClampMin = 0, Units = "cm"))
 	float Range = 150.f;

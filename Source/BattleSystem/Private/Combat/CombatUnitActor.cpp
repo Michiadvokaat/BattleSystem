@@ -36,6 +36,24 @@ ACombatUnitActor::ACombatUnitActor()
 	StatusWidget->SetCollisionEnabled(ECollisionEnabled::NoCollision);
 	StatusWidget->SetDrawSize(FVector2D(120.0, 24.0));
 
+	MoveTargetMarker = CreateDefaultSubobject<UStaticMeshComponent>(TEXT("MoveTargetMarker"));
+	MoveTargetMarker->SetupAttachment(RootComponent);
+	MoveTargetMarker->SetCollisionEnabled(ECollisionEnabled::NoCollision);
+	MoveTargetMarker->SetCastShadow(false);
+	MoveTargetMarker->SetUsingAbsoluteLocation(true);
+	MoveTargetMarker->SetUsingAbsoluteRotation(true);
+	MoveTargetMarker->SetUsingAbsoluteScale(true);
+	MoveTargetMarker->SetVisibility(false);
+
+	MoveTargetLine = CreateDefaultSubobject<UStaticMeshComponent>(TEXT("MoveTargetLine"));
+	MoveTargetLine->SetupAttachment(RootComponent);
+	MoveTargetLine->SetCollisionEnabled(ECollisionEnabled::NoCollision);
+	MoveTargetLine->SetCastShadow(false);
+	MoveTargetLine->SetUsingAbsoluteLocation(true);
+	MoveTargetLine->SetUsingAbsoluteRotation(true);
+	MoveTargetLine->SetUsingAbsoluteScale(true);
+	MoveTargetLine->SetVisibility(false);
+
 	static ConstructorHelpers::FObjectFinder<UStaticMesh> CylinderMesh(TEXT("/Engine/BasicShapes/Cylinder.Cylinder"));
 	if (CylinderMesh.Succeeded())
 	{
@@ -69,6 +87,37 @@ void ACombatUnitActor::InitUnit(int32 InUnitId, int32 InTeam, float InRadius, co
 		BodyMesh->SetStaticMesh(Shape);
 	}
 
+	// Selection ring, move disc and line: the engine shapes in a slightly brighter team color.
+	if (BodyMaterialBase)
+	{
+		MarkerMaterial = UMaterialInstanceDynamic::Create(BodyMaterialBase, this);
+		MarkerMaterial->SetVectorParameterValue(BodyColorParameter, TeamColor * 1.5f);
+	}
+	MoveTargetMarker->SetStaticMesh(MeleeBodyMesh);
+	MoveTargetMarker->SetMaterial(0, MarkerMaterial);
+	MoveTargetLine->SetStaticMesh(RangedBodyMesh);
+	MoveTargetLine->SetMaterial(0, MarkerMaterial);
+
+	const float RingRadius = InRadius + SelectionRingOffset;
+	const float SegmentLength = 2.f * UE_PI * RingRadius / SelectionRingSegments * 0.6f;
+	for (int32 Index = 0; Index < SelectionRingSegments; ++Index)
+	{
+		const float Angle = 2.f * UE_PI * Index / SelectionRingSegments;
+		UStaticMeshComponent* Segment = NewObject<UStaticMeshComponent>(this);
+		Segment->SetupAttachment(RootComponent);
+		Segment->SetStaticMesh(RangedBodyMesh);
+		Segment->SetMaterial(0, MarkerMaterial);
+		Segment->SetCollisionEnabled(ECollisionEnabled::NoCollision);
+		Segment->SetCastShadow(false);
+		// The engine cube is 100 cm: a flat block along the circle's tangent.
+		Segment->SetRelativeLocation(FVector(FMath::Cos(Angle) * RingRadius, FMath::Sin(Angle) * RingRadius, 3.0));
+		Segment->SetRelativeRotation(FRotator(0.0, FMath::RadiansToDegrees(Angle) + 90.0, 0.0));
+		Segment->SetRelativeScale3D(FVector(SegmentLength / 100.0, 0.08, 0.03));
+		Segment->SetVisibility(false);
+		Segment->RegisterComponent();
+		SelectionRing.Add(Segment);
+	}
+
 	// The engine cylinder and cube are 100 cm and centered on their origin.
 	BodyMesh->SetRelativeScale3D(FVector(InRadius * 2.0 / 100.0, InRadius * 2.0 / 100.0, BodyHeight / 100.0));
 	BodyMesh->SetRelativeLocation(FVector(0.0, 0.0, BodyHeight * 0.5));
@@ -96,6 +145,37 @@ void ACombatUnitActor::SetHealth(float Fraction)
 	{
 		HealthBar->SetFraction(Fraction);
 	}
+}
+
+void ACombatUnitActor::SetSelected(bool bSelected)
+{
+	for (UStaticMeshComponent* Segment : SelectionRing)
+	{
+		if (Segment && Segment->IsVisible() != bSelected)
+		{
+			Segment->SetVisibility(bSelected);
+		}
+	}
+}
+
+void ACombatUnitActor::SetMoveTarget(bool bActive, const FVector& Target)
+{
+	MoveTargetMarker->SetVisibility(bActive);
+	MoveTargetLine->SetVisibility(bActive);
+	if (!bActive)
+	{
+		return;
+	}
+
+	// The engine cylinder and cube are 100 cm: a flat disc on the target, a thin flat bar from the unit to it.
+	MoveTargetMarker->SetWorldLocationAndRotation(Target + FVector(0.0, 0.0, 3.0), FRotator::ZeroRotator);
+	MoveTargetMarker->SetWorldScale3D(FVector(0.5, 0.5, 0.02));
+
+	const FVector From = GetActorLocation() + FVector(0.0, 0.0, 3.0);
+	const FVector To = Target + FVector(0.0, 0.0, 3.0);
+	const FVector Delta = To - From;
+	MoveTargetLine->SetWorldLocationAndRotation((From + To) * 0.5, Delta.Rotation());
+	MoveTargetLine->SetWorldScale3D(FVector(Delta.Size() / 100.0, 0.04, 0.02));
 }
 
 void ACombatUnitActor::SetStatusEffects(const TArray<FCombatStatusDisplay>& Icons)

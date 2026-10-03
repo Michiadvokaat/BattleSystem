@@ -6,6 +6,7 @@
 #include "Engine/World.h"
 #include "GameFramework/PlayerController.h"
 #include "SCombatControlPanel.h"
+#include "SCombatUnitList.h"
 #include "Widgets/Layout/SBox.h"
 
 void ACombatHUD::BeginPlay()
@@ -30,6 +31,17 @@ void ACombatHUD::BeginPlay()
 		];
 	Viewport->AddViewportWidgetContent(PanelContainer.ToSharedRef());
 
+	UnitListContainer = SNew(SBox)
+		.HAlign(HAlign_Right)
+		.VAlign(VAlign_Top)
+		.Padding(16.f)
+		.Visibility(EVisibility::SelfHitTestInvisible)
+		[
+			SNew(SCombatUnitList)
+			.Subsystem(GetWorld()->GetSubsystem<UCombatSubsystem>())
+		];
+	Viewport->AddViewportWidgetContent(UnitListContainer.ToSharedRef());
+
 	if (APlayerController* PlayerController = GetOwningPlayerController())
 	{
 		PlayerController->SetShowMouseCursor(true);
@@ -43,14 +55,18 @@ void ACombatHUD::BeginPlay()
 
 void ACombatHUD::EndPlay(const EEndPlayReason::Type EndPlayReason)
 {
-	if (PanelContainer)
+	if (UGameViewportClient* Viewport = GetWorld()->GetGameViewport())
 	{
-		if (UGameViewportClient* Viewport = GetWorld()->GetGameViewport())
+		for (TSharedPtr<SWidget>* Container : { &PanelContainer, &UnitListContainer })
 		{
-			Viewport->RemoveViewportWidgetContent(PanelContainer.ToSharedRef());
+			if (*Container)
+			{
+				Viewport->RemoveViewportWidgetContent(Container->ToSharedRef());
+			}
 		}
-		PanelContainer.Reset();
 	}
+	PanelContainer.Reset();
+	UnitListContainer.Reset();
 
 	Super::EndPlay(EndPlayReason);
 }

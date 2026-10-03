@@ -324,6 +324,8 @@ public:
 	bool QueueCommand(const FCombatCommand& Command);
 	/** Every accepted command, in the order given: with setup, seed and settings, this reproduces the fight. */
 	const TArray<FCombatCommand>& GetCommandLog() const { return CommandLog; }
+	/** Commands that have not run yet, by tick. */
+	const TArray<FCombatCommand>& GetPendingCommands() const { return PendingCommands; }
 	/** Events of the last step only. */
 	const TArray<FCombatEvent>& GetEvents() const { return Events; }
 	/** CRC32 of the state after the last step. */

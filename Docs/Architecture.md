@@ -158,6 +158,26 @@ Code: `Source/BattleSystem/{Public,Private}/Combat/`. Layers: grid ← simulatio
   - A status line with setup, seed, tick and running/paused, or after the fight the outcome and checksum.
 - The active speed and debug level are tinted green. Nothing is saved: the panel starts from the defaults each time.
 
+### Player input (`SCombatUnitList`, `ACombatPlayerController`)
+
+- `ACombatHUD` also shows `SCombatUnitList` at the top right. It has one row per unit of `PlayerTeam`, with the name, a small health bar, the status labels and the order text (`GetOrderText`: "Queued: ..." during the command delay, "Moving to (x,y)", "Dead").
+  - The name is the definition's `DisplayName` (or the asset name without `DA_`), numbered when a type appears more than once.
+  - Dead units stay as grey, disabled rows.
+  - The list rebuilds when `GetFightSerial()` changes (start/stop); health and labels update every frame.
+- Clicking a row selects the unit, or deselects it if it was already selected. Under the row its actions appear:
+  - **Move**: `BeginMoveTargeting`; the button turns orange until the next arena click.
+  - One button per player ability (`GetAbilityName`: the ability's `DisplayName`, or the last part of its type), which sends an `Ability` command.
+- `ACombatPlayerController` (set by `ACombatGameMode`):
+  - It turns the mouse into a point on the grid plane (deproject plus a plane intersection, no collision needed).
+  - Left click goes to `HandleArenaClick`. While targeting it sends a `Move` command to the clicked cell; otherwise it selects the nearest own living unit within its radius + 30 cm, or deselects.
+  - Right click goes to `HandleArenaCancel` (cancel targeting, else deselect). Esc is not used, because it ends PIE.
+  - Clicks on the HUD panels go to the UI.
+- Selection is presentation state in the subsystem (`SelectedUnitId`, `bAwaitingMoveTarget`). A selected unit that dies is deselected. Everything reaches the fight only through `IssueCommand`.
+- `ACombatUnitActor`:
+  - `SetSelected` shows a ring of `SelectionRingSegments` (16) flat engine cubes around the feet (`SelectionRingOffset` from the edge).
+  - `SetMoveTarget` shows a flat disc on the target cell and a thin bar from the unit to it while a move order runs.
+  - These use the shape material in 1.5× the team color, are placed in world space, and are visible in release builds.
+
 ### Presentation (`ACombatProjectileActor`)
 
 - A small engine sphere (`Diameter`) at `FlightHeight` in the team color (`BasicShapeMaterial`), facing the flight direction. No collision, no shadow.

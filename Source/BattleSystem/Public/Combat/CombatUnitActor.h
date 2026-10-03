@@ -52,6 +52,12 @@ public:
 	/** The unit's active effects as labels, shown on its center. */
 	virtual void SetStatusEffects(const TArray<FCombatStatusDisplay>& Icons);
 
+	/** Shows the selection ring around the unit's feet. */
+	virtual void SetSelected(bool bSelected);
+
+	/** Shows a disc on the move target and a line to it while the unit has a move order. */
+	virtual void SetMoveTarget(bool bActive, const FVector& Target);
+
 	/** One of this unit's area attacks went off (the subsystem draws the area); Radius = its reach in cm. */
 	virtual void OnAreaAttack(float Radius);
 
@@ -82,6 +88,21 @@ protected:
 
 	UPROPERTY(VisibleAnywhere, Category = "Combat")
 	TObjectPtr<UWidgetComponent> StatusWidget;
+
+	/** Move order: a flat disc on the target cell and a thin line to it (both placed in world space). */
+	UPROPERTY(VisibleAnywhere, Category = "Combat")
+	TObjectPtr<UStaticMeshComponent> MoveTargetMarker;
+
+	UPROPERTY(VisibleAnywhere, Category = "Combat")
+	TObjectPtr<UStaticMeshComponent> MoveTargetLine;
+
+	/** Selection ring: this many short flat blocks in a circle around the unit. */
+	UPROPERTY(EditDefaultsOnly, Category = "Combat|Presentation", meta = (ClampMin = 4, ClampMax = 64))
+	int32 SelectionRingSegments = 16;
+
+	/** Gap between the unit's edge and the selection ring. */
+	UPROPERTY(EditDefaultsOnly, Category = "Combat|Presentation", meta = (Units = "cm"))
+	float SelectionRingOffset = 15.f;
 
 	/** Health bar size in screen pixels. */
 	UPROPERTY(EditDefaultsOnly, Category = "Combat|Presentation")
@@ -140,4 +161,10 @@ private:
 	bool bFlashing = false;
 	TSharedPtr<SCombatHealthBar> HealthBar;
 	TSharedPtr<SCombatStatusIcons> StatusIcons;
+
+	UPROPERTY(Transient)
+	TArray<TObjectPtr<UStaticMeshComponent>> SelectionRing;
+
+	UPROPERTY(Transient)
+	TObjectPtr<UMaterialInstanceDynamic> MarkerMaterial;
 };

@@ -6,6 +6,7 @@
 #include "Subsystems/WorldSubsystem.h"
 #include "Combat/CombatReplay.h"
 #include "Combat/CombatSimulation.h"
+#include "Combat/CombatUnitActor.h"
 #include "CombatSubsystem.generated.h"
 
 class ACombatProjectileActor;
@@ -81,6 +82,31 @@ public:
 	/** Seed and setup name of the current (or last) fight. */
 	int32 GetCurrentSeed() const { return CurrentSeed; }
 	const FString& GetCurrentSetupName() const { return CurrentSetupName; }
+
+	/** Player selection and targeting: presentation state only; it reaches the fight through IssueCommand. */
+	int32 GetPlayerTeam() const;
+	/** Selects a living unit of the player's team (INDEX_NONE or anything else deselects). Cancels Move targeting. */
+	void SelectUnit(int32 UnitId);
+	int32 GetSelectedUnitId() const { return SelectedUnitId; }
+	/** The next arena click picks the selected unit's Move target. */
+	void BeginMoveTargeting() { bAwaitingMoveTarget = SelectedUnitId != INDEX_NONE; }
+	bool IsAwaitingMoveTarget() const { return bAwaitingMoveTarget; }
+	/** Left click on the arena (a point on the grid plane): the Move target while targeting, else select the own unit there. */
+	void HandleArenaClick(const FVector& WorldPoint);
+	/** Right click: cancel Move targeting, else deselect. */
+	void HandleArenaCancel();
+	/** Height of the grid plane (for turning mouse clicks into arena points). */
+	double GetGridHeight() const { return GridOrigin.Z; }
+
+	/** Changes on every start and stop, so UI can rebuild per fight. */
+	int32 GetFightSerial() const { return FightSerial; }
+	const UCombatUnitDefinition* GetUnitDefinition(int32 UnitId) const;
+	/** UI name of a player ability: its DisplayName, else the last part of its type ("Taunt"). */
+	FText GetAbilityName(int32 UnitId, int32 AbilityIndex) const;
+	/** What the unit is doing for the player: queued or running order, or "Dead". Empty while the AI runs it. */
+	FString GetOrderText(int32 UnitId) const;
+	/** The unit's active effects as labels (StatusIcons setting). */
+	static TArray<FCombatStatusDisplay> GetStatusDisplays(const FCombatUnit& Unit);
 
 	/** Asset names of all UCombatSetup assets, sorted. */
 	static TArray<FString> GetAllSetupNames();
@@ -161,4 +187,8 @@ private:
 	/** Replay: the first checkpoint tick that differed, or INDEX_NONE. */
 	int32 FirstDifferentTick = INDEX_NONE;
 	FString LastBatchSummary;
+
+	int32 SelectedUnitId = INDEX_NONE;
+	bool bAwaitingMoveTarget = false;
+	int32 FightSerial = 0;
 };

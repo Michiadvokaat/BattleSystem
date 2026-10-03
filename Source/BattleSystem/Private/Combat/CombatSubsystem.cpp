@@ -71,6 +71,12 @@ void UCombatSubsystem::Tick(float DeltaTime)
 		}
 	}
 
+	// A selected unit that died is deselected.
+	if (SelectedUnitId != INDEX_NONE && !Simulation->GetUnits()[SelectedUnitId].bAlive)
+	{
+		SelectUnit(INDEX_NONE);
+	}
+
 	const float Alpha = FMath::Clamp(static_cast<float>(Accumulator / FixedDt), 0.f, 1.f);
 	UpdateActors(Alpha);
 	DrawDebug(Alpha);
@@ -107,6 +113,7 @@ bool UCombatSubsystem::StartFightWithSettings(int32 Seed, const UCombatSetup* Se
 	ReplayVerdict.Reset();
 	Checkpoints.Reset();
 	FirstDifferentTick = INDEX_NONE;
+	++FightSerial;
 	CheckpointInterval = FMath::Max(GetDefault<UCombatSettings>()->ReplayCheckpointInterval, 1);
 
 	if (!Setup)
@@ -298,6 +305,10 @@ bool UCombatSubsystem::RunBatchInWorld(UWorld* World, const UCombatSetup& Setup,
 
 void UCombatSubsystem::StopFight()
 {
+	SelectedUnitId = INDEX_NONE;
+	bAwaitingMoveTarget = false;
+	++FightSerial;
+
 	for (ACombatUnitActor* Actor : UnitActors)
 	{
 		if (IsValid(Actor))
@@ -414,34 +425,11 @@ void UCombatSubsystem::UpdateActors(float Alpha)
 
 		Actor->SetHealth(Unit.Stats.MaxHP > 0.f ? Unit.HP / Unit.Stats.MaxHP : 0.f);
 
-		const UCombatSettings* Settings = GetDefault<UCombatSettings>();
-		TArray<FCombatStatusDisplay> StatusIcons;
-		for (const FCombatActiveEffect& Active : Unit.Effects.GetEffects())
-		{
-			FCombatStatusDisplay& Icon = StatusIcons.AddDefaulted_GetRef();
-			const FCombatStatusIcon* Entry = Settings->StatusIcons.FindByPredicate([&Active](const FCombatStatusIcon& Candidate)
-			{
-				return Candidate.EffectTag == Active.Effect.EffectTag;
-			});
-			if (Entry)
-			{
-				Icon.Label = Entry->Label;
-				Icon.Color = Entry->Color;
-			}
-			else
-			{
-				// "Effect.Burn" -> "B"
-				FString Name = Active.Effect.EffectTag.GetTagName().ToString();
-				Name.Split(TEXT("."), nullptr, &Name, ESearchCase::IgnoreCase, ESearchDir::FromEnd);
-				Icon.Label = Name.Left(1).ToUpper();
-			}
-			if (Active.Stacks > 1)
-			{
-				Icon.Label += FString::FromInt(Active.Stacks);
-			}
-		}
-		Actor->SetStatusEffects(StatusIcons);
+		Actor->SetStatusEffects(GetStatusDisplays(Unit));
+		Actor->SetSelected(Unit.Id == SelectedUnitId);
 		Actor->UpdatePresentation(SimToWorld(Position), FVector(Facing.X, Facing.Y, 0.0));
+		// After the actor moved, so the line starts at its new position.
+		Actor->SetMoveTarget(Unit.bHasMoveOrder, SimToWorld(Simulation->GetGrid().CellToLocal(Unit.MoveTargetCell)));
 	}
 
 	for (const FCombatProjectile& Projectile : Simulation->GetProjectiles())
@@ -719,6 +707,149 @@ bool UCombatSubsystem::BuildSimConfig(UWorld* World, int32 Seed, const UCombatSe
 
 	SimSettings.ApplyTo(OutConfig);
 	return true;
+}
+
+int32 UCombatSubsystem::GetPlayerTeam() const
+{
+	return GetDefault<UCombatSettings>()->PlayerTeam;
+}
+
+void UCombatSubsystem::SelectUnit(int32 UnitId)
+{
+	const bool bValid = Simulation && Simulation->GetUnits().IsValidIndex(UnitId)
+		&& Simulation->GetUnits()[UnitId].bAlive && Simulation->GetUnits()[UnitId].Team == GetPlayerTeam();
+	SelectedUnitId = bValid ? UnitId : INDEX_NONE;
+	bAwaitingMoveTarget = false;
+}
+
+void UCombatSubsystem::HandleArenaClick(const FVector& WorldPoint)
+{
+	if (!Simulation)
+	{
+		return;
+	}
+
+	const FVector2D Local(WorldPoint.X - GridOrigin.X, WorldPoint.Y - GridOrigin.Y);
+	if (bAwaitingMoveTarget && SelectedUnitId != INDEX_NONE)
+	{
+		FCombatCommand Command;
+		Command.Type = ECombatCommandType::Move;
+		Command.UnitId = SelectedUnitId;
+		Command.TargetCell = Simulation->GetGrid().LocalToCell(Local);
+		IssueCommand(Command);
+		bAwaitingMoveTarget = false;
+		return;
+	}
+
+	// Select the nearest own unit under the click (a little margin around its body), or deselect.
+	int32 BestId = INDEX_NONE;
+	double BestDistance = TNumericLimits<double>::Max();
+	for (const FCombatUnit& Unit : Simulation->GetUnits())
+	{
+		const double Distance = FVector2D::Distance(Local, Unit.Position);
+		if (Unit.bAlive && Unit.Team == GetPlayerTeam() && Distance <= Unit.Stats.Radius + 30.0 && Distance < BestDistance)
+		{
+			BestDistance = Distance;
+			BestId = Unit.Id;
+		}
+	}
+	SelectUnit(BestId);
+}
+
+void UCombatSubsystem::HandleArenaCancel()
+{
+	if (bAwaitingMoveTarget)
+	{
+		bAwaitingMoveTarget = false;
+	}
+	else
+	{
+		SelectUnit(INDEX_NONE);
+	}
+}
+
+const UCombatUnitDefinition* UCombatSubsystem::GetUnitDefinition(int32 UnitId) const
+{
+	return UnitDefinitions.IsValidIndex(UnitId) ? UnitDefinitions[UnitId].Get() : nullptr;
+}
+
+FText UCombatSubsystem::GetAbilityName(int32 UnitId, int32 AbilityIndex) const
+{
+	const UCombatUnitDefinition* Definition = GetUnitDefinition(UnitId);
+	if (!Definition || !Definition->PlayerAbilities.IsValidIndex(AbilityIndex))
+	{
+		return FText::FromString(FString::Printf(TEXT("Ability %d"), AbilityIndex));
+	}
+
+	const FCombatAttackDefinition& Ability = Definition->PlayerAbilities[AbilityIndex];
+	if (!Ability.DisplayName.IsEmpty())
+	{
+		return Ability.DisplayName;
+	}
+	FString Name = Ability.Type.GetTagName().ToString();
+	Name.Split(TEXT("."), nullptr, &Name, ESearchCase::IgnoreCase, ESearchDir::FromEnd);
+	return FText::FromString(Name);
+}
+
+FString UCombatSubsystem::GetOrderText(int32 UnitId) const
+{
+	if (!Simulation || !Simulation->GetUnits().IsValidIndex(UnitId))
+	{
+		return FString();
+	}
+
+	const FCombatUnit& Unit = Simulation->GetUnits()[UnitId];
+	if (!Unit.bAlive)
+	{
+		return TEXT("Dead");
+	}
+
+	for (const FCombatCommand& Command : Simulation->GetPendingCommands())
+	{
+		if (Command.UnitId == UnitId)
+		{
+			return Command.Type == ECombatCommandType::Move
+				? FString::Printf(TEXT("Queued: Move (%d,%d)"), Command.TargetCell.X, Command.TargetCell.Y)
+				: TEXT("Queued: ") + GetAbilityName(UnitId, Command.AbilityIndex).ToString();
+		}
+	}
+
+	if (Unit.bHasMoveOrder)
+	{
+		return FString::Printf(TEXT("Moving to (%d,%d)"), Unit.MoveTargetCell.X, Unit.MoveTargetCell.Y);
+	}
+	return FString();
+}
+
+TArray<FCombatStatusDisplay> UCombatSubsystem::GetStatusDisplays(const FCombatUnit& Unit)
+{
+	const UCombatSettings* Settings = GetDefault<UCombatSettings>();
+	TArray<FCombatStatusDisplay> StatusIcons;
+	for (const FCombatActiveEffect& Active : Unit.Effects.GetEffects())
+	{
+		FCombatStatusDisplay& Icon = StatusIcons.AddDefaulted_GetRef();
+		const FCombatStatusIcon* Entry = Settings->StatusIcons.FindByPredicate([&Active](const FCombatStatusIcon& Candidate)
+		{
+			return Candidate.EffectTag == Active.Effect.EffectTag;
+		});
+		if (Entry)
+		{
+			Icon.Label = Entry->Label;
+			Icon.Color = Entry->Color;
+		}
+		else
+		{
+			// "Effect.Burn" -> "B"
+			FString Name = Active.Effect.EffectTag.GetTagName().ToString();
+			Name.Split(TEXT("."), nullptr, &Name, ESearchCase::IgnoreCase, ESearchDir::FromEnd);
+			Icon.Label = Name.Left(1).ToUpper();
+		}
+		if (Active.Stacks > 1)
+		{
+			Icon.Label += FString::FromInt(Active.Stacks);
+		}
+	}
+	return StatusIcons;
 }
 
 bool UCombatSubsystem::IssueCommand(FCombatCommand Command)

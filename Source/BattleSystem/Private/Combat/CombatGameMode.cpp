@@ -2,6 +2,7 @@
 
 #include "Combat/CombatGameMode.h"
 #include "Combat/CombatHUD.h"
+#include "Combat/CombatPlayerController.h"
 #include "Combat/CombatSettings.h"
 #include "Combat/CombatSetup.h"
 #include "Combat/CombatSubsystem.h"
@@ -11,6 +12,7 @@ ACombatGameMode::ACombatGameMode()
 {
 	bStartPlayersAsSpectators = true;
 	HUDClass = ACombatHUD::StaticClass();
+	PlayerControllerClass = ACombatPlayerController::StaticClass();
 }
 
 void ACombatGameMode::StartPlay()

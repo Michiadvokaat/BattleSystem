@@ -69,3 +69,5 @@ Dated history: decisions, bugs, rejected approaches. Newest entries at the botto
   - Checksums without commands are unchanged (`0xBED8CC97`, `0x7CE33AAB`, `0x32F7C942`).
   - `DA_Setup_Taunt` with `DA_Script_TauntDemo` gives `0xB029A714`. Over 1000 fights the archers deal 155 damage instead of 58, but team 0 still always loses.
   - Console commands `Combat.Move` and `Combat.Ability` for testing until the unit list exists.
+- Player commands part B (UI): a unit list at the top right (own team, with health, labels and the order text; click a row for its Move and ability buttons), `ACombatPlayerController` (left click selects or sets the Move target on the grid plane, right click cancels), a selection ring, and a move disc and line in the arena. Attacks get an optional `DisplayName`. UI only: no simulation changes.
+- Player commands part B done: the user checked the unit list, Move/Taunt, arena selection and replay in PIE.
