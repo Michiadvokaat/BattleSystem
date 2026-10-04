@@ -26,6 +26,11 @@ Content/Collections/
 # Local Fab asset packs (kept out of the repo)
 Content/ZZ_FAB/
 
+# Local character assets (meshes, textures, materials; kept out of the repo)
+Content/Characters/
+Content/Materials/
+Content/Textures/
+
 # Claude Code local settings
 .claude/settings.local.json
 
