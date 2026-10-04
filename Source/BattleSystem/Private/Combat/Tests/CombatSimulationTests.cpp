@@ -8,6 +8,7 @@
 #include "Combat/CombatSimulation.h"
 #include "Combat/CombatTags.h"
 #include "Combat/CombatUnitDefinition.h"
+#include "Misc/FileHelper.h"
 #include "UObject/Package.h"
 
 #if WITH_DEV_AUTOMATION_TESTS
@@ -1767,6 +1768,47 @@ bool FCombatWaveReplayTest::RunTest(const FString& Parameters)
 	ReplayConfig.Commands = Loaded.Commands;
 	TestTrue(TEXT("The replay has the same checksum after every step"), CombatTests::RunAndCollectChecksums(ReplayConfig) == RecordedChecksums);
 	TestFalse(TEXT("The call changes the fight"), CombatTests::RunAndCollectChecksums(Base) == RecordedChecksums);
+	return true;
+}
+
+IMPLEMENT_SIMPLE_AUTOMATION_TEST(FCombatLevelFileTest, "BattleSystem.Combat.LevelFileRenameDelete",
+	EAutomationTestFlags::EditorContext | EAutomationTestFlags::ProductFilter)
+
+bool FCombatLevelFileTest::RunTest(const FString& Parameters)
+{
+	// Works on real files in Levels/, but only on its own ZZ_AutomationTest_* levels, which are always removed.
+	const FString First = TEXT("ZZ_AutomationTest_First");
+	const FString Second = TEXT("ZZ_AutomationTest_Second");
+	const FString Other = TEXT("ZZ_AutomationTest_Other");
+	auto CleanUp = [&]() { for (const FString& Name : { First, Second, Other }) { CombatLevels::Delete(Name); } };
+	CleanUp();
+
+	TestEqual(TEXT("CleanName keeps letters, digits, - and _"), CombatLevels::CleanName(TEXT("My Level/2-b_c!")), FString(TEXT("MyLevel2-b_c")));
+
+	FCombatLevel Level = CombatTests::MakeTestLevel();
+	Level.Name = First;
+	TestTrue(TEXT("Saves"), CombatLevels::Save(Level));
+	Level.Name = Other;
+	TestTrue(TEXT("Saves another"), CombatLevels::Save(Level));
+
+	TestFalse(TEXT("Rename onto an existing level is refused"), CombatLevels::Rename(First, Other));
+	TestTrue(TEXT("Both still exist after the refusal"), CombatLevels::Exists(First) && CombatLevels::Exists(Other));
+
+	TestTrue(TEXT("Renames"), CombatLevels::Rename(First, Second));
+	TestFalse(TEXT("The old file is gone"), CombatLevels::Exists(First));
+	FCombatLevel Loaded;
+	TestTrue(TEXT("The new file loads"), CombatLevels::Load(Second, Loaded));
+	TestTrue(TEXT("Same content"), Loaded.Rows == Level.Rows && Loaded.Units.Num() == Level.Units.Num());
+	FString Json;
+	FFileHelper::LoadFileToString(Json, *(CombatLevels::GetDirectory() / (Second + TEXT(".json"))));
+	TestTrue(TEXT("The name inside the file changed"), Json.Contains(FString::Printf(TEXT("\"%s\""), *Second)));
+
+	TestFalse(TEXT("Renaming a missing level fails"), CombatLevels::Rename(First, TEXT("ZZ_AutomationTest_Never")));
+	TestTrue(TEXT("Deletes"), CombatLevels::Delete(Second));
+	TestFalse(TEXT("Deleted"), CombatLevels::Exists(Second));
+	TestFalse(TEXT("Deleting a missing level fails"), CombatLevels::Delete(Second));
+
+	CleanUp();
 	return true;
 }
 

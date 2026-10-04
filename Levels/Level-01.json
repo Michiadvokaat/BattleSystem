@@ -1,0 +1,79 @@
+{
+	"formatVersion": 2,
+	"name": "Level-01",
+	"width": 10,
+	"height": 8,
+	"cellSize": 100,
+	"rows": [
+		"..........",
+		"..........",
+		"..........",
+		"..........",
+		"..........",
+		"..........",
+		"..........",
+		".........."
+	],
+	"units": [
+		{
+			"type": "DA_Bijlman",
+			"team": 0,
+			"cell":
+			{
+				"x": 4,
+				"y": 6
+			}
+		},
+		{
+			"type": "DA_Boogschutter",
+			"team": 0,
+			"cell":
+			{
+				"x": 2,
+				"y": 6
+			}
+		},
+		{
+			"type": "DA_Magier",
+			"team": 0,
+			"cell":
+			{
+				"x": 6,
+				"y": 6
+			}
+		}
+	],
+	"waves": [
+		{
+			"spawns": [
+				{
+					"type": "DA_Brute",
+					"cell":
+					{
+						"x": 4,
+						"y": 1
+					},
+					"time": 0
+				},
+				{
+					"type": "DA_Doelpop",
+					"cell":
+					{
+						"x": 5,
+						"y": 1
+					},
+					"time": 7
+				},
+				{
+					"type": "DA_Brute",
+					"cell":
+					{
+						"x": 3,
+						"y": 1
+					},
+					"time": 13
+				}
+			]
+		}
+	]
+}

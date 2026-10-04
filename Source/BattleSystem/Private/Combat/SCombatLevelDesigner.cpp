@@ -4,6 +4,7 @@
 #include "Combat/CombatLevel.h"
 #include "Combat/CombatSettings.h"
 #include "Combat/CombatSubsystem.h"
+#include "HAL/PlatformTime.h"
 #include "Styling/CoreStyle.h"
 #include "Widgets/Input/SButton.h"
 #include "Widgets/Input/SEditableTextBox.h"
@@ -16,6 +17,8 @@
 namespace CombatLevelDesigner
 {
 	static const FLinearColor ActiveColor(0.2f, 0.8f, 0.3f);
+	static const FLinearColor ConfirmColor(0.9f, 0.15f, 0.1f);
+	static constexpr double DeleteConfirmSeconds = 3.0;
 }
 
 void SCombatLevelDesigner::Construct(const FArguments& InArgs)
@@ -128,7 +131,11 @@ void SCombatLevelDesigner::Construct(const FArguments& InArgs)
 					.InitiallySelectedItem(SelectedLevel)
 					.OnComboBoxOpening_Lambda([this]() { RefreshLevelOptions(); })
 					.OnGenerateWidget_Lambda([](TSharedPtr<FString> Item) { return SNew(STextBlock).Text(FText::FromString(*Item)); })
-					.OnSelectionChanged_Lambda([this](TSharedPtr<FString> Item, ESelectInfo::Type) { SelectedLevel = Item; })
+					.OnSelectionChanged_Lambda([this](TSharedPtr<FString> Item, ESelectInfo::Type)
+					{
+						SelectedLevel = Item;
+						DeleteConfirmUntil = 0.0;
+					})
 					[
 						SNew(STextBlock).Text_Lambda([this]()
 						{
@@ -147,7 +154,7 @@ void SCombatLevelDesigner::Construct(const FArguments& InArgs)
 						}
 					})
 				]
-				+ SHorizontalBox::Slot().AutoWidth()
+				+ SHorizontalBox::Slot().AutoWidth().Padding(0.f, 0.f, 4.f, 0.f)
 				[
 					MakeButton(INVTEXT("New"), [this]()
 					{
@@ -158,6 +165,34 @@ void SCombatLevelDesigner::Construct(const FArguments& InArgs)
 							Message = TEXT("New empty level.");
 						}
 					})
+				]
+				+ SHorizontalBox::Slot().AutoWidth().Padding(0.f, 0.f, 4.f, 0.f)
+				[
+					// The selected level gets the name from the Name field.
+					MakeButton(INVTEXT("Rename"), [this]()
+					{
+						if (UCombatSubsystem* Current = Subsystem.Get(); Current && SelectedLevel)
+						{
+							if (Current->RenameLevelFile(*SelectedLevel, NameText.ToString(), Message))
+							{
+								SelectedLevel = MakeShared<FString>(CombatLevels::CleanName(NameText.ToString()));
+								RefreshLevelOptions();
+								SyncNameFromLevel();
+							}
+						}
+					})
+				]
+				+ SHorizontalBox::Slot().AutoWidth()
+				[
+					SNew(SButton)
+					.OnClicked(this, &SCombatLevelDesigner::OnDeleteClicked)
+					.ButtonColorAndOpacity_Lambda([this]()
+					{
+						return FSlateColor(IsConfirmingDelete() ? CombatLevelDesigner::ConfirmColor : FLinearColor::White);
+					})
+					[
+						SNew(STextBlock).Text_Lambda([this]() { return IsConfirmingDelete() ? INVTEXT("Confirm?") : INVTEXT("Delete"); })
+					]
 				]
 			]
 
@@ -343,7 +378,12 @@ bool SCombatLevelDesigner::IsEditing() const
 TSharedRef<SWidget> SCombatLevelDesigner::MakeButton(const FText& Label, TFunction<void()> OnClick, TFunction<bool()> IsActive)
 {
 	return SNew(SButton)
-		.OnClicked_Lambda([OnClick]() { OnClick(); return FReply::Handled(); })
+		.OnClicked_Lambda([this, OnClick]()
+		{
+			DeleteConfirmUntil = 0.0;
+			OnClick();
+			return FReply::Handled();
+		})
 		.ButtonColorAndOpacity_Lambda([IsActive]()
 		{
 			return FSlateColor(IsActive && IsActive() ? CombatLevelDesigner::ActiveColor : FLinearColor::White);
@@ -381,6 +421,31 @@ TSharedRef<SWidget> SCombatLevelDesigner::MakeSizeBox(bool bWidth)
 				}
 			})
 		];
+}
+
+FReply SCombatLevelDesigner::OnDeleteClicked()
+{
+	UCombatSubsystem* CombatSubsystem = Subsystem.Get();
+	if (!CombatSubsystem || !SelectedLevel)
+	{
+		return FReply::Handled();
+	}
+	if (!IsConfirmingDelete())
+	{
+		DeleteConfirmUntil = FPlatformTime::Seconds() + CombatLevelDesigner::DeleteConfirmSeconds;
+		Message = FString::Printf(TEXT("Click Delete again within 3 s to delete %s."), **SelectedLevel);
+		return FReply::Handled();
+	}
+
+	DeleteConfirmUntil = 0.0;
+	CombatSubsystem->DeleteLevelFile(*SelectedLevel, Message);
+	RefreshLevelOptions();
+	return FReply::Handled();
+}
+
+bool SCombatLevelDesigner::IsConfirmingDelete() const
+{
+	return DeleteConfirmUntil > 0.0 && FPlatformTime::Seconds() < DeleteConfirmUntil;
 }
 
 void SCombatLevelDesigner::RefreshLevelOptions()

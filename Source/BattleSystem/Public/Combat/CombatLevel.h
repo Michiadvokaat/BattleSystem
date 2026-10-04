@@ -105,6 +105,12 @@ namespace CombatLevels
 	BATTLESYSTEM_API TArray<FString> FindLevelNames();
 	BATTLESYSTEM_API bool Save(const FCombatLevel& Level);
 	BATTLESYSTEM_API bool Load(const FString& Name, FCombatLevel& OutLevel);
+	/** A level name as a file name: only letters, digits, - and _ are kept (may come out empty). */
+	BATTLESYSTEM_API FString CleanName(const FString& Name);
+	BATTLESYSTEM_API bool Exists(const FString& Name);
+	/** Renames Levels/<OldName>.json to <NewName>.json and sets the name inside. False if the old one is missing or the new one exists. */
+	BATTLESYSTEM_API bool Rename(const FString& OldName, const FString& NewName);
+	BATTLESYSTEM_API bool Delete(const FString& Name);
 
 	BATTLESYSTEM_API bool ToJson(const FCombatLevel& Level, FString& OutJson);
 	BATTLESYSTEM_API bool FromJson(const FString& Json, FCombatLevel& OutLevel);

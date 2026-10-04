@@ -163,6 +163,41 @@ bool CombatLevels::Load(const FString& Name, FCombatLevel& OutLevel)
 	return true;
 }
 
+FString CombatLevels::CleanName(const FString& Name)
+{
+	FString Clean;
+	for (const TCHAR Char : Name)
+	{
+		if (FChar::IsAlnum(Char) || Char == TEXT('_') || Char == TEXT('-'))
+		{
+			Clean.AppendChar(Char);
+		}
+	}
+	return Clean;
+}
+
+bool CombatLevels::Exists(const FString& Name)
+{
+	return !Name.IsEmpty() && IFileManager::Get().FileExists(*(GetDirectory() / (Name + TEXT(".json"))));
+}
+
+bool CombatLevels::Rename(const FString& OldName, const FString& NewName)
+{
+	// Through load and save, so the name inside the file changes too.
+	FCombatLevel Level;
+	if (NewName.IsEmpty() || Exists(NewName) || !Load(OldName, Level))
+	{
+		return false;
+	}
+	Level.Name = NewName;
+	return Save(Level) && Delete(OldName);
+}
+
+bool CombatLevels::Delete(const FString& Name)
+{
+	return Exists(Name) && IFileManager::Get().Delete(*(GetDirectory() / (Name + TEXT(".json"))));
+}
+
 bool CombatLevels::BuildConfig(const FCombatLevel& Level, int32 TickRate, TFunctionRef<const UCombatUnitDefinition*(const FString&)> Resolve,
 	FCombatSimConfig& OutConfig, TArray<const UCombatUnitDefinition*>* OutDefinitions)
 {

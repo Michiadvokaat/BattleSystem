@@ -1241,14 +1241,7 @@ bool UCombatSubsystem::LoadDesignLevel(const FString& Name, FString& OutMessage)
 
 bool UCombatSubsystem::SaveDesignLevel(const FString& Name, FString& OutMessage)
 {
-	FString Clean;
-	for (const TCHAR Char : Name)
-	{
-		if (FChar::IsAlnum(Char) || Char == TEXT('_') || Char == TEXT('-'))
-		{
-			Clean.AppendChar(Char);
-		}
-	}
+	const FString Clean = CombatLevels::CleanName(Name);
 	if (Clean.IsEmpty())
 	{
 		OutMessage = TEXT("Give the level a name (letters, digits, - or _).");
@@ -1262,6 +1255,53 @@ bool UCombatSubsystem::SaveDesignLevel(const FString& Name, FString& OutMessage)
 		return false;
 	}
 	OutMessage = FString::Printf(TEXT("Saved Levels/%s.json"), *Clean);
+	UE_LOG(LogCombat, Display, TEXT("%s"), *OutMessage);
+	return true;
+}
+
+bool UCombatSubsystem::RenameLevelFile(const FString& OldName, const FString& NewName, FString& OutMessage)
+{
+	const FString Clean = CombatLevels::CleanName(NewName);
+	if (Clean.IsEmpty())
+	{
+		OutMessage = TEXT("Type the new name in the Name field (letters, digits, - or _).");
+		return false;
+	}
+	if (Clean == OldName)
+	{
+		OutMessage = FString::Printf(TEXT("Level %s already has that name."), *OldName);
+		return false;
+	}
+	if (CombatLevels::Exists(Clean))
+	{
+		OutMessage = FString::Printf(TEXT("Level %s already exists."), *Clean);
+		return false;
+	}
+	if (!CombatLevels::Rename(OldName, Clean))
+	{
+		OutMessage = FString::Printf(TEXT("Could not rename %s."), *OldName);
+		return false;
+	}
+
+	if (DesignLevel.Name == OldName)
+	{
+		DesignLevel.Name = Clean;
+	}
+	OutMessage = FString::Printf(TEXT("Renamed %s to %s."), *OldName, *Clean);
+	UE_LOG(LogCombat, Display, TEXT("%s"), *OutMessage);
+	return true;
+}
+
+bool UCombatSubsystem::DeleteLevelFile(const FString& Name, FString& OutMessage)
+{
+	if (!CombatLevels::Delete(Name))
+	{
+		OutMessage = FString::Printf(TEXT("Could not delete %s."), *Name);
+		return false;
+	}
+	OutMessage = DesignLevel.Name == Name
+		? FString::Printf(TEXT("Deleted Levels/%s.json; the open level is now unsaved."), *Name)
+		: FString::Printf(TEXT("Deleted Levels/%s.json."), *Name);
 	UE_LOG(LogCombat, Display, TEXT("%s"), *OutMessage);
 	return true;
 }

@@ -154,6 +154,13 @@ public:
 	bool LoadDesignLevel(const FString& Name, FString& OutMessage);
 	/** Saves the edited level as Levels/<Name>.json (the name is cleaned to letters, digits, - and _). */
 	bool SaveDesignLevel(const FString& Name, FString& OutMessage);
+	/**
+	 * Renames a saved level file (NewName is cleaned like a save). Refused when the new name exists. If it is the
+	 * level being edited, that one gets the new name too.
+	 */
+	bool RenameLevelFile(const FString& OldName, const FString& NewName, FString& OutMessage);
+	/** Deletes Levels/<Name>.json. The edited level stays open (unsaved), even if it was that file. */
+	bool DeleteLevelFile(const FString& Name, FString& OutMessage);
 	/** Starts a fight from the edited level (leaves edit mode). */
 	bool PlayDesignLevel(int32 Seed);
 	void SetDesignSize(int32 Width, int32 Height);
