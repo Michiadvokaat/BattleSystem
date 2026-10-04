@@ -116,6 +116,20 @@ struct FCombatUnitSpawn
 	FIntPoint StartCell = FIntPoint::ZeroValue;
 };
 
+/** An enemy that appears during a wave. */
+struct FCombatWaveSpawn
+{
+	FCombatUnitStats Stats;
+	FIntPoint Cell = FIntPoint::ZeroValue;
+	/** Ticks after the start of its wave. */
+	int32 DelayTicks = 0;
+};
+
+struct FCombatWave
+{
+	TArray<FCombatWaveSpawn> Spawns;
+};
+
 /** Everything a fight needs. A fight is fully determined by this config (on the same build). */
 struct FCombatSimConfig
 {
@@ -126,6 +140,13 @@ struct FCombatSimConfig
 	int32 TickRate = 20;
 	/** The fight ends as a time-out after this many ticks. */
 	int32 MaxTicks = 2400;
+	/**
+	 * Enemy waves, in order. The first starts WavePauseTicks after the fight starts, every next one WavePauseTicks
+	 * after the previous is clear (all its units spawned and no WaveTeam unit alive), or earlier with a CallWave command.
+	 */
+	TArray<FCombatWave> Waves;
+	int32 WaveTeam = 1;
+	int32 WavePauseTicks = 100;
 	/** Player commands known in advance (a script or a replay), queued at the start in this order. */
 	TArray<FCombatCommand> Commands;
 	/** Once a unit first reaches attack range, its first attack waits a random 0..N ticks, so the seed matters. */
@@ -172,6 +193,11 @@ struct FCombatUnit
 {
 	int32 Id = INDEX_NONE;
 	int32 Team = 0;
+	/**
+	 * What the unit was made from: its index in the config's Units, or Units.Num() + its index among all wave
+	 * spawns (waves in order). The presentation and the statistics find the definition with it.
+	 */
+	int32 SourceIndex = INDEX_NONE;
 	FCombatUnitStats Stats;
 
 	/** Grid-local position in cm, at the end of the previous and the current step. */
@@ -258,6 +284,10 @@ enum class ECombatEventType : uint8
 	AreaTelegraphStarted,
 	/** SourceId's area attack AttackIndex went off (AreaId, Area). */
 	AreaAttackFired,
+	/** Wave WaveIndex started. */
+	WaveStarted,
+	/** Unit SourceId appeared (wave WaveIndex). */
+	UnitSpawned,
 };
 
 struct FCombatEvent
@@ -273,6 +303,8 @@ struct FCombatEvent
 	FCombatArea Area;
 	/** Presentation cue (the attack's ImpactCue) for Hit and AreaAttackFired. */
 	FGameplayTag Cue;
+	/** Wave events only. */
+	int32 WaveIndex = INDEX_NONE;
 };
 
 enum class ECombatOutcome : uint8
@@ -334,6 +366,15 @@ public:
 	/** The distance map towards the enemies of a team, or null if the team has no units. */
 	const FCombatDistanceMap* GetDistanceMap(int32 Team) const;
 
+	int32 GetWaveCount() const { return Config.Waves.Num(); }
+	/** Waves started so far (the next wave's index). */
+	int32 GetWavesStarted() const { return WavesStarted; }
+	/** Tick at whose start the next wave starts, or INDEX_NONE while waiting for the field to clear (or none is left). */
+	int32 GetNextWaveTick() const { return NextWaveTick; }
+	/** A wave still has to start or still has units to spawn; the wave team then counts as alive. */
+	bool HasWavesLeft() const { return WavesStarted < Config.Waves.Num() || !PendingSpawns.IsEmpty(); }
+	int32 GetWaveTeam() const { return Config.WaveTeam; }
+
 	static const TCHAR* OutcomeToString(ECombatOutcome InOutcome);
 
 private:
@@ -347,6 +388,20 @@ private:
 		float ThreatMultiplier;
 	};
 
+	/** A spawn of a started wave that has not appeared yet. */
+	struct FPendingSpawn
+	{
+		int32 Tick;
+		int32 WaveIndex;
+		int32 SpawnIndex;
+	};
+
+	FCombatUnit& AddUnit(const FCombatUnitStats& Stats, int32 Team, const FIntPoint& Cell, int32 SourceIndex);
+	void StartWave();
+	/** Starts a wave whose time has come and spawns the units that are due. */
+	void UpdateWaves();
+	/** After the step: once the field is clear, the pause until the next wave starts. */
+	void UpdateWaveClear();
 	void RebuildDistanceMaps();
 	int32 FindNearestEnemy(const FCombatUnit& Unit) const;
 	/** Taunt immediately; otherwise every RetargetIntervalTicks (or without a valid target) by priority, with hysteresis. */
@@ -404,6 +459,13 @@ private:
 	int32 NextProjectileId = 0;
 	TArray<FCombatPendingArea> PendingAreas;
 	int32 NextAreaId = 0;
+
+	int32 WavesStarted = 0;
+	int32 NextWaveTick = INDEX_NONE;
+	/** In the order the waves started, each wave's spawns in their order. */
+	TArray<FPendingSpawn> PendingSpawns;
+	/** Per wave: the SourceIndex of its first spawn. */
+	TArray<int32> WaveFirstSourceIndex;
 
 	/** Commands not yet run, ordered by tick and then by the order they were given. */
 	TArray<FCombatCommand> PendingCommands;

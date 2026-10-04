@@ -62,6 +62,10 @@ public:
 	UPROPERTY(Config, EditAnywhere, Category = "Simulation", meta = (ClampMin = 0, Units = "s"))
 	float MaxFirstAttackDelay = 0.5f;
 
+	/** Pause before the first wave of a level, and between a cleared wave and the next (rounded to ticks). */
+	UPROPERTY(Config, EditAnywhere, Category = "Waves", meta = (ClampMin = 0.05, Units = "s"))
+	float WavePauseSeconds = 5.f;
+
 	/** How often the per-team distance maps (and so the targets) are rebuilt; they are also rebuilt after every death. */
 	UPROPERTY(Config, EditAnywhere, Category = "Movement", meta = (ClampMin = 0.05, Units = "s"))
 	float RetargetInterval = 0.25f;

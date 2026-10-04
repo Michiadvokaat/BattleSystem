@@ -31,6 +31,8 @@ struct BATTLESYSTEM_API FCombatSimSettings
 	UPROPERTY() float RetargetDistanceMargin = 150.f;
 	/** cm for every Attack.Taunt; 0 = the Range from the Data Asset. */
 	UPROPERTY() float TauntRangeOverride = 0.f;
+	/** Pause before the first wave and after each cleared wave. */
+	UPROPERTY() int32 WavePauseTicks = 100;
 
 	/** The current project settings (Project Settings > Game > Combat), with the given taunt range override. */
 	static FCombatSimSettings FromProjectSettings(float InTauntRangeOverride = 0.f);

@@ -180,7 +180,61 @@ void SCombatLevelDesigner::Construct(const FArguments& InArgs)
 				+ SHorizontalBox::Slot().AutoWidth().Padding(0.f, 0.f, 4.f, 0.f)[ ToolButton(INVTEXT("Wall"), ECombatDesignTool::Wall) ]
 				+ SHorizontalBox::Slot().AutoWidth().Padding(0.f, 0.f, 4.f, 0.f)[ ToolButton(INVTEXT("Hedge"), ECombatDesignTool::Hedge) ]
 				+ SHorizontalBox::Slot().AutoWidth().Padding(0.f, 0.f, 4.f, 0.f)[ ToolButton(INVTEXT("Water"), ECombatDesignTool::Water) ]
-				+ SHorizontalBox::Slot().AutoWidth()[ ToolButton(INVTEXT("Unit"), ECombatDesignTool::Unit) ]
+				+ SHorizontalBox::Slot().AutoWidth().Padding(0.f, 0.f, 4.f, 0.f)[ ToolButton(INVTEXT("Unit"), ECombatDesignTool::Unit) ]
+				+ SHorizontalBox::Slot().AutoWidth()[ ToolButton(INVTEXT("Spawn"), ECombatDesignTool::Spawn) ]
+			]
+
+			// Waves: select, add after the selected one, remove the selected one. The arena shows the selected wave's spawns.
+			+ SVerticalBox::Slot().AutoHeight().Padding(0.f, 2.f)
+			[
+				SNew(SHorizontalBox)
+				.Visibility(this, &SCombatLevelDesigner::GetEditVisibility)
+				+ SHorizontalBox::Slot().AutoWidth().VAlign(VAlign_Center)[ MakeLabel(INVTEXT("Wave")) ]
+				+ SHorizontalBox::Slot().AutoWidth().Padding(0.f, 0.f, 4.f, 0.f)
+				[
+					MakeButton(INVTEXT("<"), [this]()
+					{
+						if (UCombatSubsystem* Current = Subsystem.Get()) { Current->SetDesignWave(Current->GetDesignWave() - 1); }
+					})
+				]
+				+ SHorizontalBox::Slot().AutoWidth().VAlign(VAlign_Center).Padding(0.f, 0.f, 4.f, 0.f)
+				[
+					SNew(SBox)
+					.WidthOverride(50.f)
+					.HAlign(HAlign_Center)
+					[
+						SNew(STextBlock).Text_Lambda([this]()
+						{
+							const UCombatSubsystem* Current = Subsystem.Get();
+							if (!Current || Current->GetDesignWave() == INDEX_NONE)
+							{
+								return INVTEXT("none");
+							}
+							return FText::FromString(FString::Printf(TEXT("%d / %d"), Current->GetDesignWave() + 1, Current->GetDesignLevel().Waves.Num()));
+						})
+					]
+				]
+				+ SHorizontalBox::Slot().AutoWidth().Padding(0.f, 0.f, 10.f, 0.f)
+				[
+					MakeButton(INVTEXT(">"), [this]()
+					{
+						if (UCombatSubsystem* Current = Subsystem.Get()) { Current->SetDesignWave(Current->GetDesignWave() + 1); }
+					})
+				]
+				+ SHorizontalBox::Slot().AutoWidth().Padding(0.f, 0.f, 4.f, 0.f)
+				[
+					MakeButton(INVTEXT("+"), [this]()
+					{
+						if (UCombatSubsystem* Current = Subsystem.Get()) { Current->AddDesignWave(); }
+					})
+				]
+				+ SHorizontalBox::Slot().AutoWidth()
+				[
+					MakeButton(INVTEXT("-"), [this]()
+					{
+						if (UCombatSubsystem* Current = Subsystem.Get()) { Current->RemoveDesignWave(); }
+					})
+				]
 			]
 
 			+ SVerticalBox::Slot().AutoHeight().Padding(0.f, 2.f)
@@ -189,7 +243,8 @@ void SCombatLevelDesigner::Construct(const FArguments& InArgs)
 				.Visibility_Lambda([this]()
 				{
 					const UCombatSubsystem* Current = Subsystem.Get();
-					return IsEditing() && Current && Current->GetDesignTool() == ECombatDesignTool::Unit ? EVisibility::Visible : EVisibility::Collapsed;
+					const bool bPlacesUnits = Current && (Current->GetDesignTool() == ECombatDesignTool::Unit || Current->GetDesignTool() == ECombatDesignTool::Spawn);
+					return IsEditing() && bPlacesUnits ? EVisibility::Visible : EVisibility::Collapsed;
 				})
 				+ SHorizontalBox::Slot().AutoWidth().VAlign(VAlign_Center)[ MakeLabel(INVTEXT("Unit")) ]
 				+ SHorizontalBox::Slot().FillWidth(1.f).Padding(0.f, 0.f, 4.f, 0.f)
@@ -213,8 +268,51 @@ void SCombatLevelDesigner::Construct(const FArguments& InArgs)
 						})
 					]
 				]
-				+ SHorizontalBox::Slot().AutoWidth().Padding(0.f, 0.f, 4.f, 0.f)[ TeamButton(0) ]
-				+ SHorizontalBox::Slot().AutoWidth()[ TeamButton(1) ]
+				+ SHorizontalBox::Slot().AutoWidth()
+				[
+					// Unit: the team. Spawn: the time after the wave start (spawns are always the wave team).
+					SNew(SHorizontalBox)
+					.Visibility_Lambda([this]()
+					{
+						const UCombatSubsystem* Current = Subsystem.Get();
+						return Current && Current->GetDesignTool() == ECombatDesignTool::Unit ? EVisibility::Visible : EVisibility::Collapsed;
+					})
+					+ SHorizontalBox::Slot().AutoWidth().Padding(0.f, 0.f, 4.f, 0.f)[ TeamButton(0) ]
+					+ SHorizontalBox::Slot().AutoWidth()[ TeamButton(1) ]
+				]
+				+ SHorizontalBox::Slot().AutoWidth()
+				[
+					SNew(SHorizontalBox)
+					.Visibility_Lambda([this]()
+					{
+						const UCombatSubsystem* Current = Subsystem.Get();
+						return Current && Current->GetDesignTool() == ECombatDesignTool::Spawn ? EVisibility::Visible : EVisibility::Collapsed;
+					})
+					+ SHorizontalBox::Slot().AutoWidth().VAlign(VAlign_Center).Padding(0.f, 0.f, 4.f, 0.f)[ SNew(STextBlock).Text(INVTEXT("Time (s)")) ]
+					+ SHorizontalBox::Slot().AutoWidth()
+					[
+						SNew(SBox)
+						.WidthOverride(60.f)
+						[
+							SNew(SSpinBox<float>)
+							.MinValue(0.f)
+							.MaxValue(600.f)
+							.Delta(0.5f)
+							.Value_Lambda([this]()
+							{
+								const UCombatSubsystem* Current = Subsystem.Get();
+								return Current ? Current->GetDesignSpawnTime() : 0.f;
+							})
+							.OnValueChanged_Lambda([this](float Value)
+							{
+								if (UCombatSubsystem* Current = Subsystem.Get())
+								{
+									Current->SetDesignSpawnTime(Value);
+								}
+							})
+						]
+					]
+				]
 			]
 
 			+ SVerticalBox::Slot().AutoHeight().Padding(0.f, 6.f, 0.f, 0.f)

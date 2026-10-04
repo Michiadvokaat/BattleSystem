@@ -35,6 +35,7 @@ FCombatSimSettings FCombatSimSettings::FromProjectSettings(float InTauntRangeOve
 	Settings.ThreatSwitchRatio = Project->ThreatSwitchRatio;
 	Settings.RetargetDistanceMargin = Project->RetargetDistanceMargin;
 	Settings.TauntRangeOverride = InTauntRangeOverride;
+	Settings.WavePauseTicks = FMath::Max(Project->SecondsToTicks(Project->WavePauseSeconds), 1);
 	return Settings;
 }
 
@@ -51,17 +52,29 @@ void FCombatSimSettings::ApplyTo(FCombatSimConfig& Config) const
 	Config.ThreatThreshold = ThreatThreshold;
 	Config.ThreatSwitchRatio = ThreatSwitchRatio;
 	Config.RetargetDistanceMargin = RetargetDistanceMargin;
+	Config.WavePauseTicks = WavePauseTicks;
 
 	if (TauntRangeOverride > 0.f)
 	{
-		for (FCombatUnitSpawn& Spawn : Config.Units)
+		auto OverrideTaunts = [this](FCombatUnitStats& Stats)
 		{
-			for (FCombatAttackStats& Attack : Spawn.Stats.Attacks)
+			for (FCombatAttackStats& Attack : Stats.Attacks)
 			{
 				if (Attack.Type.MatchesTagExact(CombatTags::Attack_Taunt))
 				{
 					Attack.AreaRadius = TauntRangeOverride;
 				}
+			}
+		};
+		for (FCombatUnitSpawn& Spawn : Config.Units)
+		{
+			OverrideTaunts(Spawn.Stats);
+		}
+		for (FCombatWave& Wave : Config.Waves)
+		{
+			for (FCombatWaveSpawn& Spawn : Wave.Spawns)
+			{
+				OverrideTaunts(Spawn.Stats);
 			}
 		}
 	}

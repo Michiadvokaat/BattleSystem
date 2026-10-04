@@ -20,8 +20,29 @@ struct FCombatLevelUnit
 	UPROPERTY() FIntPoint Cell = FIntPoint::ZeroValue;
 };
 
+/** An enemy (wave team) that appears during a wave. */
+USTRUCT()
+struct FCombatLevelSpawn
+{
+	GENERATED_BODY()
+
+	/** Asset name of the UCombatUnitDefinition. */
+	UPROPERTY() FString Type;
+	UPROPERTY() FIntPoint Cell = FIntPoint::ZeroValue;
+	/** Seconds after the start of its wave. */
+	UPROPERTY() float Time = 0.f;
+};
+
+USTRUCT()
+struct FCombatLevelWave
+{
+	GENERATED_BODY()
+
+	UPROPERTY() TArray<FCombatLevelSpawn> Spawns;
+};
+
 /**
- * A level built with the LevelDesigner: grid size, cells and starting units. Saved as readable JSON in
+ * A level built with the LevelDesigner: grid size, cells, starting units and enemy waves. Saved as readable JSON in
  * <Project>/Levels/<Name>.json and copied into replays. Cells are text rows, one character per cell.
  */
 USTRUCT()
@@ -40,7 +61,8 @@ struct BATTLESYSTEM_API FCombatLevel
 	static constexpr int32 MinSize = 5;
 	static constexpr int32 MaxSize = 40;
 
-	UPROPERTY() int32 FormatVersion = 1;
+	/** 1 = no waves; 2 = with waves (version 1 files load as levels without waves). */
+	UPROPERTY() int32 FormatVersion = 2;
 	UPROPERTY() FString Name;
 	UPROPERTY() int32 Width = 20;
 	UPROPERTY() int32 Height = 12;
@@ -48,6 +70,8 @@ struct BATTLESYSTEM_API FCombatLevel
 	/** Height rows of Width characters; row Y is cells (0..Width-1, Y). Unknown characters count as open. */
 	UPROPERTY() TArray<FString> Rows;
 	UPROPERTY() TArray<FCombatLevelUnit> Units;
+	/** Enemy waves, in order; see FCombatSimConfig::Waves for when each starts. */
+	UPROPERTY() TArray<FCombatLevelWave> Waves;
 
 	/** An open level of the given size (clamped to MinSize..MaxSize). */
 	static FCombatLevel MakeEmpty(const FString& InName, int32 InWidth, int32 InHeight);
@@ -55,7 +79,7 @@ struct BATTLESYSTEM_API FCombatLevel
 	/** Clamps the size and makes every row exactly Width characters (padding with open cells). */
 	void Normalize();
 
-	/** Changes the size; cells and units outside the new size are removed. */
+	/** Changes the size; cells, units and spawns outside the new size are removed. */
 	void Resize(int32 NewWidth, int32 NewHeight);
 
 	bool IsInBounds(const FIntPoint& Cell) const { return Cell.X >= 0 && Cell.Y >= 0 && Cell.X < Width && Cell.Y < Height; }
@@ -65,6 +89,10 @@ struct BATTLESYSTEM_API FCombatLevel
 
 	/** Index in Units of the unit on Cell, or INDEX_NONE. */
 	int32 FindUnitAt(const FIntPoint& Cell) const;
+	/** Index in Waves[WaveIndex].Spawns of the spawn on Cell, or INDEX_NONE. */
+	int32 FindSpawnAt(int32 WaveIndex, const FIntPoint& Cell) const;
+	/** Removes the spawns on Cell from every wave; returns whether there were any. */
+	bool RemoveSpawnsAt(const FIntPoint& Cell);
 
 	void ToGridData(FCombatGridData& OutGrid) const;
 };
@@ -82,9 +110,10 @@ namespace CombatLevels
 	BATTLESYSTEM_API bool FromJson(const FString& Json, FCombatLevel& OutLevel);
 
 	/**
-	 * Builds a simulation config (grid and units) from a level. Resolve turns a unit type name into its definition;
-	 * units of an unknown type or on an unwalkable cell are skipped with a warning. OutDefinitions gets the
-	 * definition per unit ID. Settings (tick rate and the rest) are applied by the caller.
+	 * Builds a simulation config (grid, units and waves) from a level. Resolve turns a unit type name into its
+	 * definition; units and spawns of an unknown type or on an unwalkable cell are skipped with a warning.
+	 * OutDefinitions gets the definition per FCombatUnit::SourceIndex: the units, then every wave's spawns.
+	 * Settings (tick rate and the rest) are applied by the caller.
 	 */
 	BATTLESYSTEM_API bool BuildConfig(const FCombatLevel& Level, int32 TickRate, TFunctionRef<const UCombatUnitDefinition*(const FString&)> Resolve,
 		FCombatSimConfig& OutConfig, TArray<const UCombatUnitDefinition*>* OutDefinitions = nullptr);

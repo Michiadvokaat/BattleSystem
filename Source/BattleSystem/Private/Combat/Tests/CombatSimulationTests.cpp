@@ -1473,4 +1473,301 @@ bool FCombatLevelReplayTest::RunTest(const FString& Parameters)
 	return true;
 }
 
+namespace CombatTests
+{
+	static void AddWaveSpawn(FCombatSimConfig& Config, int32 WaveIndex, const FCombatUnitStats& Stats, FIntPoint Cell, int32 DelayTicks)
+	{
+		while (Config.Waves.Num() <= WaveIndex)
+		{
+			Config.Waves.AddDefaulted();
+		}
+		FCombatWaveSpawn& Spawn = Config.Waves[WaveIndex].Spawns.AddDefaulted_GetRef();
+		Spawn.Stats = Stats;
+		Spawn.Cell = Cell;
+		Spawn.DelayTicks = DelayTicks;
+	}
+
+	static FCombatCommand MakeCallWave(int32 Tick)
+	{
+		FCombatCommand Command;
+		Command.Tick = Tick;
+		Command.UnitId = INDEX_NONE;
+		Command.Type = ECombatCommandType::CallWave;
+		return Command;
+	}
+
+	static FCombatLevelSpawn MakeLevelSpawn(const FString& Type, FIntPoint Cell, float Time)
+	{
+		FCombatLevelSpawn Spawn;
+		Spawn.Type = Type;
+		Spawn.Cell = Cell;
+		Spawn.Time = Time;
+		return Spawn;
+	}
+
+	/** A hero (team 0) that kills a 10 HP enemy in one hit, against waves of one such enemy each next to it. */
+	static FCombatSimConfig MakeClearableWaves(int32 WaveCount, int32 PauseTicks)
+	{
+		FCombatSimConfig Config;
+		Config.Grid.Init(20, 12, 100.f);
+		Config.MaxFirstAttackDelayTicks = 0;
+		Config.WavePauseTicks = PauseTicks;
+		AddUnit(Config, MakeStats(1000.f, 100.f, 5, 0), 0, FIntPoint(2, 5));
+		for (int32 Wave = 0; Wave < WaveCount; ++Wave)
+		{
+			AddWaveSpawn(Config, Wave, MakeStats(10.f, 1.f, 20, 0), FIntPoint(4, 5), 0);
+		}
+		return Config;
+	}
+}
+
+IMPLEMENT_SIMPLE_AUTOMATION_TEST(FCombatWaveTimingTest, "BattleSystem.Combat.WaveSpawnTiming",
+	EAutomationTestFlags::EditorContext | EAutomationTestFlags::ProductFilter)
+
+bool FCombatWaveTimingTest::RunTest(const FString& Parameters)
+{
+	// Only a hero at the start: the fight waits for the wave instead of ending at once.
+	FCombatSimConfig Config;
+	Config.Grid.Init(20, 12, 100.f);
+	Config.WavePauseTicks = 20;
+	CombatTests::AddUnit(Config, CombatTests::MakeDummyStats(), 0, FIntPoint(2, 5));
+	CombatTests::AddWaveSpawn(Config, 0, CombatTests::MakeDummyStats(), FIntPoint(10, 5), 0);
+	CombatTests::AddWaveSpawn(Config, 0, CombatTests::MakeDummyStats(), FIntPoint(12, 5), 10);
+
+	FCombatSimulation Simulation(Config);
+	int32 WaveStartTick = INDEX_NONE;
+	TArray<int32> SpawnTicks;
+	for (int32 Step = 0; Step < 40; ++Step)
+	{
+		Simulation.Step();
+		for (const FCombatEvent& Event : Simulation.GetEvents())
+		{
+			if (Event.Type == ECombatEventType::WaveStarted && Event.WaveIndex == 0)
+			{
+				WaveStartTick = Simulation.GetTick();
+			}
+			if (Event.Type == ECombatEventType::UnitSpawned)
+			{
+				SpawnTicks.Add(Simulation.GetTick());
+			}
+		}
+		if (Simulation.GetTick() < 20)
+		{
+			TestFalse(TEXT("Not over while a wave is to come"), Simulation.IsFinished());
+		}
+	}
+
+	TestEqual(TEXT("The first wave starts after the pause"), WaveStartTick, 20);
+	TestTrue(TEXT("Spawns at wave start + delay"), SpawnTicks == TArray<int32>({ 20, 30 }));
+	TestEqual(TEXT("Three units"), Simulation.GetUnits().Num(), 3);
+	if (Simulation.GetUnits().Num() == 3)
+	{
+		const FCombatUnit& Spawned = Simulation.GetUnits()[2];
+		TestEqual(TEXT("Spawned on the wave team"), Spawned.Team, 1);
+		TestTrue(TEXT("Spawned on its cell"), Config.Grid.LocalToCell(Spawned.Position) == FIntPoint(12, 5));
+		TestEqual(TEXT("SourceIndex after the config units"), Spawned.SourceIndex, 2);
+	}
+	TestFalse(TEXT("Still running (nobody can attack)"), Simulation.IsFinished());
+	return true;
+}
+
+IMPLEMENT_SIMPLE_AUTOMATION_TEST(FCombatWaveClearTest, "BattleSystem.Combat.WaveWaitsForClear",
+	EAutomationTestFlags::EditorContext | EAutomationTestFlags::ProductFilter)
+
+bool FCombatWaveClearTest::RunTest(const FString& Parameters)
+{
+	const FCombatSimConfig Config = CombatTests::MakeClearableWaves(2, 20);
+	FCombatSimulation Simulation(Config);
+
+	TArray<int32> StartTicks;
+	TArray<int32> DeathTicks;
+	bool bSecondWhileFirstAlive = false;
+	while (!Simulation.IsFinished() && Simulation.GetTick() < 500)
+	{
+		Simulation.Step();
+		for (const FCombatEvent& Event : Simulation.GetEvents())
+		{
+			if (Event.Type == ECombatEventType::WaveStarted)
+			{
+				StartTicks.Add(Simulation.GetTick());
+				bSecondWhileFirstAlive |= Event.WaveIndex == 1 && Simulation.GetUnits()[1].bAlive;
+			}
+			if (Event.Type == ECombatEventType::Death)
+			{
+				DeathTicks.Add(Simulation.GetTick());
+			}
+		}
+	}
+
+	TestEqual(TEXT("Both waves started"), StartTicks.Num(), 2);
+	TestEqual(TEXT("Both enemies died"), DeathTicks.Num(), 2);
+	TestFalse(TEXT("Wave 2 waits until wave 1 is dead"), bSecondWhileFirstAlive);
+	if (StartTicks.Num() == 2 && DeathTicks.Num() == 2)
+	{
+		TestEqual(TEXT("Wave 2 starts a pause after the clear"), StartTicks[1], DeathTicks[0] + 20);
+	}
+	TestTrue(TEXT("The hero wins after the last wave"), Simulation.GetOutcome() == ECombatOutcome::TeamWon && Simulation.GetWinningTeam() == 0);
+	TestEqual(TEXT("Not before the last enemy died"), Simulation.GetTick(), DeathTicks.IsEmpty() ? -1 : DeathTicks.Last());
+
+	// Batch statistics count spawned units by their source (definition) index.
+	const TArray<FString> TypeNames = { TEXT("Hero"), TEXT("Grunt"), TEXT("Grunt") };
+	const FCombatBatchResult Result = CombatBatch::Run(Config, TypeNames, 2, 1);
+	const FCombatBatchUnitType* Grunts = Result.UnitTypes.FindByPredicate([](const FCombatBatchUnitType& Type) { return Type.Name == TEXT("Grunt"); });
+	TestTrue(TEXT("Two spawned grunts per fight"), Grunts && Grunts->Units == 4);
+	TestEqual(TEXT("Both teams in the report"), Result.Teams.Num(), 2);
+	return true;
+}
+
+IMPLEMENT_SIMPLE_AUTOMATION_TEST(FCombatWaveCallTest, "BattleSystem.Combat.WaveCallEarly",
+	EAutomationTestFlags::EditorContext | EAutomationTestFlags::ProductFilter)
+
+bool FCombatWaveCallTest::RunTest(const FString& Parameters)
+{
+	// Nobody can attack, so only calls start the waves (the pause is long).
+	FCombatSimConfig Config;
+	Config.Grid.Init(20, 12, 100.f);
+	Config.WavePauseTicks = 1000;
+	CombatTests::AddUnit(Config, CombatTests::MakeDummyStats(), 0, FIntPoint(2, 5));
+	for (int32 Wave = 0; Wave < 3; ++Wave)
+	{
+		CombatTests::AddWaveSpawn(Config, Wave, CombatTests::MakeDummyStats(), FIntPoint(10, 2 + Wave * 3), 0);
+	}
+	Config.Commands.Add(CombatTests::MakeCallWave(5));
+	Config.Commands.Add(CombatTests::MakeCallWave(8));	// wave 1 still alive: overlaps
+	Config.Commands.Add(CombatTests::MakeCallWave(9));
+	Config.Commands.Add(CombatTests::MakeCallWave(10));	// no wave left: rejected
+
+	FCombatSimulation Simulation(Config);
+	TArray<int32> StartTicks;
+	int32 Rejected = 0;
+	for (int32 Step = 0; Step < 12; ++Step)
+	{
+		Simulation.Step();
+		for (const FCombatEvent& Event : Simulation.GetEvents())
+		{
+			if (Event.Type == ECombatEventType::WaveStarted)
+			{
+				StartTicks.Add(Simulation.GetTick());
+			}
+		}
+		Rejected += CombatTests::CountEvents(Simulation, ECombatEventType::CommandRejected, INDEX_NONE);
+		if (Simulation.GetTick() == 5)
+		{
+			TestEqual(TEXT("A called wave's units appear in the same step"), Simulation.GetUnits().Num(), 2);
+			TestEqual(TEXT("After a call the next wave waits for a clear"), Simulation.GetNextWaveTick(), static_cast<int32>(INDEX_NONE));
+		}
+	}
+
+	TestTrue(TEXT("Waves start at the calls"), StartTicks == TArray<int32>({ 5, 8, 9 }));
+	TestEqual(TEXT("All three waves started"), Simulation.GetWavesStarted(), 3);
+	TestEqual(TEXT("The call after the last wave is rejected"), Rejected, 1);
+	TestEqual(TEXT("All enemies are there at once"), Simulation.GetUnits().Num(), 4);
+	TestFalse(TEXT("No waves left"), Simulation.HasWavesLeft());
+	return true;
+}
+
+IMPLEMENT_SIMPLE_AUTOMATION_TEST(FCombatWaveOutcomeTest, "BattleSystem.Combat.WaveWinCondition",
+	EAutomationTestFlags::EditorContext | EAutomationTestFlags::ProductFilter)
+
+bool FCombatWaveOutcomeTest::RunTest(const FString& Parameters)
+{
+	// The heroes die while a wave is still to come: the wave team wins.
+	FCombatSimConfig Config;
+	Config.Grid.Init(20, 12, 100.f);
+	Config.MaxFirstAttackDelayTicks = 0;
+	Config.WavePauseTicks = 1;
+	CombatTests::AddUnit(Config, CombatTests::MakeStats(10.f, 1.f, 20, 0), 0, FIntPoint(2, 5));
+	CombatTests::AddWaveSpawn(Config, 0, CombatTests::MakeStats(1000.f, 100.f, 5, 0), FIntPoint(4, 5), 0);
+	CombatTests::AddWaveSpawn(Config, 1, CombatTests::MakeDummyStats(), FIntPoint(10, 5), 0);
+
+	FCombatSimulation Simulation(Config);
+	Simulation.RunToEnd();
+	TestTrue(TEXT("The wave team wins"), Simulation.GetOutcome() == ECombatOutcome::TeamWon && Simulation.GetWinningTeam() == 1);
+	TestTrue(TEXT("Wave 2 never started"), Simulation.GetWavesStarted() == 1 && Simulation.HasWavesLeft());
+
+	// Every enemy of every wave dead: the heroes win, but only after the last wave.
+	FCombatSimulation Cleared(CombatTests::MakeClearableWaves(3, 10));
+	Cleared.RunToEnd();
+	TestTrue(TEXT("The heroes win"), Cleared.GetOutcome() == ECombatOutcome::TeamWon && Cleared.GetWinningTeam() == 0);
+	TestEqual(TEXT("After all waves"), Cleared.GetWavesStarted(), 3);
+	return true;
+}
+
+IMPLEMENT_SIMPLE_AUTOMATION_TEST(FCombatWaveLevelTest, "BattleSystem.Combat.WaveLevelFormat",
+	EAutomationTestFlags::EditorContext | EAutomationTestFlags::ProductFilter)
+
+bool FCombatWaveLevelTest::RunTest(const FString& Parameters)
+{
+	FCombatLevel Level = CombatTests::MakeTestLevel();
+	Level.Waves.AddDefaulted(3);
+	Level.Waves[0].Spawns.Add(CombatTests::MakeLevelSpawn(TEXT("Fighter"), FIntPoint(9, 1), 1.5f));
+	Level.Waves[0].Spawns.Add(CombatTests::MakeLevelSpawn(TEXT("Fighter"), FIntPoint(5, 1), 0.f));	// on the wall: skipped
+	Level.Waves[0].Spawns.Add(CombatTests::MakeLevelSpawn(TEXT("Unknown"), FIntPoint(9, 2), 0.f));	// unknown type: skipped
+	Level.Waves[2].Spawns.Add(CombatTests::MakeLevelSpawn(TEXT("Fighter"), FIntPoint(11, 7), 0.f));	// wave 2 stays empty
+
+	FString Json;
+	TestTrue(TEXT("Writes JSON"), CombatLevels::ToJson(Level, Json));
+	TestTrue(TEXT("JSON has waves"), Json.Contains(TEXT("\"waves\"")));
+	FCombatLevel Loaded;
+	TestTrue(TEXT("Reads JSON"), CombatLevels::FromJson(Json, Loaded));
+	TestEqual(TEXT("Waves survive"), Loaded.Waves.Num(), 3);
+	TestTrue(TEXT("A spawn survives"), Loaded.Waves.Num() == 3 && Loaded.Waves[0].Spawns.Num() == 3
+		&& Loaded.Waves[0].Spawns[0].Cell == FIntPoint(9, 1) && Loaded.Waves[0].Spawns[0].Time == 1.5f);
+
+	// A version 1 file (no waves) still loads.
+	FCombatLevel Old;
+	TestTrue(TEXT("Reads a version 1 level"), CombatLevels::FromJson(TEXT("{\"formatVersion\":1,\"name\":\"Old\",\"width\":6,\"height\":5,\"rows\":[],\"units\":[]}"), Old));
+	TestTrue(TEXT("Without waves, at the current version"), Old.Waves.IsEmpty() && Old.FormatVersion == FCombatLevel().FormatVersion);
+
+	const UCombatUnitDefinition* Fighter = CombatTests::MakeTestDefinition();
+	auto Resolve = [Fighter](const FString& Type) { return Type == TEXT("Fighter") ? Fighter : nullptr; };
+	FCombatSimConfig Config;
+	TArray<const UCombatUnitDefinition*> Definitions;
+	TestTrue(TEXT("Builds"), CombatLevels::BuildConfig(Level, 20, Resolve, Config, &Definitions));
+	TestEqual(TEXT("Every wave is kept"), Config.Waves.Num(), 3);
+	TestTrue(TEXT("Invalid spawns are skipped"), Config.Waves.Num() == 3 && Config.Waves[0].Spawns.Num() == 1 && Config.Waves[1].Spawns.IsEmpty());
+	TestTrue(TEXT("Seconds become ticks"), Config.Waves.Num() == 3 && Config.Waves[0].Spawns.Num() == 1 && Config.Waves[0].Spawns[0].DelayTicks == 30);
+	TestEqual(TEXT("A definition per unit and valid spawn"), Definitions.Num(), 3 + 2);
+
+	Level.Resize(10, 8);
+	TestTrue(TEXT("Shrinking removes spawns outside"), Level.Waves[0].Spawns.Num() == 3 && Level.Waves[2].Spawns.IsEmpty());
+	TestTrue(TEXT("RemoveSpawnsAt removes from every wave"), Level.RemoveSpawnsAt(FIntPoint(9, 1)) && Level.FindSpawnAt(0, FIntPoint(9, 1)) == INDEX_NONE);
+	return true;
+}
+
+IMPLEMENT_SIMPLE_AUTOMATION_TEST(FCombatWaveReplayTest, "BattleSystem.Combat.WaveReplay",
+	EAutomationTestFlags::EditorContext | EAutomationTestFlags::ProductFilter)
+
+bool FCombatWaveReplayTest::RunTest(const FString& Parameters)
+{
+	// Record: a wave called live during the fight, right after the first wave started.
+	const FCombatSimConfig Base = CombatTests::MakeClearableWaves(3, 40);
+	FCombatSimulation Recorded(Base);
+	TArray<uint32> RecordedChecksums;
+	while (!Recorded.IsFinished())
+	{
+		if (Recorded.GetTick() == 41)
+		{
+			Recorded.QueueCommand(CombatTests::MakeCallWave(Recorded.GetTick() + 3));
+		}
+		Recorded.Step();
+		RecordedChecksums.Add(Recorded.GetChecksum());
+	}
+
+	// Replay: the command log known in advance, after a JSON round trip.
+	FCombatReplay Replay;
+	Replay.Commands = Recorded.GetCommandLog();
+	FString Json;
+	CombatReplay::ToJson(Replay, Json);
+	FCombatReplay Loaded;
+	CombatReplay::FromJson(Json, Loaded);
+	TestTrue(TEXT("CallWave survives JSON"), Loaded.Commands.Num() == 1 && Loaded.Commands[0].Type == ECombatCommandType::CallWave);
+
+	FCombatSimConfig ReplayConfig = Base;
+	ReplayConfig.Commands = Loaded.Commands;
+	TestTrue(TEXT("The replay has the same checksum after every step"), CombatTests::RunAndCollectChecksums(ReplayConfig) == RecordedChecksums);
+	TestFalse(TEXT("The call changes the fight"), CombatTests::RunAndCollectChecksums(Base) == RecordedChecksums);
+	return true;
+}
+
 #endif // WITH_DEV_AUTOMATION_TESTS

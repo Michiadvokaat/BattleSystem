@@ -52,7 +52,7 @@ namespace CombatBatch
 {
 	/**
 	 * Runs Count fights headless with seeds StartSeed, StartSeed + 1, ... on copies of BaseConfig.
-	 * UnitTypeNames gives the type name per unit ID (for the per-type totals).
+	 * UnitTypeNames gives the type name per FCombatUnit::SourceIndex (for the per-type totals).
 	 */
 	BATTLESYSTEM_API FCombatBatchResult Run(const FCombatSimConfig& BaseConfig, TConstArrayView<FString> UnitTypeNames, int32 Count, int32 StartSeed);
 }

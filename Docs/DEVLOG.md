@@ -82,3 +82,14 @@ Dated history: decisions, bugs, rejected approaches. Newest entries at the botto
 - Camera orientation for levels: Arena-01's camera has yaw 0, so grid X (width) ran upwards on screen. When fitting a level the camera is now set to (pitch -90, yaw -90): width to the right, height downwards. Setups get the original camera back.
 - Units are flat board pieces: `BodyHeight` is 10 cm (was 180), the nose scales with the body (at most 25 cm), and projectiles fly at 15 cm (`FlightHeight`, was 110).
 - Level blocks are low like the pieces: walls 30 cm (was 200), hedges 20 cm (was 120), water 6 cm, as properties on `ACombatGrid`. The obstacles placed in Arena-01 keep their own size.
+
+## 2026-10-04
+
+- WaveSpawner:
+  - Level format 2: `waves` with `spawns` (`type`, `cell` {x, y}, `time` in seconds after the wave start). Version 1 files load without waves. Spawns are always team 1; `units` keeps both teams.
+  - Decisions (with the user): the next wave starts `WavePauseSeconds` (Project Settings, default 5 s) after the previous is clear (all spawned, no team 1 alive); the first one that long after the fight starts. A `CallWave` command (control panel button, `Combat.CallWave`) starts the next wave right away, also during a running wave (overlap). A spawn on an occupied cell still happens (separation). The heroes win when all waves are beaten, the enemies when the heroes die (also with waves left).
+  - Wave units get their unit ID when they appear, so the definition is found through `FCombatUnit::SourceIndex` (config units, then all wave spawns) in the subsystem and the batch.
+  - Fights without waves keep their checksums (`0xBED8CC97`, `0x7CE33AAB`, `0x32F7C942`, Demo `0x7CE33AAB`). A temporary level with two waves of Brutes against Demo's heroes: `0xB59CC52C` twice, the Brutes win.
+  - LevelDesigner: Spawn tool (type + time), wave row (`<` `>` `+` `-`), previews of the selected wave with their time.
+  - 43/43 tests (6 new wave tests).
+- WaveSpawner done: the user checked it in PIE (`Levels/WaveTestLevel01.json`).

@@ -26,6 +26,8 @@ enum class ECombatDesignTool : uint8
 	Hedge,
 	Water,
 	Unit,
+	/** Enemies that appear during the selected wave. */
+	Spawn,
 };
 
 /** What a fight is built from: a setup asset on the arena's own grid, or a level from the LevelDesigner. */
@@ -67,6 +69,13 @@ public:
 	 * (also while paused). Ignored while a replay plays or after the fight. The Tick of Command is set here.
 	 */
 	bool IssueCommand(FCombatCommand Command);
+
+	/** Player command: start the next wave now (also during a running wave). */
+	bool CallWave();
+	/** A wave is left to call, and no call is queued yet. */
+	bool CanCallWave() const;
+	/** "Wave 2/4, next in 3.2 s" for the control panel; empty for fights without waves. */
+	FString GetWaveText() const;
 
 	/** The project settings with this subsystem's taunt range override. */
 	FCombatSimSettings GetCurrentSimSettings() const { return FCombatSimSettings::FromProjectSettings(TauntRangeOverride); }
@@ -156,9 +165,20 @@ public:
 	void SetDesignUnitTeam(int32 Team) { DesignUnitTeam = Team; }
 	int32 GetDesignUnitTeam() const { return DesignUnitTeam; }
 
+	/** The wave the Spawn tool places in and whose spawns are shown; INDEX_NONE when the level has no waves. */
+	int32 GetDesignWave() const { return DesignWave; }
+	void SetDesignWave(int32 WaveIndex);
+	/** Adds an empty wave after the selected one and selects it. */
+	void AddDesignWave();
+	void RemoveDesignWave();
+	/** Seconds after the wave start for spawns placed with the Spawn tool. */
+	void SetDesignSpawnTime(float Seconds) { DesignSpawnTime = FMath::Max(Seconds, 0.f); }
+	float GetDesignSpawnTime() const { return DesignSpawnTime; }
+
 	/**
 	 * Mouse on the arena in edit mode. Place: the current tool on the cell (a unit only when bStroke is false,
-	 * so dragging does not drop a row of units). Erase: removes the unit and the cell's wall/hedge/water.
+	 * so dragging does not drop a row of units; the same for spawns in the selected wave). Erase: removes the unit,
+	 * the selected wave's spawn and the cell's wall/hedge/water.
 	 */
 	void DesignPaint(const FVector& WorldPoint, bool bErase, bool bStroke);
 
@@ -197,6 +217,8 @@ protected:
 
 private:
 	void DispatchEvents();
+	/** Spawns the actor of a unit that is new in the simulation (fight start or wave spawn). */
+	void SpawnUnitActor(const FCombatUnit& Unit);
 	void SpawnProjectileActor(const FCombatEvent& Event);
 	void UpdateActors(float Alpha);
 	/** Debug lines and distance-map numbers, depending on the Combat.Debug console variable. */
@@ -234,6 +256,10 @@ private:
 	/** Indexed by unit ID; kept for per-attack presentation settings such as the projectile actor class. */
 	UPROPERTY(Transient)
 	TArray<TObjectPtr<UCombatUnitDefinition>> UnitDefinitions;
+
+	/** Indexed by FCombatUnit::SourceIndex: the definition of every unit the fight can have, wave spawns included. */
+	UPROPERTY(Transient)
+	TArray<TObjectPtr<UCombatUnitDefinition>> SourceDefinitions;
 
 	/** Projectiles in flight, by projectile ID. */
 	UPROPERTY(Transient)
@@ -275,6 +301,8 @@ private:
 	ECombatDesignTool DesignTool = ECombatDesignTool::Wall;
 	FString DesignUnitType;
 	int32 DesignUnitTeam = 0;
+	int32 DesignWave = INDEX_NONE;
+	float DesignSpawnTime = 0.f;
 
 	UPROPERTY(Transient)
 	TArray<TObjectPtr<ACombatUnitActor>> DesignPreviews;

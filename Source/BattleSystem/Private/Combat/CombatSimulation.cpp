@@ -45,25 +45,20 @@ FCombatSimulation::FCombatSimulation(const FCombatSimConfig& InConfig)
 	for (int32 Index = 0; Index < Config.Units.Num(); ++Index)
 	{
 		const FCombatUnitSpawn& Spawn = Config.Units[Index];
+		AddUnit(Spawn.Stats, Spawn.Team, Spawn.StartCell, Index);
+	}
 
-		FCombatUnit& Unit = Units.AddDefaulted_GetRef();
-		Unit.Id = Index;
-		Unit.Team = Spawn.Team;
-		Unit.Stats = Spawn.Stats;
-		for (FCombatAttackStats& Attack : Unit.Stats.Attacks)
+	// Waves: the wave team needs a distance map even when it has no units at the start.
+	if (!Config.Waves.IsEmpty())
+	{
+		int32 SourceIndex = Config.Units.Num();
+		for (const FCombatWave& Wave : Config.Waves)
 		{
-			Attack.CooldownTicks = FMath::Max(Attack.CooldownTicks, 1);
-			Attack.WindupTicks = FMath::Max(Attack.WindupTicks, 0);
+			WaveFirstSourceIndex.Add(SourceIndex);
+			SourceIndex += Wave.Spawns.Num();
 		}
-		Unit.AttackCooldowns.Init(0, Unit.Stats.Attacks.Num());
-		Unit.Position = Config.Grid.CellToLocal(Spawn.StartCell);
-		Unit.PreviousPosition = Unit.Position;
-		Unit.HP = Unit.Stats.MaxHP;
-		Unit.bAlive = Unit.HP > 0.f;
-		Unit.FirstAttackDelayTicks = Random.RandRange(0, FMath::Max(Config.MaxFirstAttackDelayTicks, 0));
-		Unit.SteerPoint = Unit.Position;
-
-		TeamIds.AddUnique(Unit.Team);
+		TeamIds.AddUnique(Config.WaveTeam);
+		NextWaveTick = FMath::Max(Config.WavePauseTicks, 1);
 	}
 	DistanceMaps.SetNum(TeamIds.Num());
 
@@ -77,6 +72,88 @@ FCombatSimulation::FCombatSimulation(const FCombatSimConfig& InConfig)
 	}
 
 	Checksum = ComputeChecksum();
+}
+
+FCombatUnit& FCombatSimulation::AddUnit(const FCombatUnitStats& Stats, int32 Team, const FIntPoint& Cell, int32 SourceIndex)
+{
+	FCombatUnit& Unit = Units.AddDefaulted_GetRef();
+	Unit.Id = Units.Num() - 1;
+	Unit.Team = Team;
+	Unit.SourceIndex = SourceIndex;
+	Unit.Stats = Stats;
+	for (FCombatAttackStats& Attack : Unit.Stats.Attacks)
+	{
+		Attack.CooldownTicks = FMath::Max(Attack.CooldownTicks, 1);
+		Attack.WindupTicks = FMath::Max(Attack.WindupTicks, 0);
+	}
+	Unit.AttackCooldowns.Init(0, Unit.Stats.Attacks.Num());
+	Unit.Position = Config.Grid.CellToLocal(Cell);
+	Unit.PreviousPosition = Unit.Position;
+	Unit.HP = Unit.Stats.MaxHP;
+	Unit.bAlive = Unit.HP > 0.f;
+	Unit.FirstAttackDelayTicks = Random.RandRange(0, FMath::Max(Config.MaxFirstAttackDelayTicks, 0));
+	Unit.SteerPoint = Unit.Position;
+
+	TeamIds.AddUnique(Unit.Team);
+	return Unit;
+}
+
+void FCombatSimulation::StartWave()
+{
+	const int32 WaveIndex = WavesStarted++;
+	NextWaveTick = INDEX_NONE;
+
+	const TArray<FCombatWaveSpawn>& Spawns = Config.Waves[WaveIndex].Spawns;
+	for (int32 SpawnIndex = 0; SpawnIndex < Spawns.Num(); ++SpawnIndex)
+	{
+		PendingSpawns.Add({ Tick + FMath::Max(Spawns[SpawnIndex].DelayTicks, 0), WaveIndex, SpawnIndex });
+	}
+
+	FCombatEvent& Event = Events.Add_GetRef({ ECombatEventType::WaveStarted, INDEX_NONE, INDEX_NONE, 0.f });
+	Event.WaveIndex = WaveIndex;
+}
+
+void FCombatSimulation::UpdateWaves()
+{
+	if (NextWaveTick != INDEX_NONE && Tick >= NextWaveTick && WavesStarted < Config.Waves.Num())
+	{
+		StartWave();
+	}
+
+	// Due spawns in the order the waves started, each wave's in its own order: that order gives the unit IDs.
+	bool bSpawned = false;
+	for (const FPendingSpawn& Pending : PendingSpawns)
+	{
+		if (Pending.Tick > Tick)
+		{
+			continue;
+		}
+		const FCombatWaveSpawn& Spawn = Config.Waves[Pending.WaveIndex].Spawns[Pending.SpawnIndex];
+		const FCombatUnit& Unit = AddUnit(Spawn.Stats, Config.WaveTeam, Spawn.Cell, WaveFirstSourceIndex[Pending.WaveIndex] + Pending.SpawnIndex);
+		FCombatEvent& Event = Events.Add_GetRef({ ECombatEventType::UnitSpawned, Unit.Id, INDEX_NONE, 0.f });
+		Event.WaveIndex = Pending.WaveIndex;
+		bSpawned = true;
+	}
+	if (bSpawned)
+	{
+		PendingSpawns.RemoveAll([this](const FPendingSpawn& Pending) { return Pending.Tick <= Tick; });
+		// New units are targets (and targeters) in this very step.
+		DistanceMaps.SetNum(TeamIds.Num());
+		RebuildDistanceMaps();
+	}
+}
+
+void FCombatSimulation::UpdateWaveClear()
+{
+	if (NextWaveTick != INDEX_NONE || WavesStarted >= Config.Waves.Num() || !PendingSpawns.IsEmpty())
+	{
+		return;
+	}
+	const bool bEnemyAlive = Units.ContainsByPredicate([this](const FCombatUnit& Unit) { return Unit.bAlive && Unit.Team == Config.WaveTeam; });
+	if (!bEnemyAlive)
+	{
+		NextWaveTick = Tick + FMath::Max(Config.WavePauseTicks, 1);
+	}
 }
 
 void FCombatSimulation::Step()
@@ -120,6 +197,12 @@ void FCombatSimulation::Step()
 	// Player commands run at the start of their tick, after the areas so a telegraphed ability counts down from next step.
 	ExecuteDueCommands();
 
+	// After the commands, so units of a called wave with no delay appear in the same step.
+	if (!Config.Waves.IsEmpty())
+	{
+		UpdateWaves();
+	}
+
 	for (FCombatUnit& Unit : Units)
 	{
 		if (Unit.bAlive)
@@ -131,6 +214,10 @@ void FCombatSimulation::Step()
 	// After the units, so projectiles fired this step move right away and home in on the new positions.
 	UpdateProjectiles();
 	ApplyPendingHits();
+	if (!Config.Waves.IsEmpty())
+	{
+		UpdateWaveClear();
+	}
 	UpdateOutcome();
 	Checksum = ComputeChecksum();
 }
@@ -626,6 +713,18 @@ void FCombatSimulation::ExecuteCommand(const FCombatCommand& Command)
 		Event.AttackIndex = AttackIndex;
 	};
 
+	if (Command.Type == ECombatCommandType::CallWave)
+	{
+		if (WavesStarted >= Config.Waves.Num())
+		{
+			AddEvent(ECombatEventType::CommandRejected, INDEX_NONE);
+			return;
+		}
+		AddEvent(ECombatEventType::CommandExecuted, INDEX_NONE);
+		StartWave();
+		return;
+	}
+
 	if (!Units.IsValidIndex(Command.UnitId) || !Units[Command.UnitId].bAlive)
 	{
 		AddEvent(ECombatEventType::CommandRejected, INDEX_NONE);
@@ -669,6 +768,9 @@ void FCombatSimulation::ExecuteCommand(const FCombatCommand& Command)
 		PlaceArea(Unit, AttackIndex, INDEX_NONE);
 		return;
 	}
+
+	case ECombatCommandType::CallWave:
+		break;
 	}
 }
 
@@ -1032,6 +1134,11 @@ void FCombatSimulation::UpdateOutcome()
 			TeamsAlive.AddUnique(Unit.Team);
 		}
 	}
+	// Enemies still to come keep their team in the fight.
+	if (HasWavesLeft())
+	{
+		TeamsAlive.AddUnique(Config.WaveTeam);
+	}
 
 	if (TeamsAlive.Num() == 0)
 	{
@@ -1087,6 +1194,14 @@ uint32 FCombatSimulation::ComputeChecksum() const
 		Crc = FCrc::MemCrc32(&Pending.RemainingTicks, sizeof(Pending.RemainingTicks), Crc);
 		Crc = FCrc::MemCrc32(&Pending.Area.Center, sizeof(Pending.Area.Center), Crc);
 		Crc = FCrc::MemCrc32(&Pending.Area.Direction, sizeof(Pending.Area.Direction), Crc);
+	}
+	// Only with waves, so fights without them keep their old checksums.
+	if (!Config.Waves.IsEmpty())
+	{
+		const int32 PendingSpawnCount = PendingSpawns.Num();
+		Crc = FCrc::MemCrc32(&WavesStarted, sizeof(WavesStarted), Crc);
+		Crc = FCrc::MemCrc32(&NextWaveTick, sizeof(NextWaveTick), Crc);
+		Crc = FCrc::MemCrc32(&PendingSpawnCount, sizeof(PendingSpawnCount), Crc);
 	}
 	return Crc;
 }

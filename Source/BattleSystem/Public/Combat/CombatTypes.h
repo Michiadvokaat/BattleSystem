@@ -27,6 +27,8 @@ enum class ECombatCommandType : uint8
 	Move,
 	/** Use player ability AbilityIndex of the unit right away (no cooldown, no windup). */
 	Ability,
+	/** Start the next wave right away, also during a running wave (UnitId is ignored). Rejected when no wave is left. */
+	CallWave,
 };
 
 /**

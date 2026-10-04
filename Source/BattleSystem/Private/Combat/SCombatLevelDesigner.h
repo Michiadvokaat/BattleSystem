@@ -10,8 +10,8 @@ enum class ECombatDesignTool : uint8;
 class UCombatSubsystem;
 
 /**
- * LevelDesigner menu (bottom left): edit mode, grid size, tools (wall, hedge, water, unit with type and team),
- * and new/load/save/play. Painting itself happens with the mouse on the arena (ACombatPlayerController).
+ * LevelDesigner menu (bottom left): edit mode, grid size, tools (wall, hedge, water, unit with type and team,
+ * spawn with type and time in the selected wave), waves (select, add, remove), and new/load/save/play. Painting itself happens with the mouse on the arena (ACombatPlayerController).
  */
 class SCombatLevelDesigner : public SCompoundWidget
 {

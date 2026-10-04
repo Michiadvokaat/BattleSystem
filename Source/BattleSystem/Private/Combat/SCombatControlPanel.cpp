@@ -144,6 +144,46 @@ void SCombatControlPanel::Construct(const FArguments& InArgs)
 				]
 			]
 
+			// Only for fights with waves (levels).
+			+ SVerticalBox::Slot().AutoHeight().Padding(0.f, 2.f)
+			[
+				SNew(SHorizontalBox)
+				.Visibility_Lambda([this]()
+				{
+					const UCombatSubsystem* CombatSubsystem = Subsystem.Get();
+					return CombatSubsystem && !CombatSubsystem->GetWaveText().IsEmpty() ? EVisibility::Visible : EVisibility::Collapsed;
+				})
+				+ SHorizontalBox::Slot().AutoWidth().VAlign(VAlign_Center)[ MakeLabel(INVTEXT("Waves")) ]
+				+ SHorizontalBox::Slot().FillWidth(1.f).VAlign(VAlign_Center).Padding(0.f, 0.f, 4.f, 0.f)
+				[
+					SNew(STextBlock).Text_Lambda([this]()
+					{
+						const UCombatSubsystem* CombatSubsystem = Subsystem.Get();
+						return CombatSubsystem ? FText::FromString(CombatSubsystem->GetWaveText()) : FText::GetEmpty();
+					})
+				]
+				+ SHorizontalBox::Slot().AutoWidth()
+				[
+					SNew(SButton)
+					.IsEnabled_Lambda([this]()
+					{
+						const UCombatSubsystem* CombatSubsystem = Subsystem.Get();
+						return CombatSubsystem && CombatSubsystem->CanCallWave();
+					})
+					.OnClicked_Lambda([this]()
+					{
+						if (UCombatSubsystem* CombatSubsystem = Subsystem.Get())
+						{
+							CombatSubsystem->CallWave();
+						}
+						return FReply::Handled();
+					})
+					[
+						SNew(STextBlock).Text(INVTEXT("Call wave"))
+					]
+				]
+			]
+
 			+ SVerticalBox::Slot().AutoHeight().Padding(0.f, 2.f)
 			[
 				SNew(SHorizontalBox)

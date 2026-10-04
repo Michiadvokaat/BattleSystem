@@ -10,16 +10,30 @@ FCombatBatchResult CombatBatch::Run(const FCombatSimConfig& BaseConfig, TConstAr
 	const double StartTime = FPlatformTime::Seconds();
 
 	// Teams and unit types in order of first appearance, so the report order is stable.
-	TArray<int32> UnitTypeIndex;
-	for (int32 UnitId = 0; UnitId < BaseConfig.Units.Num(); ++UnitId)
+	// Per FCombatUnit::SourceIndex: the config's units, then every wave's spawns.
+	TArray<int32> SourceTeams;
+	for (const FCombatUnitSpawn& Spawn : BaseConfig.Units)
 	{
-		const int32 Team = BaseConfig.Units[UnitId].Team;
+		SourceTeams.Add(Spawn.Team);
+	}
+	for (const FCombatWave& Wave : BaseConfig.Waves)
+	{
+		for (int32 Index = 0; Index < Wave.Spawns.Num(); ++Index)
+		{
+			SourceTeams.Add(BaseConfig.WaveTeam);
+		}
+	}
+
+	TArray<int32> UnitTypeIndex;
+	for (int32 SourceIndex = 0; SourceIndex < SourceTeams.Num(); ++SourceIndex)
+	{
+		const int32 Team = SourceTeams[SourceIndex];
 		if (!Result.Teams.ContainsByPredicate([Team](const FCombatBatchTeam& Entry) { return Entry.Team == Team; }))
 		{
 			Result.Teams.Add({ Team, 0 });
 		}
 
-		const FString Name = UnitTypeNames.IsValidIndex(UnitId) ? UnitTypeNames[UnitId] : FString::Printf(TEXT("Unit %d"), UnitId);
+		const FString Name = UnitTypeNames.IsValidIndex(SourceIndex) ? UnitTypeNames[SourceIndex] : FString::Printf(TEXT("Unit %d"), SourceIndex);
 		int32 TypeIndex = Result.UnitTypes.IndexOfByPredicate([&Name](const FCombatBatchUnitType& Type) { return Type.Name == Name; });
 		if (TypeIndex == INDEX_NONE)
 		{
@@ -63,7 +77,7 @@ FCombatBatchResult CombatBatch::Run(const FCombatSimConfig& BaseConfig, TConstAr
 
 		for (const FCombatUnit& Unit : Simulation.GetUnits())
 		{
-			FCombatBatchUnitType& Type = Result.UnitTypes[UnitTypeIndex[Unit.Id]];
+			FCombatBatchUnitType& Type = Result.UnitTypes[UnitTypeIndex[Unit.SourceIndex]];
 			++Type.Units;
 			Type.DamageDealt += Unit.DamageDealt;
 			Type.DamageTaken += Unit.DamageTaken;

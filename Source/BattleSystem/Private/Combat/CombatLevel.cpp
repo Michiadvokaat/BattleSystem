@@ -40,6 +40,10 @@ void FCombatLevel::Resize(int32 NewWidth, int32 NewHeight)
 	Height = NewHeight;
 	Normalize();
 	Units.RemoveAll([this](const FCombatLevelUnit& Unit) { return !IsInBounds(Unit.Cell); });
+	for (FCombatLevelWave& Wave : Waves)
+	{
+		Wave.Spawns.RemoveAll([this](const FCombatLevelSpawn& Spawn) { return !IsInBounds(Spawn.Cell); });
+	}
 }
 
 TCHAR FCombatLevel::GetCell(const FIntPoint& Cell) const
@@ -73,6 +77,25 @@ ECombatCellFlags FCombatLevel::FlagsFor(TCHAR Kind)
 int32 FCombatLevel::FindUnitAt(const FIntPoint& Cell) const
 {
 	return Units.IndexOfByPredicate([&Cell](const FCombatLevelUnit& Unit) { return Unit.Cell == Cell; });
+}
+
+int32 FCombatLevel::FindSpawnAt(int32 WaveIndex, const FIntPoint& Cell) const
+{
+	if (!Waves.IsValidIndex(WaveIndex))
+	{
+		return INDEX_NONE;
+	}
+	return Waves[WaveIndex].Spawns.IndexOfByPredicate([&Cell](const FCombatLevelSpawn& Spawn) { return Spawn.Cell == Cell; });
+}
+
+bool FCombatLevel::RemoveSpawnsAt(const FIntPoint& Cell)
+{
+	int32 Removed = 0;
+	for (FCombatLevelWave& Wave : Waves)
+	{
+		Removed += Wave.Spawns.RemoveAll([&Cell](const FCombatLevelSpawn& Spawn) { return Spawn.Cell == Cell; });
+	}
+	return Removed > 0;
 }
 
 void FCombatLevel::ToGridData(FCombatGridData& OutGrid) const
@@ -117,6 +140,8 @@ bool CombatLevels::FromJson(const FString& Json, FCombatLevel& OutLevel)
 		return false;
 	}
 	OutLevel.Normalize();
+	// Older files have no waves; saved again they get the current version.
+	OutLevel.FormatVersion = FCombatLevel().FormatVersion;
 	return true;
 }
 
@@ -174,6 +199,39 @@ bool CombatLevels::BuildConfig(const FCombatLevel& Level, int32 TickRate, TFunct
 	{
 		UE_LOG(LogCombat, Error, TEXT("Level %s: no valid units."), *Level.Name);
 		return false;
+	}
+
+	// Every wave is kept (also when empty), so wave numbers stay as in the designer.
+	OutConfig.Waves.Reset();
+	for (int32 WaveIndex = 0; WaveIndex < Level.Waves.Num(); ++WaveIndex)
+	{
+		FCombatWave& Wave = OutConfig.Waves.AddDefaulted_GetRef();
+		const TArray<FCombatLevelSpawn>& Spawns = Level.Waves[WaveIndex].Spawns;
+		for (int32 Index = 0; Index < Spawns.Num(); ++Index)
+		{
+			const FCombatLevelSpawn& Entry = Spawns[Index];
+			const UCombatUnitDefinition* Definition = Resolve(Entry.Type);
+			if (!Definition)
+			{
+				UE_LOG(LogCombat, Warning, TEXT("Level %s: wave %d spawn %d has unknown type '%s', skipped."), *Level.Name, WaveIndex + 1, Index, *Entry.Type);
+				continue;
+			}
+			if (!OutConfig.Grid.IsWalkable(Entry.Cell))
+			{
+				UE_LOG(LogCombat, Warning, TEXT("Level %s: wave %d spawn %d is on cell (%d,%d), which is outside the grid or blocked; skipped."),
+					*Level.Name, WaveIndex + 1, Index, Entry.Cell.X, Entry.Cell.Y);
+				continue;
+			}
+
+			FCombatWaveSpawn& Spawn = Wave.Spawns.AddDefaulted_GetRef();
+			Spawn.Stats = Definition->ToSimStats(TickRate);
+			Spawn.Cell = Entry.Cell;
+			Spawn.DelayTicks = FMath::Max(FMath::RoundToInt32(Entry.Time * TickRate), 0);
+			if (OutDefinitions)
+			{
+				OutDefinitions->Add(Definition);
+			}
+		}
 	}
 	return true;
 }

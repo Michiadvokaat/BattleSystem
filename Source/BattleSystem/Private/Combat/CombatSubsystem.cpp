@@ -165,23 +165,13 @@ bool UCombatSubsystem::StartFightFromSource(int32 Seed, const FCombatFightSource
 	CurrentLevel = Source.Level;
 	CurrentSettings = SimSettings;
 
-	const UCombatSettings* Settings = GetDefault<UCombatSettings>();
-	FActorSpawnParameters SpawnParams;
-	SpawnParams.SpawnCollisionHandlingOverride = ESpawnActorCollisionHandlingMethod::AlwaysSpawn;
-
+	for (const UCombatUnitDefinition* Definition : Definitions)
+	{
+		SourceDefinitions.Add(const_cast<UCombatUnitDefinition*>(Definition));
+	}
 	for (const FCombatUnit& Unit : Simulation->GetUnits())
 	{
-		const UCombatUnitDefinition* Definition = Definitions[Unit.Id];
-		UClass* ActorClass = Definition->ActorClass ? Definition->ActorClass.Get() : ACombatUnitActor::StaticClass();
-
-		ACombatUnitActor* Actor = GetWorld()->SpawnActor<ACombatUnitActor>(ActorClass, SimToWorld(Unit.Position), FRotator::ZeroRotator, SpawnParams);
-		if (Actor)
-		{
-			const bool bRanged = Unit.Stats.Attacks.ContainsByPredicate([](const FCombatAttackStats& Attack) { return Attack.IsRanged(); });
-			Actor->InitUnit(Unit.Id, Unit.Team, Unit.Stats.Radius, Settings->GetTeamColor(Unit.Team), bRanged);
-		}
-		UnitActors.Add(Actor);
-		UnitDefinitions.Add(const_cast<UCombatUnitDefinition*>(Definition));
+		SpawnUnitActor(Unit);
 	}
 
 	UE_LOG(LogCombat, Display, TEXT("Fight started: seed %d, %s, %d units."), Seed, *Source.GetName(), UnitActors.Num());
@@ -358,6 +348,7 @@ void UCombatSubsystem::StopFight()
 	}
 	UnitActors.Reset();
 	UnitDefinitions.Reset();
+	SourceDefinitions.Reset();
 
 	for (const TPair<int32, TObjectPtr<ACombatProjectileActor>>& Pair : ProjectileActors)
 	{
@@ -408,6 +399,19 @@ void UCombatSubsystem::DispatchEvents()
 		case ECombatEventType::ProjectileSpawned:
 			SpawnProjectileActor(Event);
 			break;
+		case ECombatEventType::UnitSpawned:
+			SpawnUnitActor(Units[Event.SourceId]);
+			break;
+		case ECombatEventType::WaveStarted:
+		{
+			const FString Message = FString::Printf(TEXT("Wave %d/%d"), Event.WaveIndex + 1, Simulation->GetWaveCount());
+			UE_LOG(LogCombat, Display, TEXT("%s started at tick %d."), *Message, Simulation->GetTick());
+			if (GEngine)
+			{
+				GEngine->AddOnScreenDebugMessage(INDEX_NONE, 3.f, FColor::Orange, Message);
+			}
+			break;
+		}
 		case ECombatEventType::ProjectileEnded:
 		{
 			TObjectPtr<ACombatProjectileActor> Actor;
@@ -419,6 +423,25 @@ void UCombatSubsystem::DispatchEvents()
 		}
 		}
 	}
+}
+
+void UCombatSubsystem::SpawnUnitActor(const FCombatUnit& Unit)
+{
+	// Unit IDs grow by one with every spawn, so the actor arrays stay indexed by unit ID.
+	check(UnitActors.Num() == Unit.Id);
+	UCombatUnitDefinition* Definition = SourceDefinitions.IsValidIndex(Unit.SourceIndex) ? SourceDefinitions[Unit.SourceIndex].Get() : nullptr;
+	UClass* ActorClass = Definition && Definition->ActorClass ? Definition->ActorClass.Get() : ACombatUnitActor::StaticClass();
+
+	FActorSpawnParameters SpawnParams;
+	SpawnParams.SpawnCollisionHandlingOverride = ESpawnActorCollisionHandlingMethod::AlwaysSpawn;
+	ACombatUnitActor* Actor = GetWorld()->SpawnActor<ACombatUnitActor>(ActorClass, SimToWorld(Unit.Position), FRotator::ZeroRotator, SpawnParams);
+	if (Actor)
+	{
+		const bool bRanged = Unit.Stats.Attacks.ContainsByPredicate([](const FCombatAttackStats& Attack) { return Attack.IsRanged(); });
+		Actor->InitUnit(Unit.Id, Unit.Team, Unit.Stats.Radius, GetDefault<UCombatSettings>()->GetTeamColor(Unit.Team), bRanged);
+	}
+	UnitActors.Add(Actor);
+	UnitDefinitions.Add(Definition);
 }
 
 void UCombatSubsystem::SpawnProjectileActor(const FCombatEvent& Event)
@@ -899,14 +922,71 @@ bool UCombatSubsystem::IssueCommand(FCombatCommand Command)
 		return false;
 	}
 
+	// CallWave is for the whole fight, not for a unit.
 	const TArray<FCombatUnit>& Units = Simulation->GetUnits();
-	if (!Units.IsValidIndex(Command.UnitId) || Units[Command.UnitId].Team != GetDefault<UCombatSettings>()->PlayerTeam)
+	const bool bValidUnit = Units.IsValidIndex(Command.UnitId) && Units[Command.UnitId].Team == GetDefault<UCombatSettings>()->PlayerTeam;
+	if (Command.Type == ECombatCommandType::CallWave)
+	{
+		Command.UnitId = INDEX_NONE;
+	}
+	else if (!bValidUnit)
 	{
 		return false;
 	}
 
 	Command.Tick = Simulation->GetTick() + FMath::Max(GetDefault<UCombatSettings>()->CommandDelayTicks, 1);
 	return Simulation->QueueCommand(Command);
+}
+
+bool UCombatSubsystem::CallWave()
+{
+	if (!CanCallWave())
+	{
+		return false;
+	}
+	FCombatCommand Command;
+	Command.Type = ECombatCommandType::CallWave;
+	return IssueCommand(Command);
+}
+
+bool UCombatSubsystem::CanCallWave() const
+{
+	if (!Simulation || Simulation->IsFinished() || bIsReplay || Simulation->GetWavesStarted() >= Simulation->GetWaveCount())
+	{
+		return false;
+	}
+	// One call per wave: not while a call is still queued.
+	return !Simulation->GetPendingCommands().ContainsByPredicate([](const FCombatCommand& Command) { return Command.Type == ECombatCommandType::CallWave; });
+}
+
+FString UCombatSubsystem::GetWaveText() const
+{
+	if (!Simulation || Simulation->GetWaveCount() == 0)
+	{
+		return FString();
+	}
+
+	const int32 Count = Simulation->GetWaveCount();
+	const int32 Started = Simulation->GetWavesStarted();
+	FString Text = Started > 0 ? FString::Printf(TEXT("Wave %d/%d"), Started, Count) : FString::Printf(TEXT("Wave 0/%d"), Count);
+	if (Simulation->GetNextWaveTick() != INDEX_NONE && Started < Count)
+	{
+		const float Seconds = (Simulation->GetNextWaveTick() - Simulation->GetTick()) * Simulation->GetFixedDt();
+		Text += FString::Printf(TEXT(", next in %.1f s"), FMath::Max(Seconds, 0.f));
+	}
+	else if (Started < Count)
+	{
+		Text += TEXT(", next after clear");
+	}
+	else if (Simulation->HasWavesLeft())
+	{
+		Text += TEXT(", spawning");
+	}
+	else
+	{
+		Text += TEXT(", last wave");
+	}
+	return Text;
 }
 
 void UCombatSubsystem::UpdateCheckpoints()
@@ -1102,6 +1182,7 @@ void UCombatSubsystem::EnterDesignMode()
 		const TArray<FString> Types = GetAllUnitDefinitionNames();
 		DesignUnitType = Types.IsEmpty() ? FString() : Types[0];
 	}
+	SetDesignWave(DesignWave);
 	RefreshDesignView(true);
 }
 
@@ -1124,6 +1205,7 @@ void UCombatSubsystem::ExitDesignMode()
 void UCombatSubsystem::NewDesignLevel()
 {
 	DesignLevel = FCombatLevel::MakeEmpty(TEXT("NewLevel"), 20, 12);
+	DesignWave = INDEX_NONE;
 	if (DesignUnitType.IsEmpty())
 	{
 		const TArray<FString> Types = GetAllUnitDefinitionNames();
@@ -1144,6 +1226,7 @@ bool UCombatSubsystem::LoadDesignLevel(const FString& Name, FString& OutMessage)
 		return false;
 	}
 	DesignLevel = Loaded;
+	DesignWave = DesignLevel.Waves.IsEmpty() ? INDEX_NONE : 0;
 	if (bDesignMode)
 	{
 		RefreshDesignView(true);
@@ -1216,6 +1299,7 @@ void UCombatSubsystem::DesignPaint(const FVector& WorldPoint, bool bErase, bool 
 	}
 
 	const int32 UnitIndex = DesignLevel.FindUnitAt(Cell);
+	const int32 SpawnIndex = DesignLevel.FindSpawnAt(DesignWave, Cell);
 	const TCHAR OldKind = DesignLevel.GetCell(Cell);
 	bool bChanged = false;
 
@@ -1224,6 +1308,11 @@ void UCombatSubsystem::DesignPaint(const FVector& WorldPoint, bool bErase, bool 
 		if (UnitIndex != INDEX_NONE)
 		{
 			DesignLevel.Units.RemoveAt(UnitIndex);
+			bChanged = true;
+		}
+		if (SpawnIndex != INDEX_NONE)
+		{
+			DesignLevel.Waves[DesignWave].Spawns.RemoveAt(SpawnIndex);
 			bChanged = true;
 		}
 		if (OldKind != FCombatLevel::Open)
@@ -1254,6 +1343,33 @@ void UCombatSubsystem::DesignPaint(const FVector& WorldPoint, bool bErase, bool 
 		}
 		bChanged = true;
 	}
+	else if (DesignTool == ECombatDesignTool::Spawn)
+	{
+		// One spawn per cell and wave, not on walls or water; placing on a spawn replaces it. Without waves, wave 1 is made.
+		const bool bWalkable = !EnumHasAnyFlags(FCombatLevel::FlagsFor(OldKind), ECombatCellFlags::Blocked);
+		if (bStroke || !bWalkable || DesignUnitType.IsEmpty())
+		{
+			return;
+		}
+		if (!DesignLevel.Waves.IsValidIndex(DesignWave))
+		{
+			AddDesignWave();
+		}
+		FCombatLevelSpawn Spawn;
+		Spawn.Type = DesignUnitType;
+		Spawn.Cell = Cell;
+		Spawn.Time = DesignSpawnTime;
+		TArray<FCombatLevelSpawn>& Spawns = DesignLevel.Waves[DesignWave].Spawns;
+		if (SpawnIndex != INDEX_NONE)
+		{
+			Spawns[SpawnIndex] = Spawn;
+		}
+		else
+		{
+			Spawns.Add(Spawn);
+		}
+		bChanged = true;
+	}
 	else
 	{
 		const TCHAR Kind = DesignTool == ECombatDesignTool::Wall ? FCombatLevel::Wall
@@ -1263,10 +1379,14 @@ void UCombatSubsystem::DesignPaint(const FVector& WorldPoint, bool bErase, bool 
 			return;
 		}
 		DesignLevel.SetCell(Cell, Kind);
-		// Walls and water cannot hold a unit.
-		if (UnitIndex != INDEX_NONE && EnumHasAnyFlags(FCombatLevel::FlagsFor(Kind), ECombatCellFlags::Blocked))
+		// Walls and water cannot hold a unit or a spawn (of any wave).
+		if (EnumHasAnyFlags(FCombatLevel::FlagsFor(Kind), ECombatCellFlags::Blocked))
 		{
-			DesignLevel.Units.RemoveAt(UnitIndex);
+			if (UnitIndex != INDEX_NONE)
+			{
+				DesignLevel.Units.RemoveAt(UnitIndex);
+			}
+			DesignLevel.RemoveSpawnsAt(Cell);
 		}
 		bChanged = true;
 	}
@@ -1317,6 +1437,76 @@ void UCombatSubsystem::RefreshDesignView(bool bFitCamera)
 			Actor->UpdatePresentation(Location, FVector(Entry.Team == 0 ? 1.0 : -1.0, 0.0, 0.0));
 			DesignPreviews.Add(Actor);
 		}
+	}
+
+	// The selected wave's spawns, labelled with their time.
+	if (!DesignLevel.Waves.IsValidIndex(DesignWave))
+	{
+		return;
+	}
+	const int32 WaveTeam = FCombatSimConfig().WaveTeam;
+	const TArray<FCombatLevelSpawn>& Spawns = DesignLevel.Waves[DesignWave].Spawns;
+	for (int32 Index = 0; Index < Spawns.Num(); ++Index)
+	{
+		const FCombatLevelSpawn& Entry = Spawns[Index];
+		const UCombatUnitDefinition* Definition = FindUnitDefinition(Entry.Type);
+		if (!Definition)
+		{
+			continue;
+		}
+
+		const FCombatUnitStats Stats = Definition->ToSimStats(Settings->TickRate);
+		const FVector Location = SimToWorld(DesignLevel.CellSize * FVector2D(Entry.Cell.X + 0.5, Entry.Cell.Y + 0.5));
+		UClass* ActorClass = Definition->ActorClass ? Definition->ActorClass.Get() : ACombatUnitActor::StaticClass();
+		ACombatUnitActor* Actor = GetWorld()->SpawnActor<ACombatUnitActor>(ActorClass, Location, FRotator::ZeroRotator, SpawnParams);
+		if (Actor)
+		{
+			const bool bRanged = Stats.Attacks.ContainsByPredicate([](const FCombatAttackStats& Attack) { return Attack.IsRanged(); });
+			Actor->InitUnit(DesignLevel.Units.Num() + Index, WaveTeam, Stats.Radius, Settings->GetTeamColor(WaveTeam), bRanged);
+			Actor->SetHealth(1.f);
+			Actor->SetStatusEffects({ { FString::Printf(TEXT("%gs"), Entry.Time), FLinearColor::Yellow } });
+			Actor->UpdatePresentation(Location, FVector(-1.0, 0.0, 0.0));
+			DesignPreviews.Add(Actor);
+		}
+	}
+}
+
+void UCombatSubsystem::SetDesignWave(int32 WaveIndex)
+{
+	const int32 Clamped = DesignLevel.Waves.IsEmpty() ? INDEX_NONE : FMath::Clamp(WaveIndex, 0, DesignLevel.Waves.Num() - 1);
+	if (Clamped == DesignWave)
+	{
+		return;
+	}
+	DesignWave = Clamped;
+	if (bDesignMode)
+	{
+		RefreshDesignView(false);
+	}
+}
+
+void UCombatSubsystem::AddDesignWave()
+{
+	const int32 InsertAt = DesignLevel.Waves.IsValidIndex(DesignWave) ? DesignWave + 1 : DesignLevel.Waves.Num();
+	DesignLevel.Waves.Insert(FCombatLevelWave(), InsertAt);
+	DesignWave = InsertAt;
+	if (bDesignMode)
+	{
+		RefreshDesignView(false);
+	}
+}
+
+void UCombatSubsystem::RemoveDesignWave()
+{
+	if (!DesignLevel.Waves.IsValidIndex(DesignWave))
+	{
+		return;
+	}
+	DesignLevel.Waves.RemoveAt(DesignWave);
+	DesignWave = DesignLevel.Waves.IsEmpty() ? INDEX_NONE : FMath::Min(DesignWave, DesignLevel.Waves.Num() - 1);
+	if (bDesignMode)
+	{
+		RefreshDesignView(false);
 	}
 }
 
@@ -1665,6 +1855,20 @@ namespace CombatConsole
 		Command.AbilityIndex = Args.Num() > 1 ? FCString::Atoi(*Args[1]) : 0;
 		IssueFromConsole(World, Command);
 	}
+
+	static void CallWave(const TArray<FString>& Args, UWorld* World)
+	{
+		UCombatSubsystem* Subsystem = World ? World->GetSubsystem<UCombatSubsystem>() : nullptr;
+		if (!Subsystem || !Subsystem->CallWave())
+		{
+			UE_LOG(LogCombat, Warning, TEXT("Wave call not accepted (no running fight, a replay plays, no wave left, or a call is already queued)."));
+		}
+	}
+
+	static FAutoConsoleCommandWithWorldAndArgs CallWaveCommand(
+		TEXT("Combat.CallWave"),
+		TEXT("Combat.CallWave: player command, the next wave starts now (runs CommandDelayTicks later)."),
+		FConsoleCommandWithWorldAndArgsDelegate::CreateStatic(&CallWave));
 
 	static FAutoConsoleCommandWithWorldAndArgs MoveCommand(
 		TEXT("Combat.Move"),
