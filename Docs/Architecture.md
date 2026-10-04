@@ -115,6 +115,10 @@ Code: `Source/BattleSystem/{Public,Private}/Combat/`. Layers: grid ← simulatio
   - Rows: Name + **Save** (`Levels/<name>.json`; the name is cleaned to letters, digits, - and _), a level dropdown + **Load** + **New**, and Size W/H spin boxes (5–40; shrinking drops what falls outside, and the camera refits).
   - Tool: Wall / Hedge / Water / Unit / Spawn, with a unit type (all definition assets), Team 0/1 for Unit, and a time in seconds for Spawn.
   - Wave row: `<` / `>` select a wave ("2 / 3", or "none"), `+` adds an empty wave after the selected one, `-` removes the selected one. The Spawn tool places in the selected wave (and makes wave 1 if there is none). The arena shows the selected wave's spawns as previews in the wave team's color with their time as a yellow label.
+  - Spawn list (`SCombatSpawnList`, bottom right, edit mode only): first "Start enemies (n)", the level's `Units` not on `PlayerTeam` (placed with the Unit tool; they stand on the field from the start), with type, X, Y, Move and remove (`SetDesignUnit`, `RemoveDesignUnit`, `BeginDesignUnitMove`; a cell holding another unit is refused). Then a header per wave ("Wave 2 (3)", click selects the wave, the selected one is green; an empty wave shows "(empty: use the Spawn tool)") and its spawns sorted by time (equal times in placement order; the file keeps the placement order). Each spawn row has a type dropdown, Wave, X, Y and Time spin boxes, **Move** and **x** (remove).
+    - Spin boxes apply on commit (Enter, focus loss, end of a drag) through `SetDesignSpawn` / `MoveDesignSpawnToWave`. A cell outside the grid, on a wall or water, or already holding a spawn of that wave is refused; the list then rebuilds with the old values. Every edit selects the spawn's wave.
+    - **Move** (orange while active) makes the next left click in the arena the spawn's new cell; a right click on the grid or Move again cancels. That click paints nothing.
+    - The list rebuilds when `GetDesignRevision()` changes (every `RefreshDesignView` and every refused edit). A spawn is addressed by (wave, index), so a pending Move is cancelled by any other change.
   - **Play** (or Start in the control panel while editing) starts a fight from the edited level as it is, saved or not, with the default seed (Play) or the seed field (Start).
   - Mouse (`ACombatPlayerController` in edit mode):
     - Left click places with the tool; holding paints a stroke while the cursor moves (`PlayerTick`). Units are only placed on a press, not while dragging.
@@ -182,7 +186,7 @@ Code: `Source/BattleSystem/{Public,Private}/Combat/`. Layers: grid ← simulatio
 
 ### Control panel (`ACombatHUD`, `SCombatControlPanel`)
 
-- `ACombatGameMode` uses `ACombatHUD`. At BeginPlay the HUD adds a Slate panel at the top left of the game viewport, inside a full-screen box that lets clicks elsewhere through. It shows the mouse cursor and sets input to Game+UI, so the console still works.
+- `ACombatGameMode` uses `ACombatHUD`. At BeginPlay the HUD adds four Slate panels (control panel top left, unit list top right, LevelDesigner bottom left, spawn list bottom right). The control panel is at the top left of the game viewport, inside a full-screen box that lets clicks elsewhere through. It shows the mouse cursor and sets input to Game+UI, so the console still works.
 - Panel controls (built in code, English labels):
   - Setup dropdown (`UCombatSubsystem::GetAllSetupNames`, default selection from settings), seed field, and a Random seed button.
   - Start / Restart (`StartFight`), Stop, and Pause/Resume.

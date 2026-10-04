@@ -28,3 +28,6 @@ Content/ZZ_FAB/
 
 # Claude Code local settings
 .claude/settings.local.json
+
+# Screenshots for bug reports (local only)
+Docs/Screenshots/

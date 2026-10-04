@@ -1168,6 +1168,7 @@ void UCombatSubsystem::EnterDesignMode()
 	const TOptional<FCombatLevel> LastLevel = Simulation ? CurrentLevel : TOptional<FCombatLevel>();
 	StopFight();
 	bDesignMode = true;
+	DesignSpawnMove.Reset();
 	if (LastLevel.IsSet())
 	{
 		DesignLevel = LastLevel.GetValue();
@@ -1193,6 +1194,7 @@ void UCombatSubsystem::ExitDesignMode()
 		return;
 	}
 	bDesignMode = false;
+	DesignSpawnMove.Reset();
 	DestroyDesignPreviews();
 	if (ACombatGrid* Grid = ACombatGrid::Find(GetWorld()))
 	{
@@ -1206,6 +1208,7 @@ void UCombatSubsystem::NewDesignLevel()
 {
 	DesignLevel = FCombatLevel::MakeEmpty(TEXT("NewLevel"), 20, 12);
 	DesignWave = INDEX_NONE;
+	DesignSpawnMove.Reset();
 	if (DesignUnitType.IsEmpty())
 	{
 		const TArray<FString> Types = GetAllUnitDefinitionNames();
@@ -1227,6 +1230,7 @@ bool UCombatSubsystem::LoadDesignLevel(const FString& Name, FString& OutMessage)
 	}
 	DesignLevel = Loaded;
 	DesignWave = DesignLevel.Waves.IsEmpty() ? INDEX_NONE : 0;
+	DesignSpawnMove.Reset();
 	if (bDesignMode)
 	{
 		RefreshDesignView(true);
@@ -1276,6 +1280,7 @@ void UCombatSubsystem::SetDesignSize(int32 Width, int32 Height)
 		return;
 	}
 	DesignLevel.Resize(Width, Height);
+	DesignSpawnMove.Reset();
 	if (bDesignMode)
 	{
 		RefreshDesignView(true);
@@ -1295,6 +1300,30 @@ void UCombatSubsystem::DesignPaint(const FVector& WorldPoint, bool bErase, bool 
 		FMath::FloorToInt32((WorldPoint.Y - Origin.Y) / DesignLevel.CellSize));
 	if (!DesignLevel.IsInBounds(Cell))
 	{
+		return;
+	}
+
+	// Moving a spawn from the spawn list: this click only places it (or cancels).
+	if (DesignSpawnMove.IsSet())
+	{
+		if (bStroke)
+		{
+			return;
+		}
+		const FIntPoint Move = DesignSpawnMove.GetValue();
+		DesignSpawnMove.Reset();
+		if (!bErase && Move.X == INDEX_NONE && DesignLevel.Units.IsValidIndex(Move.Y))
+		{
+			FCombatLevelUnit Unit = DesignLevel.Units[Move.Y];
+			Unit.Cell = Cell;
+			SetDesignUnit(Move.Y, Unit);
+		}
+		else if (!bErase && DesignLevel.Waves.IsValidIndex(Move.X) && DesignLevel.Waves[Move.X].Spawns.IsValidIndex(Move.Y))
+		{
+			FCombatLevelSpawn Spawn = DesignLevel.Waves[Move.X].Spawns[Move.Y];
+			Spawn.Cell = Cell;
+			SetDesignSpawn(Move.X, Move.Y, Spawn);
+		}
 		return;
 	}
 
@@ -1399,6 +1428,7 @@ void UCombatSubsystem::DesignPaint(const FVector& WorldPoint, bool bErase, bool 
 
 void UCombatSubsystem::RefreshDesignView(bool bFitCamera)
 {
+	++DesignRevision;
 	ACombatGrid* Grid = ACombatGrid::Find(GetWorld());
 	if (!Grid)
 	{
@@ -1489,11 +1519,136 @@ void UCombatSubsystem::AddDesignWave()
 {
 	const int32 InsertAt = DesignLevel.Waves.IsValidIndex(DesignWave) ? DesignWave + 1 : DesignLevel.Waves.Num();
 	DesignLevel.Waves.Insert(FCombatLevelWave(), InsertAt);
+	DesignSpawnMove.Reset();
 	DesignWave = InsertAt;
 	if (bDesignMode)
 	{
 		RefreshDesignView(false);
 	}
+}
+
+bool UCombatSubsystem::SetDesignSpawn(int32 WaveIndex, int32 SpawnIndex, const FCombatLevelSpawn& Spawn)
+{
+	DesignSpawnMove.Reset();
+	if (!DesignLevel.Waves.IsValidIndex(WaveIndex) || !DesignLevel.Waves[WaveIndex].Spawns.IsValidIndex(SpawnIndex))
+	{
+		return false;
+	}
+
+	const int32 Occupant = DesignLevel.FindSpawnAt(WaveIndex, Spawn.Cell);
+	const bool bValidCell = DesignLevel.IsInBounds(Spawn.Cell)
+		&& !EnumHasAnyFlags(FCombatLevel::FlagsFor(DesignLevel.GetCell(Spawn.Cell)), ECombatCellFlags::Blocked)
+		&& (Occupant == INDEX_NONE || Occupant == SpawnIndex);
+	if (!bValidCell || Spawn.Type.IsEmpty())
+	{
+		// Refused: the UI rebuilds and shows the old values again.
+		++DesignRevision;
+		return false;
+	}
+
+	FCombatLevelSpawn& Target = DesignLevel.Waves[WaveIndex].Spawns[SpawnIndex];
+	Target = Spawn;
+	Target.Time = FMath::Max(Target.Time, 0.f);
+	DesignWave = WaveIndex;
+	if (bDesignMode)
+	{
+		RefreshDesignView(false);
+	}
+	return true;
+}
+
+bool UCombatSubsystem::MoveDesignSpawnToWave(int32 WaveIndex, int32 SpawnIndex, int32 NewWaveIndex)
+{
+	DesignSpawnMove.Reset();
+	if (!DesignLevel.Waves.IsValidIndex(WaveIndex) || !DesignLevel.Waves[WaveIndex].Spawns.IsValidIndex(SpawnIndex)
+		|| !DesignLevel.Waves.IsValidIndex(NewWaveIndex) || NewWaveIndex == WaveIndex
+		|| DesignLevel.FindSpawnAt(NewWaveIndex, DesignLevel.Waves[WaveIndex].Spawns[SpawnIndex].Cell) != INDEX_NONE)
+	{
+		++DesignRevision;
+		return false;
+	}
+
+	DesignLevel.Waves[NewWaveIndex].Spawns.Add(DesignLevel.Waves[WaveIndex].Spawns[SpawnIndex]);
+	DesignLevel.Waves[WaveIndex].Spawns.RemoveAt(SpawnIndex);
+	DesignWave = NewWaveIndex;
+	if (bDesignMode)
+	{
+		RefreshDesignView(false);
+	}
+	return true;
+}
+
+void UCombatSubsystem::RemoveDesignSpawn(int32 WaveIndex, int32 SpawnIndex)
+{
+	DesignSpawnMove.Reset();
+	if (!DesignLevel.Waves.IsValidIndex(WaveIndex) || !DesignLevel.Waves[WaveIndex].Spawns.IsValidIndex(SpawnIndex))
+	{
+		return;
+	}
+	DesignLevel.Waves[WaveIndex].Spawns.RemoveAt(SpawnIndex);
+	DesignWave = WaveIndex;
+	if (bDesignMode)
+	{
+		RefreshDesignView(false);
+	}
+}
+
+void UCombatSubsystem::BeginDesignSpawnMove(int32 WaveIndex, int32 SpawnIndex)
+{
+	if (IsMovingDesignSpawn(WaveIndex, SpawnIndex))
+	{
+		DesignSpawnMove.Reset();
+		return;
+	}
+	DesignSpawnMove = FIntPoint(WaveIndex, SpawnIndex);
+	// Show the wave being edited.
+	SetDesignWave(WaveIndex);
+}
+
+bool UCombatSubsystem::SetDesignUnit(int32 UnitIndex, const FCombatLevelUnit& Unit)
+{
+	DesignSpawnMove.Reset();
+	if (!DesignLevel.Units.IsValidIndex(UnitIndex))
+	{
+		return false;
+	}
+
+	const int32 Occupant = DesignLevel.FindUnitAt(Unit.Cell);
+	const bool bValidCell = DesignLevel.IsInBounds(Unit.Cell)
+		&& !EnumHasAnyFlags(FCombatLevel::FlagsFor(DesignLevel.GetCell(Unit.Cell)), ECombatCellFlags::Blocked)
+		&& (Occupant == INDEX_NONE || Occupant == UnitIndex);
+	if (!bValidCell || Unit.Type.IsEmpty())
+	{
+		// Refused: the UI rebuilds and shows the old values again.
+		++DesignRevision;
+		return false;
+	}
+
+	DesignLevel.Units[UnitIndex] = Unit;
+	if (bDesignMode)
+	{
+		RefreshDesignView(false);
+	}
+	return true;
+}
+
+void UCombatSubsystem::RemoveDesignUnit(int32 UnitIndex)
+{
+	DesignSpawnMove.Reset();
+	if (!DesignLevel.Units.IsValidIndex(UnitIndex))
+	{
+		return;
+	}
+	DesignLevel.Units.RemoveAt(UnitIndex);
+	if (bDesignMode)
+	{
+		RefreshDesignView(false);
+	}
+}
+
+void UCombatSubsystem::BeginDesignUnitMove(int32 UnitIndex)
+{
+	DesignSpawnMove = IsMovingDesignUnit(UnitIndex) ? TOptional<FIntPoint>() : TOptional<FIntPoint>(FIntPoint(INDEX_NONE, UnitIndex));
 }
 
 void UCombatSubsystem::RemoveDesignWave()
@@ -1503,6 +1658,7 @@ void UCombatSubsystem::RemoveDesignWave()
 		return;
 	}
 	DesignLevel.Waves.RemoveAt(DesignWave);
+	DesignSpawnMove.Reset();
 	DesignWave = DesignLevel.Waves.IsEmpty() ? INDEX_NONE : FMath::Min(DesignWave, DesignLevel.Waves.Num() - 1);
 	if (bDesignMode)
 	{

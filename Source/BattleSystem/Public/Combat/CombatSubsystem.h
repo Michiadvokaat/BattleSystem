@@ -176,7 +176,31 @@ public:
 	float GetDesignSpawnTime() const { return DesignSpawnTime; }
 
 	/**
-	 * Mouse on the arena in edit mode. Place: the current tool on the cell (a unit only when bStroke is false,
+	 * Spawn list edits (wave index, index in that wave's Spawns). Each selects the spawn's wave. A cell that is outside
+	 * the grid, on a wall or water, or already holds a spawn of that wave is refused (the level stays as it was).
+	 */
+	bool SetDesignSpawn(int32 WaveIndex, int32 SpawnIndex, const FCombatLevelSpawn& Spawn);
+	/** Moves a spawn to the end of another wave's spawns. */
+	bool MoveDesignSpawnToWave(int32 WaveIndex, int32 SpawnIndex, int32 NewWaveIndex);
+	void RemoveDesignSpawn(int32 WaveIndex, int32 SpawnIndex);
+	/** The next left click in the arena puts this spawn on the clicked cell; a right click cancels. Again on the same spawn cancels too. */
+	void BeginDesignSpawnMove(int32 WaveIndex, int32 SpawnIndex);
+	bool IsMovingDesignSpawn() const { return DesignSpawnMove.IsSet(); }
+	bool IsMovingDesignSpawn(int32 WaveIndex, int32 SpawnIndex) const { return DesignSpawnMove.IsSet() && DesignSpawnMove.GetValue() == FIntPoint(WaveIndex, SpawnIndex); }
+	/**
+	 * Start unit edits from the spawn list (index in the level's Units). A cell outside the grid, on a wall or water,
+	 * or holding another unit is refused. Moving works as for spawns.
+	 */
+	bool SetDesignUnit(int32 UnitIndex, const FCombatLevelUnit& Unit);
+	void RemoveDesignUnit(int32 UnitIndex);
+	void BeginDesignUnitMove(int32 UnitIndex);
+	bool IsMovingDesignUnit(int32 UnitIndex) const { return IsMovingDesignSpawn(INDEX_NONE, UnitIndex); }
+	/** Changes with every change of the edited level (and every refused edit), so UI can rebuild. */
+	int32 GetDesignRevision() const { return DesignRevision; }
+
+	/**
+	 * Mouse on the arena in edit mode. While a spawn is being moved, a place click moves it there and an erase click
+	 * only cancels the move. Place: the current tool on the cell (a unit only when bStroke is false,
 	 * so dragging does not drop a row of units; the same for spawns in the selected wave). Erase: removes the unit,
 	 * the selected wave's spawn and the cell's wall/hedge/water.
 	 */
@@ -303,6 +327,9 @@ private:
 	int32 DesignUnitTeam = 0;
 	int32 DesignWave = INDEX_NONE;
 	float DesignSpawnTime = 0.f;
+	/** (wave, spawn index) of the spawn the next arena click moves; (INDEX_NONE, unit index) for a start unit. */
+	TOptional<FIntPoint> DesignSpawnMove;
+	int32 DesignRevision = 0;
 
 	UPROPERTY(Transient)
 	TArray<TObjectPtr<ACombatUnitActor>> DesignPreviews;

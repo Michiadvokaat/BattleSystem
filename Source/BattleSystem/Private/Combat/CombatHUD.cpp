@@ -7,6 +7,7 @@
 #include "GameFramework/PlayerController.h"
 #include "SCombatControlPanel.h"
 #include "SCombatLevelDesigner.h"
+#include "SCombatSpawnList.h"
 #include "SCombatUnitList.h"
 #include "Widgets/Layout/SBox.h"
 
@@ -54,6 +55,17 @@ void ACombatHUD::BeginPlay()
 		];
 	Viewport->AddViewportWidgetContent(DesignerContainer.ToSharedRef());
 
+	SpawnListContainer = SNew(SBox)
+		.HAlign(HAlign_Right)
+		.VAlign(VAlign_Bottom)
+		.Padding(16.f)
+		.Visibility(EVisibility::SelfHitTestInvisible)
+		[
+			SNew(SCombatSpawnList)
+			.Subsystem(GetWorld()->GetSubsystem<UCombatSubsystem>())
+		];
+	Viewport->AddViewportWidgetContent(SpawnListContainer.ToSharedRef());
+
 	if (APlayerController* PlayerController = GetOwningPlayerController())
 	{
 		PlayerController->SetShowMouseCursor(true);
@@ -69,7 +81,7 @@ void ACombatHUD::EndPlay(const EEndPlayReason::Type EndPlayReason)
 {
 	if (UGameViewportClient* Viewport = GetWorld()->GetGameViewport())
 	{
-		for (TSharedPtr<SWidget>* Container : { &PanelContainer, &UnitListContainer, &DesignerContainer })
+		for (TSharedPtr<SWidget>* Container : { &PanelContainer, &UnitListContainer, &DesignerContainer, &SpawnListContainer })
 		{
 			if (*Container)
 			{
@@ -80,6 +92,7 @@ void ACombatHUD::EndPlay(const EEndPlayReason::Type EndPlayReason)
 	PanelContainer.Reset();
 	UnitListContainer.Reset();
 	DesignerContainer.Reset();
+	SpawnListContainer.Reset();
 
 	Super::EndPlay(EndPlayReason);
 }

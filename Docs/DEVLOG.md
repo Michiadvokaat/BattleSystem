@@ -93,3 +93,6 @@ Dated history: decisions, bugs, rejected approaches. Newest entries at the botto
   - LevelDesigner: Spawn tool (type + time), wave row (`<` `>` `+` `-`), previews of the selected wave with their time.
   - 43/43 tests (6 new wave tests).
 - WaveSpawner done: the user checked it in PIE (`Levels/WaveTestLevel01.json`).
+- Spawn list for the LevelDesigner: bottom right in edit mode, every wave with its spawns sorted by time; per row type, wave, X, Y and time to edit, Move (then a click in the arena) and remove. Invalid cells are refused. Presentation only: no simulation changes, 43/43 tests.
+- Spawn list "empty" bug report: `WaveTest2` had three empty waves; its enemies were placed with the Unit tool on team 1 (start units), not as spawns. The list now also shows "Start enemies" (editable, movable, removable) and "(empty: use the Spawn tool)" under empty waves.
+- Spawn list done: the user checked it in PIE (`WaveTestLevel01`, `WaveTest2`).

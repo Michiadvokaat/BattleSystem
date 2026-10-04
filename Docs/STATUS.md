@@ -10,7 +10,7 @@ _Last updated: 2026-10-04_
 - Deterministic in `Arena-01`, seed 42: `DA_Setup_AoE` `0xBED8CC97`, `DA_Setup_Taunt` `0x7CE33AAB`, `DA_Setup_Mixed` `0x32F7C942`.
 - Player commands are done: the command log in the simulation (Move, player abilities without cooldown), scripts, replay v2 with checkpoints, a unit list at the top right with action buttons, arena clicks, a selection ring, and a move disc and line. Checked by the user.
 - LevelDesigner is done: levels as JSON in `Levels/` (`Demo`, `TestLevel`), built in the bottom-left menu (edit mode, size, wall/hedge/water/unit, painting, save/load, play), shown in the arena with a fitted camera, and copied into replays. Checked by the user.
-- WaveSpawner is done (checked by the user in PIE, test level `WaveTestLevel01`): levels have `waves` (spawns with type, cell and time), a wave pause in Project Settings (`WavePauseSeconds`), a Call wave button / `CallWave` command, and a Spawn tool and wave row in the LevelDesigner.
+- WaveSpawner is done (checked by the user in PIE, test level `WaveTestLevel01`): levels have `waves` (spawns with type, cell and time), a wave pause in Project Settings (`WavePauseSeconds`), a Call wave button / `CallWave` command, and a Spawn tool and wave row in the LevelDesigner, plus a spawn list at the bottom right (start enemies and every wave's spawns, editable; checked by the user).
 - In-game control panel: setup, seed, start/stop, pause, speed, debug, taunt range, replay save/play, batch 100/1000 (+CSV). Auto-start is off.
 - Repo on GitHub (`main`), with Git LFS for binary assets. `Content/ZZ_FAB/` (Fab packs) is local only.
 

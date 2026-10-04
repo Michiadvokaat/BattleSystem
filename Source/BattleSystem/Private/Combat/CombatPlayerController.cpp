@@ -41,7 +41,8 @@ void ACombatPlayerController::OnLeftClick()
 	}
 	if (Subsystem->IsDesignMode())
 	{
-		bPainting = true;
+		// Moving a spawn takes only this click: no painting stroke follows.
+		bPainting = !Subsystem->IsMovingDesignSpawn();
 		Subsystem->DesignPaint(Point, false, false);
 		return;
 	}
@@ -58,7 +59,7 @@ void ACombatPlayerController::OnRightClick()
 	FVector Point;
 	if (Subsystem->IsDesignMode())
 	{
-		bErasing = true;
+		bErasing = !Subsystem->IsMovingDesignSpawn();
 		if (GetArenaPointUnderMouse(Subsystem->GetGridHeight(), Point))
 		{
 			Subsystem->DesignPaint(Point, true, false);
