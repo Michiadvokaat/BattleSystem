@@ -1,6 +1,7 @@
 // Copyright Epic Games, Inc. All Rights Reserved.
 
 #include "Misc/AutomationTest.h"
+#include "Combat/CombatAppearance.h"
 #include "Combat/CombatBatch.h"
 #include "Combat/CombatLevel.h"
 #include "Combat/CombatPathfinding.h"
@@ -8,6 +9,7 @@
 #include "Combat/CombatSimulation.h"
 #include "Combat/CombatTags.h"
 #include "Combat/CombatUnitDefinition.h"
+#include "Engine/SkeletalMesh.h"
 #include "Misc/FileHelper.h"
 #include "UObject/Package.h"
 
@@ -1809,6 +1811,62 @@ bool FCombatLevelFileTest::RunTest(const FString& Parameters)
 	TestFalse(TEXT("Deleting a missing level fails"), CombatLevels::Delete(Second));
 
 	CleanUp();
+	return true;
+}
+
+IMPLEMENT_SIMPLE_AUTOMATION_TEST(FCombatAppearancePicksTest, "BattleSystem.Combat.AppearancePicks",
+	EAutomationTestFlags::EditorContext | EAutomationTestFlags::ProductFilter)
+
+bool FCombatAppearancePicksTest::RunTest(const FString& Parameters)
+{
+	// Empty transient meshes: the picks only compare pointers, nothing is rendered or merged.
+	auto MakeMesh = []() { return NewObject<USkeletalMesh>(GetTransientPackage()); };
+	USkeletalMesh* Body = MakeMesh();
+	const TArray<USkeletalMesh*> Hairs = { MakeMesh(), MakeMesh(), MakeMesh() };
+
+	UCombatAppearance* Look = NewObject<UCombatAppearance>(GetTransientPackage());
+	auto AddSlot = [Look](const TArray<USkeletalMesh*>& Options, float EmptyChance)
+	{
+		FCombatAppearanceSlot& Slot = Look->Slots.AddDefaulted_GetRef();
+		Slot.Options.Append(Options);
+		Slot.EmptyChance = EmptyChance;
+	};
+	AddSlot({ Body }, 0.f);
+	AddSlot(Hairs, 0.f);
+	AddSlot({ MakeMesh(), MakeMesh() }, 0.5f);
+	AddSlot({ MakeMesh() }, 1.f);
+	AddSlot({}, 0.f);
+
+	TestTrue(TEXT("Same seed, same picks"), Look->PickMeshes(7) == Look->PickMeshes(7));
+
+	bool bAnyDifferent = false;
+	bool bAlwaysFixed = true;
+	TArray<int32> HairCounts = { 0, 0, 0 };
+	int32 EmptyHats = 0;
+	constexpr int32 Runs = 200;
+	for (int32 Seed = 0; Seed < Runs; ++Seed)
+	{
+		const TArray<USkeletalMesh*> Picks = Look->PickMeshes(Seed);
+		bAnyDifferent |= Picks != Look->PickMeshes(0);
+		bAlwaysFixed &= Picks.Num() == 5 && Picks[0] == Body && Picks[3] == nullptr && Picks[4] == nullptr;
+		const int32 HairIndex = Hairs.IndexOfByKey(Picks[1]);
+		if (HairCounts.IsValidIndex(HairIndex))
+		{
+			++HairCounts[HairIndex];
+		}
+		EmptyHats += Picks[2] == nullptr ? 1 : 0;
+	}
+
+	TestTrue(TEXT("Other seeds give other picks"), bAnyDifferent);
+	TestTrue(TEXT("One option is always picked, EmptyChance 1 and no options are always empty"), bAlwaysFixed);
+	TestEqual(TEXT("Every hair pick is one of the options"), HairCounts[0] + HairCounts[1] + HairCounts[2], Runs);
+	TestTrue(TEXT("Every hair option is picked"), HairCounts[0] > 0 && HairCounts[1] > 0 && HairCounts[2] > 0);
+	TestTrue(TEXT("EmptyChance 0.5 leaves about half empty"), EmptyHats > Runs * 3 / 10 && EmptyHats < Runs * 7 / 10);
+
+	Look->UniformScale = 2.f;
+	Look->WidthScale = 1.5f;
+	Look->HeightScale = 0.5f;
+	TestTrue(TEXT("Mesh scale: uniform times width across, times height up"), Look->GetMeshScale().Equals(FVector(3.0, 3.0, 1.0)));
 	return true;
 }
 

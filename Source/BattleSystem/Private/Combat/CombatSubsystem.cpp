@@ -2,6 +2,7 @@
 
 #include "Combat/CombatSubsystem.h"
 #include "AssetRegistry/IAssetRegistry.h"
+#include "Combat/CombatAppearance.h"
 #include "Combat/CombatBatch.h"
 #include "Combat/CombatCommandScript.h"
 #include "Combat/CombatCueTable.h"
@@ -14,6 +15,7 @@
 #include "Combat/CombatUnitDefinition.h"
 #include "DrawDebugHelpers.h"
 #include "Engine/Engine.h"
+#include "Engine/SkeletalMesh.h"
 #include "Camera/CameraActor.h"
 #include "Camera/CameraComponent.h"
 #include "Engine/World.h"
@@ -439,6 +441,11 @@ void UCombatSubsystem::SpawnUnitActor(const FCombatUnit& Unit)
 	{
 		const bool bRanged = Unit.Stats.Attacks.ContainsByPredicate([](const FCombatAttackStats& Attack) { return Attack.IsRanged(); });
 		Actor->InitUnit(Unit.Id, Unit.Team, Unit.Stats.Radius, GetDefault<UCombatSettings>()->GetTeamColor(Unit.Team), bRanged);
+		if (Definition && Definition->Appearance)
+		{
+			// Same seed and unit ID, same look: a replay shows the same figures.
+			Actor->InitAppearance(Definition->Appearance, static_cast<int32>(HashCombine(GetTypeHash(CurrentSeed), GetTypeHash(Unit.Id))));
+		}
 	}
 	UnitActors.Add(Actor);
 	UnitDefinitions.Add(Definition);
@@ -489,6 +496,16 @@ void UCombatSubsystem::UpdateActors(float Alpha)
 		Actor->SetHealth(Unit.Stats.MaxHP > 0.f ? Unit.HP / Unit.Stats.MaxHP : 0.f);
 
 		Actor->SetStatusEffects(GetStatusDisplays(Unit));
+		if (Actor->HasAppearanceOverrides())
+		{
+			FGameplayTagContainer Tags = Unit.Stats.Tags;
+			for (const FCombatActiveEffect& Active : Unit.Effects.GetEffects())
+			{
+				Tags.AddTag(Active.Effect.EffectTag);
+				Tags.AppendTags(Active.Effect.GrantedTags);
+			}
+			Actor->SetActiveTags(Tags);
+		}
 		Actor->SetSelected(Unit.Id == SelectedUnitId);
 		Actor->UpdatePresentation(SimToWorld(Position), FVector(Facing.X, Facing.Y, 0.0));
 		// After the actor moved, so the line starts at its new position.
@@ -834,6 +851,11 @@ void UCombatSubsystem::HandleArenaCancel()
 const UCombatUnitDefinition* UCombatSubsystem::GetUnitDefinition(int32 UnitId) const
 {
 	return UnitDefinitions.IsValidIndex(UnitId) ? UnitDefinitions[UnitId].Get() : nullptr;
+}
+
+ACombatUnitActor* UCombatSubsystem::GetUnitActor(int32 UnitId) const
+{
+	return UnitActors.IsValidIndex(UnitId) ? UnitActors[UnitId].Get() : nullptr;
 }
 
 FText UCombatSubsystem::GetAbilityName(int32 UnitId, int32 AbilityIndex) const
@@ -2060,6 +2082,62 @@ namespace CombatConsole
 			UE_LOG(LogCombat, Warning, TEXT("Wave call not accepted (no running fight, a replay plays, no wave left, or a call is already queued)."));
 		}
 	}
+
+	/** Debug: puts a mesh (asset name or object path; none = empty) in a swappable slot of a unit's look. */
+	static void SetSlot(const TArray<FString>& Args, UWorld* World)
+	{
+		if (Args.Num() < 2)
+		{
+			UE_LOG(LogCombat, Error, TEXT("Combat.SetSlot <unit> <slot> [mesh]"));
+			return;
+		}
+		const UCombatSubsystem* Subsystem = World ? World->GetSubsystem<UCombatSubsystem>() : nullptr;
+		ACombatUnitActor* Actor = Subsystem ? Subsystem->GetUnitActor(FCString::Atoi(*Args[0])) : nullptr;
+		if (!Actor)
+		{
+			UE_LOG(LogCombat, Error, TEXT("No unit %s in a running fight."), *Args[0]);
+			return;
+		}
+
+		const FString SlotName = Args[1].StartsWith(TEXT("Slot.")) ? Args[1] : TEXT("Slot.") + Args[1];
+		const FGameplayTag SlotTag = FGameplayTag::RequestGameplayTag(FName(*SlotName), false);
+		if (!SlotTag.IsValid())
+		{
+			UE_LOG(LogCombat, Error, TEXT("Unknown slot tag %s."), *SlotName);
+			return;
+		}
+
+		USkeletalMesh* Mesh = nullptr;
+		if (Args.Num() > 2)
+		{
+			if (Args[2].Contains(TEXT("/")))
+			{
+				Mesh = LoadObject<USkeletalMesh>(nullptr, *Args[2]);
+			}
+			else
+			{
+				TArray<FAssetData> Assets;
+				IAssetRegistry::GetChecked().GetAssetsByClass(USkeletalMesh::StaticClass()->GetClassPathName(), Assets);
+				const FAssetData* Found = Assets.FindByPredicate([&Args](const FAssetData& Asset) { return Asset.AssetName.ToString() == Args[2]; });
+				Mesh = Found ? Cast<USkeletalMesh>(Found->GetAsset()) : nullptr;
+			}
+			if (!Mesh)
+			{
+				UE_LOG(LogCombat, Error, TEXT("Skeletal mesh %s not found."), *Args[2]);
+				return;
+			}
+		}
+
+		if (!Actor->SetSlotMesh(SlotTag, Mesh))
+		{
+			UE_LOG(LogCombat, Warning, TEXT("Slot %s of unit %s cannot change (no look, or a merged slot)."), *SlotName, *Args[0]);
+		}
+	}
+
+	static FAutoConsoleCommandWithWorldAndArgs SetSlotCommand(
+		TEXT("Combat.SetSlot"),
+		TEXT("Combat.SetSlot <unit> <slot> [mesh]: presentation debug, puts a skeletal mesh (asset name or path; none = empty) in a swappable slot (Hat or Slot.Hat) of the unit's look."),
+		FConsoleCommandWithWorldAndArgsDelegate::CreateStatic(&SetSlot));
 
 	static FAutoConsoleCommandWithWorldAndArgs CallWaveCommand(
 		TEXT("Combat.CallWave"),

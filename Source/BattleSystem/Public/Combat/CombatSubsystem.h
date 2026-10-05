@@ -134,6 +134,8 @@ public:
 	/** Changes on every start and stop, so UI can rebuild per fight. */
 	int32 GetFightSerial() const { return FightSerial; }
 	const UCombatUnitDefinition* GetUnitDefinition(int32 UnitId) const;
+	/** The actor that shows a unit, or nullptr (no fight, unknown ID). Presentation only. */
+	ACombatUnitActor* GetUnitActor(int32 UnitId) const;
 	/** UI name of a player ability: its DisplayName, else the last part of its type ("Taunt"). */
 	FText GetAbilityName(int32 UnitId, int32 AbilityIndex) const;
 	/** What the unit is doing for the player: queued or running order, or "Dead". Empty while the AI runs it. */

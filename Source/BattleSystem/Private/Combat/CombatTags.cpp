@@ -23,4 +23,17 @@ namespace CombatTags
 	UE_DEFINE_GAMEPLAY_TAG_COMMENT(Cue_Cleave, "Cue.Cleave", "Cleave swing.");
 	UE_DEFINE_GAMEPLAY_TAG_COMMENT(Cue_Rally, "Cue.Rally", "Rally aura.");
 	UE_DEFINE_GAMEPLAY_TAG_COMMENT(Cue_Taunt, "Cue.Taunt", "Taunt.");
+
+	UE_DEFINE_GAMEPLAY_TAG_COMMENT(Slot, "Slot", "Body part slots of a UCombatAppearance (presentation only).");
+	UE_DEFINE_GAMEPLAY_TAG_COMMENT(Slot_Body, "Slot.Body", "The body (skin, head).");
+	UE_DEFINE_GAMEPLAY_TAG_COMMENT(Slot_Face, "Slot.Face", "Face (expression).");
+	UE_DEFINE_GAMEPLAY_TAG_COMMENT(Slot_Hair, "Slot.Hair", "Hair style.");
+	UE_DEFINE_GAMEPLAY_TAG_COMMENT(Slot_Hat, "Slot.Hat", "Hat or helmet.");
+	UE_DEFINE_GAMEPLAY_TAG_COMMENT(Slot_Glasses, "Slot.Glasses", "Glasses.");
+	UE_DEFINE_GAMEPLAY_TAG_COMMENT(Slot_Shirt, "Slot.Shirt", "Shirt or top.");
+	UE_DEFINE_GAMEPLAY_TAG_COMMENT(Slot_Outwear, "Slot.Outwear", "Jacket or coat.");
+	UE_DEFINE_GAMEPLAY_TAG_COMMENT(Slot_Pants, "Slot.Pants", "Pants, shorts or skirt.");
+	UE_DEFINE_GAMEPLAY_TAG_COMMENT(Slot_Shoes, "Slot.Shoes", "Shoes.");
+	UE_DEFINE_GAMEPLAY_TAG_COMMENT(Slot_Gloves, "Slot.Gloves", "Gloves.");
+	UE_DEFINE_GAMEPLAY_TAG_COMMENT(Slot_Backpack, "Slot.Backpack", "Backpack or bag.");
 }

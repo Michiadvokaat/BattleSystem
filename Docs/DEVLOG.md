@@ -99,3 +99,14 @@ Dated history: decisions, bugs, rejected approaches. Newest entries at the botto
 - LevelDesigner Rename and Delete: on the level selected in the dropdown; rename takes the Name field and refuses an existing name; delete needs a second click within 3 s; the open level stays as unsaved. 44/44 tests (new: LevelFileRenameDelete).
 - Rename/Delete done: the user checked it in PIE. While testing, the test levels `TestLevel`, `WaveTest2` and `WaveTestLevel01` were deleted (still in git history) and `Levels/Level-01.json` was made.
 - Editor GPU crash (`DXGI_ERROR_DEVICE_REMOVED` / `DRIVER_INTERNAL_ERROR`) when copying ~80 skeletal meshes in the Content Browser. Cause: `USkeletalMeshThumbnailRenderer` caches one preview scene per asset path (up to 128), and with reserved GPUScene buffers every scene reserves several 2 GB virtual ranges. Past ~256 GB the driver fails a 2 GB `CreateReservedResource`. Measured with `rhi.DumpResourceMemory all Name=GPUScene.InstanceSceneData`: one extra scene per copy, not freed by `obj gc`. Fix in `DefaultEngine.ini` `[SystemSettings]`: `r.GPUScene.UseReservedResources=0` and `r.GPUScene.InstanceDataTileSizeLog2=-1` (normal growable buffers, 0.06 MB per scene). `r.Nanite.Streaming.ReservedResources` was not the cause. The user confirmed: 80 copies, no crash.
+
+## 2026-10-05
+
+- Character looks, route 1 of two investigated (Data Asset + own build vs the Mutable plugin; Mutable stays the fallback). Decisions with the user:
+  - A look is a `UCombatAppearance` Data Asset (diffable, filled by Python) instead of a Blueprint per figure.
+  - Variation: fixed parts plus optional random options per slot, picked with their own stream seeded by `HashCombine(fight seed, unit ID)`, so replays look the same and the simulation checksum is untouched.
+  - 30–100 figures on screen and parts that must change during play: fixed parts are merged into one mesh (`SkeletalMerging` plugin) and shared per combination; hats, glasses and the like are swappable Leader Pose components. Gameplay changes go through tag overrides (effect and granted tags), never through the simulation.
+  - Shape: uniform, width and height scale now; per-bone scaling later (needs an AnimGraph node and an editor module). No animations yet.
+- All 161 child/hero meshes use `/Game/ZZ_FAB/City_Characters/Skeletons/SKEL_Child_Skeleton`; a headless check merged the fixed parts of all four looks.
+- `ACombatUnitActor::SetActiveTags(Tags)` clashed with `AActor::Tags` (C4458, warnings are errors); the parameter is `InTags`.
+- Character looks checked by the user in PIE. `DA_Krijger` → `DA_Look_Melee`, `DA_Boogschutter` → `DA_Look_Ranger`, `DA_Tank` → `DA_Look_Tank`, `DA_Brute` → `DA_Look_Child_Male_Random` (set in the editor; the looks are local content, so without `/Game/Characters` these references are empty and the units show the placeholder).

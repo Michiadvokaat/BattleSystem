@@ -10,6 +10,7 @@
 #include "CombatUnitDefinition.generated.h"
 
 class ACombatProjectileActor;
+class UCombatAppearance;
 class ACombatUnitActor;
 struct FCombatUnitStats;
 
@@ -171,6 +172,10 @@ public:
 	/** Actor spawned to show this unit. Empty = ACombatUnitActor. */
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Presentation")
 	TSubclassOf<ACombatUnitActor> ActorClass;
+
+	/** Modular character look. Empty = the placeholder shape (cylinder or cube). */
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Presentation")
+	TObjectPtr<UCombatAppearance> Appearance;
 
 	/** Converts this definition to simulation stats, with times rounded to ticks of the given rate. */
 	FCombatUnitStats ToSimStats(int32 TickRate) const;

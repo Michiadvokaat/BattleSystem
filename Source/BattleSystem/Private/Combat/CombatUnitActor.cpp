@@ -1,10 +1,14 @@
 // Copyright Epic Games, Inc. All Rights Reserved.
 
 #include "Combat/CombatUnitActor.h"
+#include "Combat/CombatAppearance.h"
+#include "Combat/CombatSubsystem.h"
 #include "Components/WidgetComponent.h"
 #include "SCombatUnitWidgets.h"
+#include "Components/SkeletalMeshComponent.h"
 #include "Components/StaticMeshComponent.h"
 #include "DrawDebugHelpers.h"
+#include "Engine/SkeletalMesh.h"
 #include "Engine/StaticMesh.h"
 #include "Materials/MaterialInstanceDynamic.h"
 #include "Materials/MaterialInterface.h"
@@ -23,6 +27,12 @@ ACombatUnitActor::ACombatUnitActor()
 	NoseMesh = CreateDefaultSubobject<UStaticMeshComponent>(TEXT("NoseMesh"));
 	NoseMesh->SetupAttachment(RootComponent);
 	NoseMesh->SetCollisionEnabled(ECollisionEnabled::NoCollision);
+
+	CharacterMesh = CreateDefaultSubobject<USkeletalMeshComponent>(TEXT("CharacterMesh"));
+	CharacterMesh->SetupAttachment(RootComponent);
+	CharacterMesh->SetCollisionEnabled(ECollisionEnabled::NoCollision);
+	CharacterMesh->VisibilityBasedAnimTickOption = EVisibilityBasedAnimTickOption::OnlyTickPoseWhenRendered;
+	CharacterMesh->SetVisibility(false);
 
 	// Screen-space widgets always face the camera; they follow the actor's location only.
 	HealthBarWidget = CreateDefaultSubobject<UWidgetComponent>(TEXT("HealthBarWidget"));
@@ -81,6 +91,7 @@ void ACombatUnitActor::InitUnit(int32 InUnitId, int32 InTeam, float InRadius, co
 	UnitId = InUnitId;
 	Team = InTeam;
 	TeamColor = InTeamColor;
+	VisualHeight = BodyHeight;
 
 	if (UStaticMesh* Shape = bRanged ? RangedBodyMesh : MeleeBodyMesh)
 	{
@@ -139,6 +150,177 @@ void ACombatUnitActor::InitUnit(int32 InUnitId, int32 InTeam, float InRadius, co
 	StatusIcons = SNew(SCombatStatusIcons);
 	StatusWidget->SetSlateWidget(StatusIcons);
 	StatusWidget->SetRelativeLocation(FVector(0.0, 0.0, BodyHeight * 0.5));
+}
+
+void ACombatUnitActor::InitAppearance(const UCombatAppearance* InAppearance, int32 Seed)
+{
+	if (!InAppearance)
+	{
+		return;
+	}
+
+	const TArray<USkeletalMesh*> Picks = InAppearance->PickMeshes(Seed);
+	TArray<USkeletalMesh*> MergedParts;
+	for (int32 Index = 0; Index < Picks.Num(); ++Index)
+	{
+		if (Picks[Index] && !InAppearance->Slots[Index].bSwappable)
+		{
+			MergedParts.Add(Picks[Index]);
+		}
+	}
+	if (MergedParts.IsEmpty())
+	{
+		UE_LOG(LogCombat, Warning, TEXT("Look %s has no merged part (body) for unit %d; keeping the placeholder."), *InAppearance->GetName(), UnitId);
+		return;
+	}
+	Appearance = InAppearance;
+
+	// The fixed parts become one mesh, shared by all units with the same parts. If the merge fails, every part gets
+	// its own component that follows the first one: more expensive, but the unit still looks right.
+	UCombatMeshMergeCache* MergeCache = GetWorld()->GetSubsystem<UCombatMeshMergeCache>();
+	USkeletalMesh* MergedMesh = MergeCache ? MergeCache->GetMergedMesh(MergedParts) : nullptr;
+	CharacterMesh->SetSkeletalMesh(MergedMesh ? MergedMesh : MergedParts[0]);
+	if (!MergedMesh)
+	{
+		for (int32 Index = 1; Index < MergedParts.Num(); ++Index)
+		{
+			AddPartComponent(MergedParts[Index]);
+		}
+	}
+	CharacterMesh->SetRelativeRotation(InAppearance->MeshRotation);
+	CharacterMesh->SetRelativeScale3D(InAppearance->GetMeshScale());
+	if (InAppearance->AnimClass)
+	{
+		CharacterMesh->SetAnimInstanceClass(InAppearance->AnimClass);
+	}
+	CharacterMesh->SetVisibility(true);
+	BodyMesh->SetVisibility(false);
+	NoseMesh->SetVisibility(false);
+
+	for (int32 Index = 0; Index < Picks.Num(); ++Index)
+	{
+		if (InAppearance->Slots[Index].bSwappable)
+		{
+			AddSwappableSlot(InAppearance->Slots[Index].SlotTag, Picks[Index]);
+		}
+	}
+	// An override of a slot the look does not have (a helmet while taunted) needs an empty slot to show in.
+	for (const FCombatAppearanceOverride& Override : InAppearance->Overrides)
+	{
+		if (!SwappableSlotTags.Contains(Override.SlotTag))
+		{
+			const bool bMergedSlot = InAppearance->Slots.ContainsByPredicate([&Override](const FCombatAppearanceSlot& Slot) { return Slot.SlotTag == Override.SlotTag; });
+			if (bMergedSlot)
+			{
+				UE_LOG(LogCombat, Warning, TEXT("Look %s: override for %s is ignored, that slot is merged (turn on Swappable)."),
+					*InAppearance->GetName(), *Override.SlotTag.ToString());
+				continue;
+			}
+			AddSwappableSlot(Override.SlotTag, nullptr);
+		}
+	}
+
+	for (const FCombatAppearanceProp& Prop : InAppearance->Props)
+	{
+		if (!Prop.Mesh)
+		{
+			continue;
+		}
+		UStaticMeshComponent* PropComponent = NewObject<UStaticMeshComponent>(this);
+		PropComponent->SetupAttachment(CharacterMesh, Prop.Socket);
+		PropComponent->SetStaticMesh(Prop.Mesh);
+		PropComponent->SetRelativeTransform(Prop.Offset);
+		PropComponent->SetCollisionEnabled(ECollisionEnabled::NoCollision);
+		PropComponent->RegisterComponent();
+	}
+
+	// Widgets and texts by the figure's height (feet at the mesh origin) instead of BodyHeight.
+	VisualHeight = FMath::Max(CharacterMesh->GetSkeletalMeshAsset()->GetBounds().GetBox().Max.Z * InAppearance->GetMeshScale().Z, 10.0);
+	HealthBarWidget->SetRelativeLocation(FVector(0.0, 0.0, VisualHeight + HealthBarOffset));
+	StatusWidget->SetRelativeLocation(FVector(0.0, 0.0, VisualHeight * 0.5));
+}
+
+bool ACombatUnitActor::HasAppearanceOverrides() const
+{
+	return Appearance && !Appearance->Overrides.IsEmpty();
+}
+
+void ACombatUnitActor::SetActiveTags(const FGameplayTagContainer& InTags)
+{
+	if (!HasAppearanceOverrides() || InTags == ActiveTags)
+	{
+		return;
+	}
+	ActiveTags = InTags;
+	for (int32 Index = 0; Index < SwappableSlotTags.Num(); ++Index)
+	{
+		RefreshSwappableSlot(Index);
+	}
+}
+
+bool ACombatUnitActor::SetSlotMesh(FGameplayTag SlotTag, USkeletalMesh* Mesh)
+{
+	if (!Appearance)
+	{
+		return false;
+	}
+	int32 Index = SwappableSlotTags.IndexOfByKey(SlotTag);
+	if (Index == INDEX_NONE)
+	{
+		const bool bMergedSlot = Appearance->Slots.ContainsByPredicate([SlotTag](const FCombatAppearanceSlot& Slot) { return Slot.SlotTag == SlotTag; });
+		if (bMergedSlot)
+		{
+			return false;
+		}
+		Index = AddSwappableSlot(SlotTag, Mesh);
+	}
+	SwappableBaseMeshes[Index] = Mesh;
+	RefreshSwappableSlot(Index);
+	return true;
+}
+
+USkeletalMeshComponent* ACombatUnitActor::AddPartComponent(USkeletalMesh* Mesh)
+{
+	// Attached without offset: it gets the body's rotation and scale, and its pose from the body.
+	USkeletalMeshComponent* Part = NewObject<USkeletalMeshComponent>(this);
+	Part->SetupAttachment(CharacterMesh);
+	Part->SetSkeletalMesh(Mesh);
+	Part->SetLeaderPoseComponent(CharacterMesh);
+	Part->SetCollisionEnabled(ECollisionEnabled::NoCollision);
+	Part->RegisterComponent();
+	return Part;
+}
+
+int32 ACombatUnitActor::AddSwappableSlot(FGameplayTag SlotTag, USkeletalMesh* BaseMesh)
+{
+	SwappableSlotTags.Add(SlotTag);
+	SwappableComponents.Add(AddPartComponent(BaseMesh));
+	SwappableBaseMeshes.Add(BaseMesh);
+	const int32 Index = SwappableSlotTags.Num() - 1;
+	RefreshSwappableSlot(Index);
+	return Index;
+}
+
+void ACombatUnitActor::RefreshSwappableSlot(int32 Index)
+{
+	USkeletalMesh* Mesh = SwappableBaseMeshes[Index];
+	for (const FCombatAppearanceOverride& Override : Appearance->Overrides)
+	{
+		if (Override.SlotTag == SwappableSlotTags[Index] && ActiveTags.HasTag(Override.WhileTag))
+		{
+			Mesh = Override.Mesh;
+			break;
+		}
+	}
+
+	USkeletalMeshComponent* Component = SwappableComponents[Index];
+	if (Component->GetSkeletalMeshAsset() != Mesh)
+	{
+		Component->SetSkeletalMesh(Mesh);
+		// A new mesh needs the leader's pose again.
+		Component->SetLeaderPoseComponent(CharacterMesh, true);
+	}
+	Component->SetVisibility(Mesh != nullptr);
 }
 
 void ACombatUnitActor::SetHealth(float Fraction)
@@ -230,14 +412,14 @@ void ACombatUnitActor::OnAttack(const FVector& TargetLocation)
 void ACombatUnitActor::OnHit(float Damage)
 {
 	HitFlashStartTime = GetWorld()->GetTimeSeconds();
-	DrawDebugString(GetWorld(), GetActorLocation() + FVector(0.0, 0.0, BodyHeight + 30.0),
+	DrawDebugString(GetWorld(), GetActorLocation() + FVector(0.0, 0.0, VisualHeight + 30.0),
 		FString::Printf(TEXT("-%.0f"), Damage), nullptr, FColor::Yellow, DamageTextDuration, true);
 	ReceiveUnitHit(Damage);
 }
 
 void ACombatUnitActor::OnDeath()
 {
-	DrawDebugString(GetWorld(), GetActorLocation() + FVector(0.0, 0.0, BodyHeight * 0.5),
+	DrawDebugString(GetWorld(), GetActorLocation() + FVector(0.0, 0.0, VisualHeight * 0.5),
 		TEXT("X"), nullptr, FColor::Red, DamageTextDuration * 2.f, true);
 	SetActorHiddenInGame(true);
 	ReceiveUnitDeath();

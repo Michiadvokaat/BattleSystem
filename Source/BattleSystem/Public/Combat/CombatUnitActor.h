@@ -4,10 +4,14 @@
 
 #include "CoreMinimal.h"
 #include "GameFramework/Actor.h"
+#include "GameplayTagContainer.h"
 #include "CombatUnitActor.generated.h"
 
 class SCombatHealthBar;
 class SCombatStatusIcons;
+class UCombatAppearance;
+class USkeletalMesh;
+class USkeletalMeshComponent;
 class UMaterialInstanceDynamic;
 class UWidgetComponent;
 class UMaterialInterface;
@@ -19,6 +23,7 @@ class UStaticMeshComponent;
  * simulation (interpolated position, events) and contains no gameplay logic.
  * Placeholder look: a cylinder (melee) or cube (ranged) in the team color with a "nose" that shows the facing,
  * a health bar above it and its active effects as short labels on its center (both screen-space widgets).
+ * With a UCombatAppearance (InitAppearance) it shows a modular character instead of the placeholder shape.
  */
 /** One status label shown on a unit, for example "T" in magenta while taunted. */
 struct FCombatStatusDisplay
@@ -39,6 +44,25 @@ public:
 
 	/** bRanged picks the body shape: RangedBodyMesh for units with a ranged attack, MeleeBodyMesh otherwise. */
 	virtual void InitUnit(int32 InUnitId, int32 InTeam, float InRadius, const FLinearColor& InTeamColor, bool bRanged);
+
+	/**
+	 * Shows the modular look instead of the placeholder shape. Call after InitUnit. Seed picks the variations
+	 * (the subsystem passes a hash of the fight seed and the unit ID).
+	 */
+	virtual void InitAppearance(const UCombatAppearance* InAppearance, int32 Seed);
+
+	/** True when the look has overrides, so the subsystem only collects tags for the units that use them. */
+	bool HasAppearanceOverrides() const;
+
+	/** The unit's active effect tags plus the tags they grant; switches the look's overrides. Called every frame. */
+	virtual void SetActiveTags(const FGameplayTagContainer& InTags);
+
+	/**
+	 * Puts another mesh in a swappable slot (nullptr = empty). A slot the look does not have yet is added; a merged
+	 * slot cannot change. An active override of the slot stays visible until its tag ends. False if not possible.
+	 */
+	UFUNCTION(BlueprintCallable, Category = "Combat|Appearance")
+	bool SetSlotMesh(FGameplayTag SlotTag, USkeletalMesh* Mesh);
 
 	/** Called every frame with the interpolated location and the direction to face (may be zero). */
 	virtual void UpdatePresentation(const FVector& InLocation, const FVector& FacingDirection);
@@ -82,6 +106,10 @@ protected:
 
 	UPROPERTY(VisibleAnywhere, Category = "Combat")
 	TObjectPtr<UStaticMeshComponent> NoseMesh;
+
+	/** The modular look's body: the merged parts. Swappable slots and props are attached to it. Hidden without a look. */
+	UPROPERTY(VisibleAnywhere, Category = "Combat")
+	TObjectPtr<USkeletalMeshComponent> CharacterMesh;
 
 	UPROPERTY(VisibleAnywhere, Category = "Combat")
 	TObjectPtr<UWidgetComponent> HealthBarWidget;
@@ -147,6 +175,29 @@ protected:
 
 private:
 	void SetBodyColor(const FLinearColor& Color);
+
+	/** A part component on CharacterMesh that follows its pose (Leader Pose). */
+	USkeletalMeshComponent* AddPartComponent(USkeletalMesh* Mesh);
+	int32 AddSwappableSlot(FGameplayTag SlotTag, USkeletalMesh* BaseMesh);
+	/** Shows the slot's mesh: the first override whose tag is active, else the base mesh. */
+	void RefreshSwappableSlot(int32 Index);
+
+	UPROPERTY(Transient)
+	TObjectPtr<const UCombatAppearance> Appearance;
+
+	/** Swappable slots, parallel arrays: tag, component and the mesh shown when no override is active. */
+	TArray<FGameplayTag> SwappableSlotTags;
+
+	UPROPERTY(Transient)
+	TArray<TObjectPtr<USkeletalMeshComponent>> SwappableComponents;
+
+	UPROPERTY(Transient)
+	TArray<TObjectPtr<USkeletalMesh>> SwappableBaseMeshes;
+
+	FGameplayTagContainer ActiveTags;
+
+	/** Height of what is shown (BodyHeight or the look's mesh); the widgets and texts are placed by it. */
+	float VisualHeight = 0.f;
 
 	UPROPERTY(Transient)
 	TObjectPtr<UMaterialInstanceDynamic> BodyMaterial;
