@@ -1418,6 +1418,7 @@ IMPLEMENT_SIMPLE_AUTOMATION_TEST(FCombatLevelFormatTest, "BattleSystem.Combat.Le
 bool FCombatLevelFormatTest::RunTest(const FString& Parameters)
 {
 	FCombatLevel Level = CombatTests::MakeTestLevel();
+	Level.Units[0].Rotation = 3;
 
 	FCombatGridData Grid;
 	Level.ToGridData(Grid);
@@ -1435,6 +1436,8 @@ bool FCombatLevelFormatTest::RunTest(const FString& Parameters)
 	TestFalse(TEXT("No cell rows in the file"), Json.Contains(TEXT("\"rows\"")));
 	TestEqual(TEXT("Units survive"), Loaded.Units.Num(), 3);
 	TestTrue(TEXT("Unit cell survives"), Loaded.Units.Num() == 3 && Loaded.Units[1].Cell == FIntPoint(10, 6) && Loaded.Units[1].Team == 1);
+	TestEqual(TEXT("Unit rotation survives"), Loaded.Units.Num() == 3 ? Loaded.Units[0].Rotation : -1, 3);
+	TestEqual(TEXT("Rotation 3 is 135 degrees"), CombatLevels::GetUnitYaw(3), 135.f);
 
 	Level.Resize(8, 8);
 	TestEqual(TEXT("Shrinking removes units outside"), Level.Units.Num(), 2);
@@ -1447,6 +1450,14 @@ bool FCombatLevelFormatTest::RunTest(const FString& Parameters)
 	FCombatGridData OldGrid;
 	Old.ToGridData(OldGrid);
 	TestTrue(TEXT("Its wall row is ignored"), OldGrid.IsWalkable(FIntPoint(0, 0)) && !OldGrid.BlocksSight(FIntPoint(0, 0)));
+
+	// Before version 5 units faced the other side: team 0 +X, the rest and spawns -X.
+	FCombatLevel Unturned;
+	TestTrue(TEXT("Reads a version 4 level"), CombatLevels::FromJson(TEXT("{\"formatVersion\":4,\"name\":\"Old\",\"width\":6,\"height\":5,")
+		TEXT("\"units\":[{\"type\":\"A\",\"team\":0,\"cell\":{\"x\":0,\"y\":0}},{\"type\":\"A\",\"team\":1,\"cell\":{\"x\":5,\"y\":0}}],")
+		TEXT("\"waves\":[{\"spawns\":[{\"type\":\"A\",\"cell\":{\"x\":5,\"y\":4},\"time\":0}]}]}"), Unturned));
+	TestTrue(TEXT("Old team 0 faces +X, team 1 and spawns -X"), Unturned.Units.Num() == 2 && Unturned.Units[0].Rotation == 0
+		&& Unturned.Units[1].Rotation == 4 && Unturned.Waves.Num() == 1 && Unturned.Waves[0].Spawns.Num() == 1 && Unturned.Waves[0].Spawns[0].Rotation == 4);
 	Level.Resize(2, 100);
 	TestTrue(TEXT("Size is clamped"), Level.Width == FCombatLevel::MinSize && Level.Height == FCombatLevel::MaxSize);
 	return true;
@@ -1465,9 +1476,12 @@ bool FCombatLevelConfigTest::RunTest(const FString& Parameters)
 
 	FCombatSimConfig Config;
 	TArray<const UCombatUnitDefinition*> Definitions;
-	TestTrue(TEXT("Builds"), CombatLevels::BuildConfig(Level, 20, Resolve, Config, &Definitions));
+	TArray<int32> Rotations;
+	Level.Units[2].Rotation = 6;
+	TestTrue(TEXT("Builds"), CombatLevels::BuildConfig(Level, 20, Resolve, Config, &Definitions, &Rotations));
 	TestEqual(TEXT("Three valid units"), Config.Units.Num(), 3);
 	TestEqual(TEXT("A definition per unit"), Definitions.Num(), 3);
+	TestTrue(TEXT("A rotation per unit, skipped ones left out"), Rotations.Num() == 3 && Rotations[2] == 6);
 	TestTrue(TEXT("The grid comes from the level"), Config.Grid.Width == 12 && !Config.Grid.IsWalkable(FIntPoint(5, 1)));
 
 	// A fight from a level is deterministic like any other.

@@ -8,6 +8,7 @@
 #include "CombatSettings.generated.h"
 
 class UCombatCueTable;
+class UMaterialInterface;
 class UCombatPieceCatalog;
 class UCombatSetup;
 
@@ -148,6 +149,16 @@ public:
 	/** Pieces the LevelDesigner can place (walls, floors, furniture); shown levels take their meshes from it. */
 	UPROPERTY(Config, EditAnywhere, Category = "Arena")
 	TSoftObjectPtr<UCombatPieceCatalog> PieceCatalog = TSoftObjectPtr<UCombatPieceCatalog>(FSoftObjectPath(TEXT("/Game/Environment/DA_PieceCatalog.DA_PieceCatalog")));
+
+	/**
+	 * LevelDesigner: the see-through material of the unit ghost under the cursor (Unit and Spawn Mode). It replaces
+	 * every material of the unit; vector parameter Color gets the team color, scalar Opacity DesignGhostOpacity.
+	 */
+	UPROPERTY(Config, EditAnywhere, Category = "Presentation")
+	TSoftObjectPtr<UMaterialInterface> DesignGhostMaterial = TSoftObjectPtr<UMaterialInterface>(FSoftObjectPath(TEXT("/Game/Combat/M_DesignGhost.M_DesignGhost")));
+
+	UPROPERTY(Config, EditAnywhere, Category = "Presentation", meta = (ClampMin = 0, ClampMax = 1))
+	float DesignGhostOpacity = 0.45f;
 
 	/** Height of border pieces (walls, windows, door frames) while they are lowered (walls Cutaway / Down, key V). */
 	UPROPERTY(Config, EditAnywhere, Category = "Presentation", meta = (ClampMin = 1, Units = "cm"))

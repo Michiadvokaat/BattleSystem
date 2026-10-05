@@ -19,6 +19,8 @@ _Last updated: 2026-10-05_
 - In-game control panel: setup, seed, start/stop, pause, speed, debug, taunt range, replay save/play, batch 100/1000 (+CSV). Auto-start is off.
 - Repo on GitHub (`main`), with Git LFS for binary assets. `Content/ZZ_FAB/` (Fab packs) and the other local content folders (`Characters`, `Environment`, `Meshes`, ...) are local only.
 
+- Unit ghost and rotation in the LevelDesigner (checked by the user in PIE; merged to `main` from `unit-ghost`, tag `before-unit-ghost`): a see-through ghost of the unit under the cursor in Unit and Spawn Mode, and a start rotation in 45 degree steps (R / Shift+R) stored per unit and spawn (level format 5, presentation only).
+
 ## Open work
 
 - Balance (from the batch): team 0 wins `DA_Setup_AoE` 86.5% and `DA_Setup_Mixed` 99.7%; the Brutes win `DA_Setup_Test` and `DA_Setup_Taunt`.

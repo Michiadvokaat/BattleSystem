@@ -63,13 +63,22 @@ void ACombatPlayerController::PlayerTick(float DeltaTime)
 		Subsystem->DesignPaint(Point, bErasing, true);
 	}
 
-	// Piece tool: the selected piece follows the cursor (orange while Shift is held: erasing).
-	if (Subsystem && Subsystem->IsDesignMode() && Subsystem->GetDesignTool() == ECombatDesignTool::Build && GetArenaPointUnderMouse(Subsystem->GetGridHeight(), Point))
+	// Build Mode: the selected piece follows the cursor (orange while Shift is held: erasing). Unit and Spawn Mode: the
+	// unit ghost does, except while Shift is held or a unit or spawn is being moved from the list.
+	const bool bHasPoint = Subsystem && Subsystem->IsDesignMode() && GetArenaPointUnderMouse(Subsystem->GetGridHeight(), Point);
+	const bool bShift = IsInputKeyDown(EKeys::LeftShift) || IsInputKeyDown(EKeys::RightShift);
+	if (bHasPoint && Subsystem->GetDesignTool() == ECombatDesignTool::Build)
 	{
-		Subsystem->UpdateDesignPiecePreview(Point, IsInputKeyDown(EKeys::LeftShift) || IsInputKeyDown(EKeys::RightShift));
+		Subsystem->HideDesignUnitGhost();
+		Subsystem->UpdateDesignPiecePreview(Point, bShift);
+	}
+	else if (bHasPoint && !bShift && !Subsystem->IsMovingDesignSpawn())
+	{
+		Subsystem->UpdateDesignUnitGhost(Point);
 	}
 	else if (Subsystem)
 	{
+		Subsystem->HideDesignUnitGhost();
 		Subsystem->HideDesignPiecePreview();
 	}
 
@@ -167,9 +176,17 @@ void ACombatPlayerController::OnWheel(double Steps)
 void ACombatPlayerController::OnRotatePiece()
 {
 	UCombatSubsystem* Subsystem = GetWorld()->GetSubsystem<UCombatSubsystem>();
-	if (Subsystem && Subsystem->IsDesignMode() && Subsystem->GetDesignTool() == ECombatDesignTool::Build)
+	if (Subsystem && Subsystem->IsDesignMode())
 	{
-		Subsystem->RotateDesignPiece(IsInputKeyDown(EKeys::LeftShift) || IsInputKeyDown(EKeys::RightShift) ? -1 : 1);
+		const int32 Steps = IsInputKeyDown(EKeys::LeftShift) || IsInputKeyDown(EKeys::RightShift) ? -1 : 1;
+		if (Subsystem->GetDesignTool() == ECombatDesignTool::Build)
+		{
+			Subsystem->RotateDesignPiece(Steps);
+		}
+		else
+		{
+			Subsystem->RotateDesignUnit(Steps);
+		}
 	}
 }
 
