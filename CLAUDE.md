@@ -44,6 +44,9 @@ $P  = "D:\Unreal\UnrealProjects\BattleSystem\BattleSystem.uproject"
 # Create or update the LevelDesigner piece catalog from /Game/Environment/Catalogus (local content; editor must be closed)
 & "$UE\Engine\Binaries\Win64\UnrealEditor-Cmd.exe" "$P" -run=pythonscript -script="D:/Unreal/UnrealProjects/BattleSystem/Scripts/CreatePieceCatalog.py" -unattended -nullrhi -nosplash
 
+# Make taller/lower copies of catalog meshes (editor mode, not -run=pythonscript; editor must be closed), then rerun CreatePieceCatalog.py
+& "$UE\Engine\Binaries\Win64\UnrealEditor-Cmd.exe" "$P" -unattended -nullrhi -nosplash -nosound -ExecCmds="py D:/Unreal/UnrealProjects/BattleSystem/Scripts/MakeWallVariants.py, QUIT_EDITOR"
+
 # Create the character looks in /Game/Characters/Looks (local content; editor must be closed)
 & "$UE\Engine\Binaries\Win64\UnrealEditor-Cmd.exe" "$P" -run=pythonscript -script="D:/Unreal/UnrealProjects/BattleSystem/Scripts/CreateCharacterAppearances.py" -unattended -nullrhi -nosplash
 ```
