@@ -31,6 +31,9 @@ Content/Characters/
 Content/Materials/
 Content/Textures/
 
+# Local environment assets (kept out of the repo)
+Content/Environment/
+
 # Claude Code local settings
 .claude/settings.local.json
 
