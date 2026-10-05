@@ -4,6 +4,7 @@
 
 #include "CoreMinimal.h"
 #include "Subsystems/WorldSubsystem.h"
+#include "Combat/CombatGrid.h"
 #include "Combat/CombatLevel.h"
 #include "Combat/CombatReplay.h"
 #include "Combat/CombatSimulation.h"
@@ -133,6 +134,11 @@ public:
 	void HandleArenaClick(const FVector& WorldPoint);
 	/** Right click: cancel Move targeting, else deselect. */
 	void HandleArenaCancel();
+	/** Walls Up / Cutaway / Down (key V, control panel): presentation only. */
+	void CycleWallMode();
+	ECombatWallMode GetWallMode() const { return WallMode; }
+	FText GetWallModeText() const;
+
 	/** Height of the grid plane (for turning mouse clicks into arena points). */
 	double GetGridHeight() const { return GridOrigin.Z; }
 
@@ -186,9 +192,38 @@ public:
 	ECombatDesignTool GetDesignTool() const { return DesignTool; }
 	void SetDesignUnitType(const FString& Type) { DesignUnitType = Type; }
 	const FString& GetDesignUnitType() const { return DesignUnitType; }
+	/**
+	 * LevelDesigner undo / redo (Ctrl+Z, Ctrl+Y or Ctrl+Shift+Z, buttons): one step per change of the edited level,
+	 * a mouse stroke is one step, at most MaxDesignUndo steps. The level's name is not part of it (Save does not count).
+	 */
+	void UndoDesign();
+	void RedoDesign();
+	bool CanUndoDesign() const { return bDesignMode && !DesignUndo.IsEmpty(); }
+	bool CanRedoDesign() const { return bDesignMode && !DesignRedo.IsEmpty(); }
+
 	/** Piece tool: the catalog piece to place (its Id) and its rotation (R, Shift+R, Rotate). */
-	void SetDesignPiece(const FString& Id) { DesignPieceId = Id; }
+	/** Choosing another piece while moving one puts the moved piece back first. */
+	void SetDesignPiece(const FString& Id)
+	{
+		if (DesignMovingPiece.IsSet() && Id != DesignPieceId)
+		{
+			CancelDesignPieceMove();
+		}
+		DesignPieceId = Id;
+	}
 	const FString& GetDesignPiece() const { return DesignPieceId; }
+	/**
+	 * Ctrl+click: picks up the topmost piece under WorldPoint to move it: it leaves the level and becomes the selection
+	 * (with its rotation and the Piece tool). The next placement puts it down (one undo step with the pick-up).
+	 */
+	bool PickDesignPiece(const FVector& WorldPoint);
+	bool IsMovingDesignPiece() const { return DesignMovingPiece.IsSet(); }
+	bool HasDesignPieceSelected() const { return !DesignPieceId.IsEmpty(); }
+	/**
+	 * Right click in edit mode: puts a moved piece back, else deselects the selected piece, else erases what is under
+	 * WorldPoint (the cell; with the Piece tool the topmost piece). bHasPoint is false when the click missed the grid plane.
+	 */
+	void DesignRightClick(const FVector& WorldPoint, bool bHasPoint);
 	/** Turns the selected piece by Steps of its layer: 45 degrees for details, 90 for the others. */
 	void RotateDesignPiece(int32 Steps);
 	/** The selected piece's rotation in degrees. */
@@ -310,11 +345,20 @@ private:
 	void ShowOverviewIfChanged(bool bLevel);
 	/** Shows the edited level in the arena and rebuilds the preview units. */
 	void RefreshDesignView(bool bFitCamera);
+	/** Adds the last recorded level to the undo steps when the edited level differs from it (from RefreshDesignView). */
+	void RecordDesignChange();
+	void ResetDesignHistory();
+	/** Puts a piece that is being moved back where it was (undoing the pick-up). */
+	void CancelDesignPieceMove();
+	/** Undo / redo: shows Level as the edited level (keeping the current name). */
+	void RestoreDesignLevel(FCombatLevel Level);
 	/** The selected piece under WorldPoint and its definition; false without a catalog or a valid selection. */
 	bool GetDesignPiecePlacement(const FVector& WorldPoint, FCombatLevelPiece& OutPiece, const FCombatPieceDefinition*& OutDefinition);
 	/** Whether a unit may stand on Cell of the edited level: no blocking cell kind and no piece that blocks walking. */
 	bool IsDesignCellWalkable(const FIntPoint& Cell) const;
 	void DestroyDesignPreviews();
+	/** Lowers the walls for the wall mode, with the units (or LevelDesigner previews) as cutaway targets. */
+	void UpdateWalls();
 	FVector SimToWorld(const FVector2D& Local) const { return GridOrigin + FVector(Local.X, Local.Y, 0.0); }
 
 	TUniquePtr<FCombatSimulation> Simulation;
@@ -379,6 +423,21 @@ private:
 	float DesignSpawnTime = 0.f;
 	/** (wave, spawn index) of the spawn the next arena click moves; (INDEX_NONE, unit index) for a start unit. */
 	TOptional<FIntPoint> DesignSpawnMove;
+	static constexpr int32 MaxDesignUndo = 50;
+	TArray<FCombatLevel> DesignUndo;
+	TArray<FCombatLevel> DesignRedo;
+	/** The edited level as last recorded; changes are measured against it. */
+	FCombatLevel DesignRecorded;
+	bool bHasDesignRecorded = false;
+	/** Mouse strokes: a press starts a new one; changes during the same stroke merge into one undo step. */
+	int32 DesignStrokeSerial = 0;
+	int32 ActiveDesignStroke = INDEX_NONE;
+	int32 LastRecordedStroke = INDEX_NONE;
+
+	/** The piece being moved, as it was before the pick-up, and the stroke serial of the pick-up. */
+	TOptional<FCombatLevelPiece> DesignMovingPiece;
+	int32 DesignMoveStroke = INDEX_NONE;
+
 	FString DesignPieceId;
 	/** In eighth turns (45 degrees); pieces that turn in quarters use half of it. */
 	int32 DesignPieceRotation = 0;
@@ -391,6 +450,7 @@ private:
 
 	UPROPERTY(Transient)
 	TArray<TObjectPtr<ACombatUnitActor>> DesignPreviews;
+	ECombatWallMode WallMode = ECombatWallMode::Cutaway;
 
 	int32 SelectedUnitId = INDEX_NONE;
 	bool bAwaitingMoveTarget = false;

@@ -142,6 +142,25 @@ void SCombatControlPanel::Construct(const FArguments& InArgs)
 						SNew(STextBlock).Text(this, &SCombatControlPanel::GetPauseText)
 					]
 				]
+				+ SHorizontalBox::Slot().AutoWidth().Padding(0.f, 0.f, 4.f, 0.f)
+				[
+					SNew(SButton)
+					.OnClicked_Lambda([this]()
+					{
+						if (UCombatSubsystem* CombatSubsystem = Subsystem.Get())
+						{
+							CombatSubsystem->CycleWallMode();
+						}
+						return FReply::Handled();
+					})
+					[
+						SNew(STextBlock).Text_Lambda([this]()
+						{
+							const UCombatSubsystem* CombatSubsystem = Subsystem.Get();
+							return CombatSubsystem ? CombatSubsystem->GetWallModeText() : FText::GetEmpty();
+						})
+					]
+				]
 				+ SHorizontalBox::Slot().AutoWidth()
 				[
 					MakeButton(INVTEXT("Reset camera (F)"), FOnClicked::CreateLambda([this]()

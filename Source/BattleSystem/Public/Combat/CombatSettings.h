@@ -79,6 +79,13 @@ public:
 	UPROPERTY(Config, EditAnywhere, Category = "Movement", meta = (ClampMin = 0, ClampMax = 1))
 	float SeparationStrength = 0.5f;
 
+	/**
+	 * Units keep their radius from walls, blocks and edge walls, but at most this much, so every unit still fits through
+	 * an opening of one cell (keep it below half the cell size). 0 = only the center is kept out of walls.
+	 */
+	UPROPERTY(Config, EditAnywhere, Category = "Movement", meta = (ClampMin = 0, Units = "cm"))
+	float WallClearance = 45.f;
+
 	/** How threat decreases over time. */
 	UPROPERTY(Config, EditAnywhere, Category = "Threat")
 	ECombatThreatDecayMode ThreatDecayMode = ECombatThreatDecayMode::HalfLife;
@@ -141,6 +148,14 @@ public:
 	/** Pieces the LevelDesigner can place (walls, floors, furniture); shown levels take their meshes from it. */
 	UPROPERTY(Config, EditAnywhere, Category = "Arena")
 	TSoftObjectPtr<UCombatPieceCatalog> PieceCatalog = TSoftObjectPtr<UCombatPieceCatalog>(FSoftObjectPath(TEXT("/Game/Environment/DA_PieceCatalog.DA_PieceCatalog")));
+
+	/** Height of border pieces (walls, windows, door frames) while they are lowered (walls Cutaway / Down, key V). */
+	UPROPERTY(Config, EditAnywhere, Category = "Presentation", meta = (ClampMin = 1, Units = "cm"))
+	float LowWallHeight = 40.f;
+
+	/** Cutaway: a wall goes down when it hides this point of a unit (its feet + this height) from the camera. */
+	UPROPERTY(Config, EditAnywhere, Category = "Presentation", meta = (ClampMin = 0, Units = "cm"))
+	float CutawayTargetHeight = 60.f;
 
 	/** How long the flash of an area attack going off stays visible. */
 	UPROPERTY(Config, EditAnywhere, Category = "Presentation", meta = (ClampMin = 0, Units = "s"))

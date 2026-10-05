@@ -42,7 +42,10 @@ void ACombatPlayerController::SetupInputComponent()
 	InputComponent->BindKey(EKeys::MouseScrollUp, IE_Pressed, this, &ACombatPlayerController::OnWheelUp);
 	InputComponent->BindKey(EKeys::MouseScrollDown, IE_Pressed, this, &ACombatPlayerController::OnWheelDown);
 	InputComponent->BindKey(EKeys::F, IE_Pressed, this, &ACombatPlayerController::OnResetCamera);
+	InputComponent->BindKey(EKeys::V, IE_Pressed, this, &ACombatPlayerController::OnCycleWalls);
 	InputComponent->BindKey(EKeys::R, IE_Pressed, this, &ACombatPlayerController::OnRotatePiece);
+	InputComponent->BindKey(EKeys::Z, IE_Pressed, this, &ACombatPlayerController::OnUndoKey);
+	InputComponent->BindKey(EKeys::Y, IE_Pressed, this, &ACombatPlayerController::OnRedoKey);
 }
 
 void ACombatPlayerController::PlayerTick(float DeltaTime)
@@ -90,6 +93,12 @@ void ACombatPlayerController::OnLeftClick()
 	FVector Point;
 	if (!Subsystem || !GetArenaPointUnderMouse(Subsystem->GetGridHeight(), Point))
 	{
+		return;
+	}
+	// Ctrl: pick up the piece under the cursor to move it, instead of placing.
+	if (Subsystem->IsDesignMode() && (IsInputKeyDown(EKeys::LeftControl) || IsInputKeyDown(EKeys::RightControl)))
+	{
+		Subsystem->PickDesignPiece(Point);
 		return;
 	}
 	if (Subsystem->IsDesignMode())
@@ -161,6 +170,40 @@ void ACombatPlayerController::OnRotatePiece()
 	if (Subsystem && Subsystem->IsDesignMode() && Subsystem->GetDesignTool() == ECombatDesignTool::Piece)
 	{
 		Subsystem->RotateDesignPiece(IsInputKeyDown(EKeys::LeftShift) || IsInputKeyDown(EKeys::RightShift) ? -1 : 1);
+	}
+}
+
+void ACombatPlayerController::OnUndoKey()
+{
+	UCombatSubsystem* Subsystem = GetWorld()->GetSubsystem<UCombatSubsystem>();
+	if (!Subsystem || !(IsInputKeyDown(EKeys::LeftControl) || IsInputKeyDown(EKeys::RightControl)))
+	{
+		return;
+	}
+	if (IsInputKeyDown(EKeys::LeftShift) || IsInputKeyDown(EKeys::RightShift))
+	{
+		Subsystem->RedoDesign();
+	}
+	else
+	{
+		Subsystem->UndoDesign();
+	}
+}
+
+void ACombatPlayerController::OnRedoKey()
+{
+	UCombatSubsystem* Subsystem = GetWorld()->GetSubsystem<UCombatSubsystem>();
+	if (Subsystem && (IsInputKeyDown(EKeys::LeftControl) || IsInputKeyDown(EKeys::RightControl)))
+	{
+		Subsystem->RedoDesign();
+	}
+}
+
+void ACombatPlayerController::OnCycleWalls()
+{
+	if (UCombatSubsystem* Subsystem = GetWorld()->GetSubsystem<UCombatSubsystem>())
+	{
+		Subsystem->CycleWallMode();
 	}
 }
 
@@ -252,9 +295,9 @@ void ACombatPlayerController::UpdateCameraDrag(float DeltaTime)
 			{
 				Subsystem->HandleArenaCancel();
 			}
-			else if (bHasClickPoint)
+			else
 			{
-				Subsystem->DesignPaint(ClickPoint, true, false);
+				Subsystem->DesignRightClick(ClickPoint, bHasClickPoint);
 			}
 			return;
 		}

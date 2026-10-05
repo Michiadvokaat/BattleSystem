@@ -9,6 +9,17 @@
 #include "CombatGrid.generated.h"
 
 class UInstancedStaticMeshComponent;
+
+/** How border pieces (walls) are shown, so units behind them stay visible (key V, control panel). */
+enum class ECombatWallMode : uint8
+{
+	/** Full height. */
+	Up,
+	/** Walls that hide a unit from the camera are lowered. */
+	Cutaway,
+	/** All walls lowered. */
+	Down,
+};
 class UMaterialInstanceDynamic;
 class UMaterialInterface;
 class UStaticMesh;
@@ -60,6 +71,12 @@ public:
 	 */
 	void ShowPiecePreview(const FCombatLevelPiece& Piece, float InCellSize, UStaticMesh* Mesh, const FTransform& MeshTransform, bool bFits, bool bErase);
 	void HidePiecePreview();
+
+	/**
+	 * Lowers border pieces to LowWallHeight: all of them (Down), none (Up), or those whose full-height bounds the line
+	 * from CameraLocation to one of Targets crosses (Cutaway). Only changes components whose state changes.
+	 */
+	void UpdateWalls(ECombatWallMode Mode, const FVector& CameraLocation, TConstArrayView<FVector> Targets);
 
 	FIntPoint WorldToCell(const FVector& World) const;
 	/** World position of the center of a cell, at the grid's height. */
@@ -151,6 +168,17 @@ private:
 
 	UPROPERTY(Transient)
 	TArray<TObjectPtr<UStaticMeshComponent>> PieceComponents;
+
+	/** Border pieces taller than LowWallHeight, parallel arrays: component, full and lowered transform, full world bounds. */
+	struct FWallPiece
+	{
+		TWeakObjectPtr<UStaticMeshComponent> Component;
+		FTransform FullTransform;
+		FTransform LowTransform;
+		FBox WorldBounds;
+		bool bLowered = false;
+	};
+	TArray<FWallPiece> WallPieces;
 
 	bool bHasLevel = false;
 	FCombatGridData LevelGridData;

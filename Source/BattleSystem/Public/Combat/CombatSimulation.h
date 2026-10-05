@@ -157,6 +157,8 @@ struct FCombatSimConfig
 	int32 PathLookaheadCells = 8;
 	/** Fraction of the overlap between two units that is pushed apart per tick (0..1). */
 	float SeparationStrength = 0.5f;
+	/** Units keep min(radius, this) cm from unwalkable cells and edge walls; 0 = only their center is kept out. */
+	float WallClearance = 0.f;
 
 	/** Threat decay per tick: threat = threat * ThreatDecayFactorPerTick - ThreatDecayAmountPerTick (half-life or linear). */
 	float ThreatDecayFactorPerTick = 1.f;
@@ -434,7 +436,15 @@ private:
 	FVector2D FindRouteSteerPoint(FCombatUnit& Unit) const;
 	FVector2D ComputeSeparation(const FCombatUnit& Unit) const;
 	/** Moves from From towards To without ending in a blocked cell, sliding along one axis if needed. */
-	FVector2D ResolveMove(const FVector2D& From, const FVector2D& To) const;
+	/** Where a move from From to To ends: in a walkable cell without crossing an edge wall, then Clearance away from walls. */
+	FVector2D ResolveMove(const FVector2D& From, const FVector2D& To, float Clearance) const;
+	/**
+	 * Whether a unit can walk the straight line From -> To when steering: with wall clearance a band of 90% of its
+	 * clearance to either side (so it does not aim past a door frame it cannot pass), else the center line.
+	 */
+	bool IsSteerLineClear(const FCombatUnit& Unit, const FVector2D& From, const FVector2D& To) const;
+	/** The cell part of ResolveMove: walkable cell, no edge wall crossed, else slide on X, then Y, else stay. */
+	FVector2D ResolveMoveInCells(const FVector2D& From, const FVector2D& To) const;
 	void TryStartAttack(FCombatUnit& Unit, const FCombatUnit& Target, int32 AttackIndex);
 	/** Starts an attack (event, cooldown, windup or fire); TargetId is INDEX_NONE for area attacks. */
 	void StartAttack(FCombatUnit& Unit, int32 TargetId, int32 AttackIndex);

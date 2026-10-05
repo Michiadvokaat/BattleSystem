@@ -91,6 +91,29 @@ void SCombatLevelDesigner::Construct(const FArguments& InArgs)
 						},
 						[this]() { return IsEditing(); })
 				]
+				// Undo / redo of the edited level (Ctrl+Z, Ctrl+Y).
+				+ SHorizontalBox::Slot().AutoWidth().Padding(0.f, 0.f, 4.f, 0.f)
+				[
+					SNew(SButton)
+					.Visibility(this, &SCombatLevelDesigner::GetEditVisibility)
+					.ToolTipText(INVTEXT("Undo (Ctrl+Z)"))
+					.IsEnabled_Lambda([this]() { const UCombatSubsystem* Current = Subsystem.Get(); return Current && Current->CanUndoDesign(); })
+					.OnClicked_Lambda([this]() { if (UCombatSubsystem* Current = Subsystem.Get()) { Current->UndoDesign(); } return FReply::Handled(); })
+					[
+						SNew(STextBlock).Text(INVTEXT("Undo"))
+					]
+				]
+				+ SHorizontalBox::Slot().AutoWidth().Padding(0.f, 0.f, 4.f, 0.f)
+				[
+					SNew(SButton)
+					.Visibility(this, &SCombatLevelDesigner::GetEditVisibility)
+					.ToolTipText(INVTEXT("Redo (Ctrl+Y or Ctrl+Shift+Z)"))
+					.IsEnabled_Lambda([this]() { const UCombatSubsystem* Current = Subsystem.Get(); return Current && Current->CanRedoDesign(); })
+					.OnClicked_Lambda([this]() { if (UCombatSubsystem* Current = Subsystem.Get()) { Current->RedoDesign(); } return FReply::Handled(); })
+					[
+						SNew(STextBlock).Text(INVTEXT("Redo"))
+					]
+				]
 				+ SHorizontalBox::Slot().AutoWidth()
 				[
 					MakeButton(INVTEXT("Play"), [this]()
@@ -410,7 +433,7 @@ void SCombatLevelDesigner::Construct(const FArguments& InArgs)
 				.Text_Lambda([this]()
 				{
 					return IsPieceTool()
-						? INVTEXT("Left: place   Shift+Left: erase (this layer)   R / Shift+R: rotate   Right drag: look")
+						? INVTEXT("Left: place   Ctrl+Left: move a piece   Shift+Left: erase   R / Shift+R: rotate   Right click: deselect / put back / erase   Right drag: look")
 						: INVTEXT("Left: place (hold to paint)   Shift+Left: erase   Right click: erase cell   Right drag: look");
 				})
 				.ColorAndOpacity(FLinearColor(0.75f, 0.75f, 0.75f))
@@ -426,6 +449,24 @@ void SCombatLevelDesigner::Construct(const FArguments& InArgs)
 		]
 	];
 	RebuildPieceCategories();
+}
+
+void SCombatLevelDesigner::Tick(const FGeometry& AllottedGeometry, const double InCurrentTime, const float InDeltaTime)
+{
+	SCompoundWidget::Tick(AllottedGeometry, InCurrentTime, InDeltaTime);
+	UCombatSubsystem* Current = Subsystem.Get();
+	const UCombatPieceCatalog* Catalog = Current && IsPieceTool() ? Current->GetPieceCatalog() : nullptr;
+	if (!Catalog || Current->GetDesignPiece() == FollowedPiece)
+	{
+		return;
+	}
+	FollowedPiece = Current->GetDesignPiece();
+	const FCombatPieceDefinition* Selected = Catalog->Find(FollowedPiece);
+	if (Selected && Selected->Category != SelectedCategory)
+	{
+		SelectedCategory = Selected->Category;
+		RebuildPalette();
+	}
 }
 
 bool SCombatLevelDesigner::IsPieceTool() const
@@ -458,6 +499,7 @@ void SCombatLevelDesigner::RebuildPieceCategories()
 		Current->SetDesignPiece(Selected->Id);
 	}
 	SelectedCategory = Selected->Category;
+	FollowedPiece = Selected->Id;
 
 	for (const FString& Category : Categories)
 	{

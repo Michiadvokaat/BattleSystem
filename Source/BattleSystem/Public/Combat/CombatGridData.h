@@ -67,6 +67,13 @@ struct BATTLESYSTEM_API FCombatGridData
 	/** Whether the straight line between two local positions crosses no edge wall (cells are not checked). */
 	bool CrossesNoEdgeWall(const FVector2D& From, const FVector2D& To) const;
 
+	/**
+	 * Pushes a position away from unwalkable cells (also outside the grid) and edge walls nearby until it is at least
+	 * Clearance from each, in one pass in a fixed order (cells row by row, then edges). Deterministic; a position
+	 * exactly on a wall is left there.
+	 */
+	FVector2D PushClear(const FVector2D& Position, float Clearance) const;
+
 	/** Out-of-bounds cells are not walkable. */
 	bool IsWalkable(const FIntPoint& Cell) const { return IsInBounds(Cell) && !HasFlags(Cell, ECombatCellFlags::Blocked); }
 	bool BlocksSight(const FIntPoint& Cell) const { return !IsInBounds(Cell) || HasFlags(Cell, ECombatCellFlags::BlocksSight); }
@@ -82,6 +89,9 @@ struct BATTLESYSTEM_API FCombatGridData
 
 	/** Whether the straight line between two local positions only crosses walkable cells and no edge walls. Passing exactly through a corner needs both routes around it open. */
 	bool IsLineWalkable(const FVector2D& From, const FVector2D& To) const;
+
+	/** IsLineWalkable for a band: the center line and the lines HalfWidth to either side of it must all be walkable. */
+	bool IsWideLineWalkable(const FVector2D& From, const FVector2D& To, float HalfWidth) const;
 
 	/** Whether the straight line between two local positions crosses no sight-blocking cells and no edge walls (same corner rule). */
 	bool HasLineOfSight(const FVector2D& From, const FVector2D& To) const;

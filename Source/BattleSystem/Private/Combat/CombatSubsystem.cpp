@@ -19,12 +19,14 @@
 #include "Engine/SkeletalMesh.h"
 #include "Camera/CameraActor.h"
 #include "Camera/CameraComponent.h"
+#include "Camera/PlayerCameraManager.h"
 #include "Engine/World.h"
 #include "GameFramework/PlayerController.h"
 #include "HAL/IConsoleManager.h"
 #include "Kismet/GameplayStatics.h"
 #include "Misc/App.h"
 #include "Misc/Paths.h"
+#include "Misc/ScopeExit.h"
 #include "NiagaraFunctionLibrary.h"
 
 DEFINE_LOG_CATEGORY(LogCombat);
@@ -43,6 +45,7 @@ static TAutoConsoleVariable<int32> CVarCombatShowRanges(
 void UCombatSubsystem::Tick(float DeltaTime)
 {
 	Super::Tick(DeltaTime);
+	UpdateWalls();
 
 	if (!Simulation)
 	{
@@ -1275,6 +1278,7 @@ void UCombatSubsystem::EnterDesignMode()
 	StopFight();
 	bDesignMode = true;
 	DesignSpawnMove.Reset();
+	ResetDesignHistory();
 	if (LastLevel.IsSet())
 	{
 		DesignLevel = LastLevel.GetValue();
@@ -1441,6 +1445,14 @@ void UCombatSubsystem::DesignPaint(const FVector& WorldPoint, bool bErase, bool 
 		return;
 	}
 
+	// Everything this press and the stroke after it change is one undo step.
+	if (!bStroke)
+	{
+		++DesignStrokeSerial;
+	}
+	ActiveDesignStroke = DesignStrokeSerial;
+	ON_SCOPE_EXIT { ActiveDesignStroke = INDEX_NONE; };
+
 	const ACombatGrid* Grid = ACombatGrid::Find(GetWorld());
 	const FVector Origin = Grid ? Grid->GetActorLocation() : FVector::ZeroVector;
 	const FIntPoint Cell(FMath::FloorToInt32((WorldPoint.X - Origin.X) / DesignLevel.CellSize),
@@ -1486,6 +1498,14 @@ void UCombatSubsystem::DesignPaint(const FVector& WorldPoint, bool bErase, bool 
 		const FCombatPieceDefinition* Definition = nullptr;
 		if (!GetDesignPiecePlacement(WorldPoint, Piece, Definition))
 		{
+			// Nothing selected: erasing removes the topmost piece under the cursor.
+			const ACombatGrid* PieceGrid = ACombatGrid::Find(GetWorld());
+			const int32 Under = bErase ? DesignLevel.FindPieceUnder(FVector2D(WorldPoint - (PieceGrid ? PieceGrid->GetActorLocation() : FVector::ZeroVector))) : INDEX_NONE;
+			if (Under != INDEX_NONE)
+			{
+				DesignLevel.Pieces.RemoveAt(Under);
+				RefreshDesignView(false);
+			}
 			return;
 		}
 		if (bErase)
@@ -1494,6 +1514,13 @@ void UCombatSubsystem::DesignPaint(const FVector& WorldPoint, bool bErase, bool 
 		}
 		else if (!bStroke && DesignLevel.PlacePiece(Piece))
 		{
+			// Putting down a moved piece completes the move: one undo step with its pick-up.
+			if (DesignMovingPiece.IsSet())
+			{
+				ActiveDesignStroke = DesignMoveStroke;
+				DesignMovingPiece.Reset();
+				DesignMoveStroke = INDEX_NONE;
+			}
 			// A piece that blocks walking cannot stand on a unit or a spawn (of any wave).
 			if (Piece.Layer == ECombatPieceLayer::Cell && Piece.bBlocksWalking)
 			{
@@ -1602,6 +1629,127 @@ void UCombatSubsystem::DesignPaint(const FVector& WorldPoint, bool bErase, bool 
 	}
 }
 
+void UCombatSubsystem::RecordDesignChange()
+{
+	if (!bHasDesignRecorded)
+	{
+		DesignRecorded = DesignLevel;
+		bHasDesignRecorded = true;
+		return;
+	}
+	// Compared as JSON without the name, so Save (which sets the name) is not a change.
+	auto ToComparable = [](FCombatLevel Level)
+	{
+		Level.Name.Reset();
+		FString Json;
+		CombatLevels::ToJson(Level, Json);
+		return Json;
+	};
+	if (ToComparable(DesignLevel) == ToComparable(DesignRecorded))
+	{
+		return;
+	}
+	const bool bSameStroke = ActiveDesignStroke != INDEX_NONE && ActiveDesignStroke == LastRecordedStroke;
+	if (!bSameStroke)
+	{
+		DesignUndo.Add(DesignRecorded);
+		if (DesignUndo.Num() > MaxDesignUndo)
+		{
+			DesignUndo.RemoveAt(0);
+		}
+	}
+	DesignRedo.Reset();
+	LastRecordedStroke = ActiveDesignStroke;
+	DesignRecorded = DesignLevel;
+}
+
+void UCombatSubsystem::ResetDesignHistory()
+{
+	DesignMovingPiece.Reset();
+	DesignMoveStroke = INDEX_NONE;
+	DesignUndo.Reset();
+	DesignRedo.Reset();
+	bHasDesignRecorded = false;
+	LastRecordedStroke = INDEX_NONE;
+}
+
+void UCombatSubsystem::UndoDesign()
+{
+	if (CanUndoDesign())
+	{
+		DesignRedo.Add(DesignLevel);
+		RestoreDesignLevel(DesignUndo.Pop());
+	}
+}
+
+void UCombatSubsystem::RedoDesign()
+{
+	if (CanRedoDesign())
+	{
+		DesignUndo.Add(DesignLevel);
+		RestoreDesignLevel(DesignRedo.Pop());
+	}
+}
+
+void UCombatSubsystem::RestoreDesignLevel(FCombatLevel Level)
+{
+	Level.Name = DesignLevel.Name;
+	DesignLevel = MoveTemp(Level);
+	DesignRecorded = DesignLevel;
+	LastRecordedStroke = INDEX_NONE;
+	DesignSpawnMove.Reset();
+	DesignMovingPiece.Reset();
+	DesignMoveStroke = INDEX_NONE;
+	if (!DesignLevel.Waves.IsValidIndex(DesignWave))
+	{
+		DesignWave = DesignLevel.Waves.Num() - 1;
+	}
+	// Refits the camera only if the size changed.
+	RefreshDesignView(true);
+}
+
+void UCombatSubsystem::CycleWallMode()
+{
+	WallMode = static_cast<ECombatWallMode>((static_cast<uint8>(WallMode) + 1) % 3);
+}
+
+FText UCombatSubsystem::GetWallModeText() const
+{
+	switch (WallMode)
+	{
+	case ECombatWallMode::Up: return INVTEXT("Walls: Up (V)");
+	case ECombatWallMode::Cutaway: return INVTEXT("Walls: Cutaway (V)");
+	default: return INVTEXT("Walls: Down (V)");
+	}
+}
+
+void UCombatSubsystem::UpdateWalls()
+{
+	ACombatGrid* Grid = ACombatGrid::Find(GetWorld());
+	const APlayerController* PlayerController = GetWorld()->GetFirstPlayerController();
+	if (!Grid || !PlayerController || !PlayerController->PlayerCameraManager)
+	{
+		return;
+	}
+	// Cutaway targets: a point in each visible unit (or LevelDesigner preview).
+	TArray<FVector> Targets;
+	if (WallMode == ECombatWallMode::Cutaway)
+	{
+		const FVector Lift(0.0, 0.0, GetDefault<UCombatSettings>()->CutawayTargetHeight);
+		for (const TArray<TObjectPtr<ACombatUnitActor>>* Actors : { &UnitActors, &DesignPreviews })
+		{
+			for (const ACombatUnitActor* Actor : *Actors)
+			{
+				if (Actor && !Actor->IsHidden())
+				{
+					Targets.Add(Actor->GetActorLocation() + Lift);
+				}
+			}
+		}
+	}
+	Grid->UpdateWalls(WallMode, PlayerController->PlayerCameraManager->GetCameraLocation(), Targets);
+}
+
 const UCombatPieceCatalog* UCombatSubsystem::GetPieceCatalog()
 {
 	if (!PieceCatalog)
@@ -1609,6 +1757,74 @@ const UCombatPieceCatalog* UCombatSubsystem::GetPieceCatalog()
 		PieceCatalog = GetDefault<UCombatSettings>()->PieceCatalog.LoadSynchronous();
 	}
 	return PieceCatalog;
+}
+
+bool UCombatSubsystem::PickDesignPiece(const FVector& WorldPoint)
+{
+	const ACombatGrid* Grid = ACombatGrid::Find(GetWorld());
+	const FVector Origin = Grid ? Grid->GetActorLocation() : FVector::ZeroVector;
+	CancelDesignPieceMove();
+	const int32 Index = bDesignMode ? DesignLevel.FindPieceUnder(FVector2D(WorldPoint - Origin)) : INDEX_NONE;
+	if (Index == INDEX_NONE)
+	{
+		return false;
+	}
+	const FCombatLevelPiece Piece = DesignLevel.Pieces[Index];
+	DesignTool = ECombatDesignTool::Piece;
+	DesignPieceId = Piece.Id;
+	// The rotation is kept in eighths.
+	DesignPieceRotation = Piece.Layer == ECombatPieceLayer::Detail ? Piece.Rotation : Piece.Rotation * 2;
+
+	// The pick-up is a stroke of its own; putting it down joins it, so both are one undo step.
+	DesignMovingPiece = Piece;
+	DesignMoveStroke = ++DesignStrokeSerial;
+	ActiveDesignStroke = DesignMoveStroke;
+	DesignLevel.Pieces.RemoveAt(Index);
+	RefreshDesignView(false);
+	ActiveDesignStroke = INDEX_NONE;
+	return true;
+}
+
+void UCombatSubsystem::CancelDesignPieceMove()
+{
+	if (!DesignMovingPiece.IsSet())
+	{
+		return;
+	}
+	const bool bPickUpRecorded = LastRecordedStroke == DesignMoveStroke;
+	const FCombatLevelPiece Original = DesignMovingPiece.GetValue();
+	DesignMovingPiece.Reset();
+	DesignMoveStroke = INDEX_NONE;
+	// If the last undo step is the level before the pick-up, going back to it puts the piece back; after other edits
+	// it is placed again instead.
+	if (bPickUpRecorded)
+	{
+		UndoDesign();
+		DesignRedo.Reset();
+	}
+	else if (DesignLevel.PlacePiece(Original))
+	{
+		RefreshDesignView(false);
+	}
+}
+
+void UCombatSubsystem::DesignRightClick(const FVector& WorldPoint, bool bHasPoint)
+{
+	if (DesignMovingPiece.IsSet())
+	{
+		CancelDesignPieceMove();
+		return;
+	}
+	if (DesignTool == ECombatDesignTool::Piece && HasDesignPieceSelected())
+	{
+		DesignPieceId.Reset();
+		HideDesignPiecePreview();
+		return;
+	}
+	if (bHasPoint)
+	{
+		DesignPaint(WorldPoint, true, false);
+	}
 }
 
 void UCombatSubsystem::RotateDesignPiece(int32 Steps)
@@ -1689,6 +1905,7 @@ bool UCombatSubsystem::IsDesignCellWalkable(const FIntPoint& Cell) const
 
 void UCombatSubsystem::RefreshDesignView(bool bFitCamera)
 {
+	RecordDesignChange();
 	++DesignRevision;
 	ACombatGrid* Grid = ACombatGrid::Find(GetWorld());
 	if (!Grid)

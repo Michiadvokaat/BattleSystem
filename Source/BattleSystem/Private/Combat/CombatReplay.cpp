@@ -20,6 +20,7 @@ FCombatSimSettings FCombatSimSettings::FromProjectSettings(float InTauntRangeOve
 	Settings.RetargetIntervalTicks = FMath::Max(Project->SecondsToTicks(Project->RetargetInterval), 1);
 	Settings.PathLookaheadCells = Project->PathLookaheadCells;
 	Settings.SeparationStrength = Project->SeparationStrength;
+	Settings.WallClearance = Project->WallClearance;
 
 	if (Project->ThreatDecayMode == ECombatThreatDecayMode::HalfLife)
 	{
@@ -47,6 +48,7 @@ void FCombatSimSettings::ApplyTo(FCombatSimConfig& Config) const
 	Config.RetargetIntervalTicks = RetargetIntervalTicks;
 	Config.PathLookaheadCells = PathLookaheadCells;
 	Config.SeparationStrength = SeparationStrength;
+	Config.WallClearance = WallClearance;
 	Config.ThreatDecayFactorPerTick = ThreatDecayFactorPerTick;
 	Config.ThreatDecayAmountPerTick = ThreatDecayAmountPerTick;
 	Config.ThreatThreshold = ThreatThreshold;

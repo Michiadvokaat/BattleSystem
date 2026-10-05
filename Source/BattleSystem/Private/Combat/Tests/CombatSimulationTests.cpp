@@ -2278,4 +2278,113 @@ bool FCombatDetailPiecesTest::RunTest(const FString& Parameters)
 	return true;
 }
 
+IMPLEMENT_SIMPLE_AUTOMATION_TEST(FCombatPieceUnderTest, "BattleSystem.Combat.PieceUnder",
+	EAutomationTestFlags::EditorContext | EAutomationTestFlags::ProductFilter)
+
+bool FCombatPieceUnderTest::RunTest(const FString& Parameters)
+{
+	FCombatPieceDefinition Floor;
+	Floor.Layer = ECombatPieceLayer::Floor;
+	Floor.Size = FIntPoint(4, 4);
+	FCombatPieceDefinition Table;
+	Table.Id = TEXT("Table");
+	FCombatPieceDefinition Wall;
+	Wall.Layer = ECombatPieceLayer::Edge;
+	Wall.Size = FIntPoint(2, 1);
+	FCombatPieceDefinition Toy;
+	Toy.Layer = ECombatPieceLayer::Detail;
+
+	FCombatLevel Level = FCombatLevel::MakeEmpty(TEXT("Under"), 6, 6);
+	Level.PlacePiece(Floor.MakePiece(FIntPoint(0, 0), 0));
+	Level.PlacePiece(Table.MakePiece(FIntPoint(1, 1), 0));
+	Level.PlacePiece(Wall.MakePiece(FIntPoint(2, 3), 0));
+	Level.PlacePiece(CombatPieces::PlaceAt(Toy, FVector2D(110.0, 110.0), 0, 100.f));
+
+	TestEqual(TEXT("The detail on its position comes first"), Level.FindPieceUnder(FVector2D(115.0, 105.0)), 3);
+	TestEqual(TEXT("Elsewhere in that cell: the table"), Level.FindPieceUnder(FVector2D(180.0, 180.0)), 1);
+	TestEqual(TEXT("Near a wall's border: the wall"), Level.FindPieceUnder(FVector2D(250.0, 290.0)), 2);
+	TestEqual(TEXT("Further from it: the floor"), Level.FindPieceUnder(FVector2D(250.0, 250.0)), 0);
+	TestEqual(TEXT("Nothing outside every piece"), Level.FindPieceUnder(FVector2D(550.0, 550.0)), INDEX_NONE);
+	return true;
+}
+
+IMPLEMENT_SIMPLE_AUTOMATION_TEST(FCombatWallClearanceTest, "BattleSystem.Combat.WallClearance",
+	EAutomationTestFlags::EditorContext | EAutomationTestFlags::ProductFilter)
+
+bool FCombatWallClearanceTest::RunTest(const FString& Parameters)
+{
+	FCombatGridData Grid = CombatTests::MakeEdgeWallGrid();
+	Grid.AddFlags(FIntPoint(2, 5), ECombatCellFlags::Blocked);
+
+	TestTrue(TEXT("Next to a blocked cell: pushed out to the clearance"), Grid.PushClear(FVector2D(250.0, 610.0), 45.f).Equals(FVector2D(250.0, 645.0), 0.01));
+	TestTrue(TEXT("Next to an edge wall: pushed out"), Grid.PushClear(FVector2D(490.0, 250.0), 45.f).Equals(FVector2D(455.0, 250.0), 0.01));
+	TestTrue(TEXT("Next to the grid's border: pushed out"), Grid.PushClear(FVector2D(20.0, 250.0), 45.f).Equals(FVector2D(45.0, 250.0), 0.01));
+	TestTrue(TEXT("Far enough: unchanged"), Grid.PushClear(FVector2D(150.0, 150.0), 45.f).Equals(FVector2D(150.0, 150.0)));
+	TestTrue(TEXT("Clearance 0: unchanged"), Grid.PushClear(FVector2D(490.0, 250.0), 0.f).Equals(FVector2D(490.0, 250.0)));
+
+	// A fight through the gap of the edge wall: the unit keeps its distance on the way and still gets through.
+	FCombatSimConfig Config;
+	Config.Grid = CombatTests::MakeEdgeWallGrid();
+	Config.MaxFirstAttackDelayTicks = 0;
+	Config.WallClearance = 45.f;
+	CombatTests::AddUnit(Config, CombatTests::MakeStats(100.f, 10.f, 20, 6), 0, FIntPoint(2, 2));
+	CombatTests::AddUnit(Config, CombatTests::MakeDummyStats(), 1, FIntPoint(7, 2));
+	FCombatSimulation Simulation(Config);
+	const float Clearance = FMath::Min(Config.Units[0].Stats.Radius, Config.WallClearance);
+	bool bKeptDistance = true;
+	bool bAttacked = false;
+	for (int32 Step = 0; Step < 900 && !bAttacked; ++Step)
+	{
+		Simulation.Step();
+		const FVector2D Position = Simulation.GetUnits()[0].Position;
+		bKeptDistance &= Config.Grid.PushClear(Position, Clearance - 0.5f).Equals(Position, 0.01);
+		bAttacked = Simulation.GetEvents().ContainsByPredicate([](const FCombatEvent& Event)
+		{
+			return Event.Type == ECombatEventType::Attack && Event.SourceId == 0;
+		});
+	}
+	TestTrue(TEXT("Never closer to a wall than its clearance"), bKeptDistance);
+	TestTrue(TEXT("Still gets through the gap and attacks"), bAttacked);
+	TestTrue(TEXT("Deterministic with clearance"), CombatTests::RunAndCollectChecksums(Config) == CombatTests::RunAndCollectChecksums(Config));
+	return true;
+}
+
+IMPLEMENT_SIMPLE_AUTOMATION_TEST(FCombatClearanceDoorTest, "BattleSystem.Combat.ClearanceDoor",
+	EAutomationTestFlags::EditorContext | EAutomationTestFlags::ProductFilter)
+
+bool FCombatClearanceDoorTest::RunTest(const FString& Parameters)
+{
+	// An edge wall between columns 4 and 5 with a one-cell door in row 5; two wide units come from the right, side by
+	// side, for a target on the left. Without the wide steering line they pressed each other against the door frame.
+	FCombatSimConfig Config;
+	Config.Grid.Init(10, 11, 100.f);
+	for (int32 Y = 0; Y < 11; ++Y)
+	{
+		if (Y != 5)
+		{
+			Config.Grid.AddEdgeWall(FIntPoint(4, Y), FIntPoint(5, Y));
+		}
+	}
+	Config.MaxFirstAttackDelayTicks = 0;
+	Config.WallClearance = 45.f;
+	FCombatUnitStats Wide = CombatTests::MakeStats(100.f, 1.f, 20, 6);
+	Wide.Radius = 60.f;
+	CombatTests::AddUnit(Config, CombatTests::MakeDummyStats(), 0, FIntPoint(1, 5));
+	CombatTests::AddUnit(Config, Wide, 1, FIntPoint(7, 4));
+	CombatTests::AddUnit(Config, Wide, 1, FIntPoint(7, 6));
+
+	FCombatSimulation Simulation(Config);
+	bool bCrossed[2] = { false, false };
+	for (int32 Step = 0; Step < 400 && !(bCrossed[0] && bCrossed[1]); ++Step)
+	{
+		Simulation.Step();
+		for (int32 Index = 0; Index < 2; ++Index)
+		{
+			bCrossed[Index] |= Simulation.GetUnits()[Index + 1].Position.X < 500.0;
+		}
+	}
+	TestTrue(TEXT("Both wide units get through the one-cell door within 20 s"), bCrossed[0] && bCrossed[1]);
+	return true;
+}
+
 #endif // WITH_DEV_AUTOMATION_TESTS

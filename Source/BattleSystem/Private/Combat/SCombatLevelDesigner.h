@@ -28,6 +28,8 @@ public:
 	SLATE_END_ARGS()
 
 	void Construct(const FArguments& InArgs);
+	/** Shows the selected piece's category when the selected piece changes (eyedropper); category clicks stay. */
+	virtual void Tick(const FGeometry& AllottedGeometry, const double InCurrentTime, const float InDeltaTime) override;
 
 private:
 	bool IsEditing() const;
@@ -63,6 +65,8 @@ private:
 	TSharedPtr<SWrapBox> CategoryBox;
 	TSharedPtr<SWrapBox> PaletteBox;
 	FString SelectedCategory;
+	/** The selected piece the palette last followed. */
+	FString FollowedPiece;
 	/** Thumbnails of the palette (editor and PIE only); kept alive while shown. */
 	TSharedPtr<FAssetThumbnailPool> ThumbnailPool;
 	TArray<TSharedPtr<FAssetThumbnail>> Thumbnails;

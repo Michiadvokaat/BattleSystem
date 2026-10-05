@@ -56,6 +56,64 @@ bool FCombatGridData::CrossesNoEdgeWall(const FVector2D& From, const FVector2D& 
 	return !HasEdgeWalls() || IsLineClear(From, To, [](const FIntPoint&) { return true; });
 }
 
+FVector2D FCombatGridData::PushClear(const FVector2D& Position, float Clearance) const
+{
+	if (Clearance <= 0.f)
+	{
+		return Position;
+	}
+	FVector2D Result = Position;
+	// Moves Result out to Clearance from its closest point on a wall; nothing when it is exactly on it.
+	auto PushFrom = [&Result, Clearance](const FVector2D& Closest)
+	{
+		const FVector2D Away = Result - Closest;
+		const double Distance = Away.Size();
+		if (Distance < Clearance && Distance > UE_KINDA_SMALL_NUMBER)
+		{
+			Result += Away / Distance * (Clearance - Distance);
+		}
+	};
+
+	const FIntPoint Center = LocalToCell(Position);
+	const int32 Reach = FMath::CeilToInt32(Clearance / CellSize);
+	for (int32 Y = Center.Y - Reach; Y <= Center.Y + Reach; ++Y)
+	{
+		for (int32 X = Center.X - Reach; X <= Center.X + Reach; ++X)
+		{
+			if (!IsWalkable(FIntPoint(X, Y)) && FIntPoint(X, Y) != Center)
+			{
+				const FVector2D Min(X * CellSize, Y * CellSize);
+				PushFrom(FVector2D(FMath::Clamp(Result.X, Min.X, Min.X + CellSize), FMath::Clamp(Result.Y, Min.Y, Min.Y + CellSize)));
+			}
+		}
+	}
+
+	if (HasEdgeWalls())
+	{
+		for (int32 Y = Center.Y - Reach; Y <= Center.Y + Reach + 1; ++Y)
+		{
+			for (int32 X = Center.X - Reach; X <= Center.X + Reach + 1; ++X)
+			{
+				const FIntPoint Cell(X, Y);
+				if (!IsInBounds(Cell))
+				{
+					continue;
+				}
+				const uint8 Bits = Edges[CellIndex(Cell)];
+				if (Bits & EdgeWest)
+				{
+					PushFrom(FVector2D(X * CellSize, FMath::Clamp(Result.Y, Y * CellSize, (Y + 1) * CellSize)));
+				}
+				if (Bits & EdgeNorth)
+				{
+					PushFrom(FVector2D(FMath::Clamp(Result.X, X * CellSize, (X + 1) * CellSize), Y * CellSize));
+				}
+			}
+		}
+	}
+	return Result;
+}
+
 FIntPoint FCombatGridData::LocalToCell(const FVector2D& Local) const
 {
 	return FIntPoint(FMath::FloorToInt32(Local.X / CellSize), FMath::FloorToInt32(Local.Y / CellSize));
@@ -115,6 +173,17 @@ bool FCombatGridData::CanStep(const FIntPoint& Cell, const FIntPoint& Offset) co
 bool FCombatGridData::IsLineWalkable(const FVector2D& From, const FVector2D& To) const
 {
 	return IsLineClear(From, To, [this](const FIntPoint& Cell) { return IsWalkable(Cell); });
+}
+
+bool FCombatGridData::IsWideLineWalkable(const FVector2D& From, const FVector2D& To, float HalfWidth) const
+{
+	const FVector2D Direction = (To - From).GetSafeNormal();
+	if (HalfWidth <= 0.f || Direction.IsZero())
+	{
+		return IsLineWalkable(From, To);
+	}
+	const FVector2D Side = FVector2D(-Direction.Y, Direction.X) * HalfWidth;
+	return IsLineWalkable(From, To) && IsLineWalkable(From + Side, To + Side) && IsLineWalkable(From - Side, To - Side);
 }
 
 bool FCombatGridData::HasLineOfSight(const FVector2D& From, const FVector2D& To) const

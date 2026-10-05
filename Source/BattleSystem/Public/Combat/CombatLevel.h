@@ -162,6 +162,13 @@ struct BATTLESYSTEM_API FCombatLevel
 	/** Index of the piece of a Floor or Cell layer that covers Cell, or INDEX_NONE. */
 	int32 FindPieceAt(ECombatPieceLayer Layer, const FIntPoint& Cell) const;
 
+	/**
+	 * Index of the topmost piece under a grid-local point (eyedropper), or INDEX_NONE: the detail on the detail position
+	 * under it, else the Cell piece of its cell, else the Edge piece on the nearest border within EdgeReach cells, else
+	 * the Floor piece.
+	 */
+	int32 FindPieceUnder(const FVector2D& Local, float EdgeReach = 0.25f) const;
+
 	void ToGridData(FCombatGridData& OutGrid) const;
 };
 

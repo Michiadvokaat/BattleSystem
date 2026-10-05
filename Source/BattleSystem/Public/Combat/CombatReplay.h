@@ -24,6 +24,8 @@ struct BATTLESYSTEM_API FCombatSimSettings
 	UPROPERTY() int32 RetargetIntervalTicks = 5;
 	UPROPERTY() int32 PathLookaheadCells = 8;
 	UPROPERTY() float SeparationStrength = 0.5f;
+	/** cm; 0 in replays saved before it existed, so they play as they were recorded. */
+	UPROPERTY() float WallClearance = 0.f;
 	UPROPERTY() float ThreatDecayFactorPerTick = 1.f;
 	UPROPERTY() float ThreatDecayAmountPerTick = 0.f;
 	UPROPERTY() float ThreatThreshold = 5.f;

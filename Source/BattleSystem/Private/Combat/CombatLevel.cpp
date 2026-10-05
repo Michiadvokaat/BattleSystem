@@ -225,6 +225,63 @@ int32 FCombatLevel::FindPieceAt(ECombatPieceLayer Layer, const FIntPoint& Cell) 
 	return INDEX_NONE;
 }
 
+int32 FCombatLevel::FindPieceUnder(const FVector2D& Local, float EdgeReach) const
+{
+	const FVector2D InCells = Local / FMath::Max(CellSize, 1.f);
+	const FIntPoint Cell(FMath::FloorToInt32(InCells.X), FMath::FloorToInt32(InCells.Y));
+
+	// A detail whose position (on its own grid) is under the point.
+	for (int32 Index = 0; Index < Pieces.Num(); ++Index)
+	{
+		const FCombatLevelPiece& Piece = Pieces[Index];
+		if (Piece.Layer == ECombatPieceLayer::Detail && Piece.Cell == Cell)
+		{
+			const int32 Grid = FMath::Max(Piece.DetailGrid, 1);
+			const int32 X = FMath::Clamp(FMath::FloorToInt32((InCells.X - Cell.X) * Grid), 0, Grid - 1);
+			const int32 Y = FMath::Clamp(FMath::FloorToInt32((InCells.Y - Cell.Y) * Grid), 0, Grid - 1);
+			if (Piece.Detail == X + Y * Grid)
+			{
+				return Index;
+			}
+		}
+	}
+
+	const int32 CellPiece = FindPieceAt(ECombatPieceLayer::Cell, Cell);
+	if (CellPiece != INDEX_NONE)
+	{
+		return CellPiece;
+	}
+
+	// The nearest border line within reach: a row border (between Y - 1 and Y) or a column border (between X - 1 and X).
+	const double RowDistance = FMath::Abs(InCells.Y - FMath::RoundToDouble(InCells.Y));
+	const double ColumnDistance = FMath::Abs(InCells.X - FMath::RoundToDouble(InCells.X));
+	TArray<TPair<FIntPoint, FIntPoint>> Borders;
+	if (RowDistance <= EdgeReach && RowDistance <= ColumnDistance)
+	{
+		const int32 Row = FMath::RoundToInt32(InCells.Y);
+		Borders.Emplace(FIntPoint(Cell.X, Row - 1), FIntPoint(Cell.X, Row));
+	}
+	else if (ColumnDistance <= EdgeReach)
+	{
+		const int32 Column = FMath::RoundToInt32(InCells.X);
+		Borders.Emplace(FIntPoint(Column - 1, Cell.Y), FIntPoint(Column, Cell.Y));
+	}
+	if (!Borders.IsEmpty())
+	{
+		TArray<TPair<FIntPoint, FIntPoint>> Edges;
+		for (int32 Index = 0; Index < Pieces.Num(); ++Index)
+		{
+			Pieces[Index].GetEdges(Edges);
+			if (Edges.Contains(Borders[0]))
+			{
+				return Index;
+			}
+		}
+	}
+
+	return FindPieceAt(ECombatPieceLayer::Floor, Cell);
+}
+
 void FCombatLevel::ToGridData(FCombatGridData& OutGrid) const
 {
 	OutGrid.Init(Width, Height, CellSize);

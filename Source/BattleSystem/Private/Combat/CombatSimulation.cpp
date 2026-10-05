@@ -475,8 +475,20 @@ void FCombatSimulation::UpdateUnit(FCombatUnit& Unit)
 	}
 
 	const FVector2D Move = UpdateCombat(Unit);
-	const FVector2D Desired = Unit.PreviousPosition + Move + ComputeSeparation(Unit);
-	Unit.Position = ResolveMove(Unit.PreviousPosition, Desired);
+	const FVector2D Separation = ComputeSeparation(Unit);
+	const float Clearance = FMath::Min(Unit.Stats.Radius, Config.WallClearance);
+	if (Clearance > 0.f)
+	{
+		// The own move first, then the push from other units, each against the walls: two units pushing each other
+		// into a door frame would otherwise block the whole move and hold each other in the doorway.
+		const FVector2D Moved = ResolveMove(Unit.PreviousPosition, Unit.PreviousPosition + Move, Clearance);
+		Unit.Position = ResolveMove(Moved, Moved + Separation, Clearance);
+	}
+	else
+	{
+		// Without clearance (also replays saved before it): move and push together, as always.
+		Unit.Position = ResolveMove(Unit.PreviousPosition, Unit.PreviousPosition + Move + Separation, 0.f);
+	}
 	Unit.Velocity = (Unit.Position - Unit.PreviousPosition) / FixedDt;
 }
 
@@ -535,7 +547,7 @@ FVector2D FCombatSimulation::UpdateCombat(FCombatUnit& Unit)
 		return FVector2D::ZeroVector;
 	}
 
-	if (bClearWalkingLine)
+	if (bClearWalkingLine && IsSteerLineClear(Unit, Unit.PreviousPosition, Target.PreviousPosition))
 	{
 		// Clear line: straight at the target, stopping just inside the longest range that will work from there.
 		double StopGap = 0.0;
@@ -592,7 +604,7 @@ FVector2D FCombatSimulation::FindRouteSteerPoint(FCombatUnit& Unit) const
 			Cell = Next;
 
 			const FVector2D Point = Grid.CellToLocal(Cell);
-			if (Step > 0 && !Grid.IsLineWalkable(Unit.PreviousPosition, Point))
+			if (Step > 0 && !IsSteerLineClear(Unit, Unit.PreviousPosition, Point))
 			{
 				break;
 			}
@@ -624,7 +636,7 @@ FVector2D FCombatSimulation::SteerAlongPath(FCombatUnit& Unit, const FIntPoint& 
 	for (int32 Index = 1; Index <= LastIndex; ++Index)
 	{
 		const FVector2D Point = Grid.CellToLocal(Unit.Path[Index]);
-		if (Index > 1 && !Grid.IsLineWalkable(Unit.PreviousPosition, Point))
+		if (Index > 1 && !IsSteerLineClear(Unit, Unit.PreviousPosition, Point))
 		{
 			break;
 		}
@@ -653,7 +665,7 @@ FVector2D FCombatSimulation::UpdateMoveOrder(FCombatUnit& Unit)
 		return ToGoal;
 	}
 
-	if (Grid.IsLineWalkable(Unit.PreviousPosition, Goal))
+	if (IsSteerLineClear(Unit, Unit.PreviousPosition, Goal))
 	{
 		Unit.SteerPoint = Goal;
 	}
@@ -799,7 +811,29 @@ FVector2D FCombatSimulation::ComputeSeparation(const FCombatUnit& Unit) const
 	return Push;
 }
 
-FVector2D FCombatSimulation::ResolveMove(const FVector2D& From, const FVector2D& To) const
+FVector2D FCombatSimulation::ResolveMove(const FVector2D& From, const FVector2D& To, float Clearance) const
+{
+	const FVector2D Moved = ResolveMoveInCells(From, To);
+	if (Clearance <= 0.f)
+	{
+		return Moved;
+	}
+	// Away from walls by the clearance, unless that push itself is not a valid move.
+	const FCombatGridData& Grid = Config.Grid;
+	const FVector2D Clear = Grid.PushClear(Moved, Clearance);
+	const bool bValid = Grid.IsWalkable(Grid.LocalToCell(Clear)) && Grid.CrossesNoEdgeWall(From, Clear);
+	return bValid ? Clear : Moved;
+}
+
+bool FCombatSimulation::IsSteerLineClear(const FCombatUnit& Unit, const FVector2D& From, const FVector2D& To) const
+{
+	// 90%: a unit pushed out to exactly its clearance still has a clear band along the wall it stands at.
+	constexpr float BandFraction = 0.9f;
+	const float Clearance = FMath::Min(Unit.Stats.Radius, Config.WallClearance);
+	return Clearance > 0.f ? Config.Grid.IsWideLineWalkable(From, To, Clearance * BandFraction) : Config.Grid.IsLineWalkable(From, To);
+}
+
+FVector2D FCombatSimulation::ResolveMoveInCells(const FVector2D& From, const FVector2D& To) const
 {
 	// A position is allowed in a walkable cell that the unit reaches without crossing an edge wall.
 	const FCombatGridData& Grid = Config.Grid;

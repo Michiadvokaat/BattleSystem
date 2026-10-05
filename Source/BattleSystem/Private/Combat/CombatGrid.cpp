@@ -219,10 +219,27 @@ void ACombatGrid::ShowPieces(const FCombatLevel& Level)
 		Component->SetCollisionEnabled(ECollisionEnabled::NoCollision);
 		// Details stand on the Cell piece under them.
 		const double BaseHeight = Piece.Layer == ECombatPieceLayer::Detail ? CombatPieces::FindDetailBaseHeight(Level, *Catalog, Piece) : 0.0;
-		Component->SetRelativeTransform(CombatPieces::ComputeMeshTransform(Piece, Level.CellSize, Mesh->GetBoundingBox(),
-			Definition->MeshYaw, Definition->Offset, Definition->bScaleToFit, BaseHeight));
+		const FBox MeshBounds = Mesh->GetBoundingBox();
+		const FTransform Transform = CombatPieces::ComputeMeshTransform(Piece, Level.CellSize, MeshBounds,
+			Definition->MeshYaw, Definition->Offset, Definition->bScaleToFit, BaseHeight);
+		Component->SetRelativeTransform(Transform);
 		Component->RegisterComponent();
 		PieceComponents.Add(Component);
+
+		// Border pieces taller than the low height can be lowered: squeezed in Z, so the bottom stays on the floor.
+		const double LowHeight = GetDefault<UCombatSettings>()->LowWallHeight;
+		const double MeshHeight = MeshBounds.GetSize().Z;
+		if (Piece.Layer == ECombatPieceLayer::Edge && MeshHeight > LowHeight)
+		{
+			FWallPiece& Wall = WallPieces.AddDefaulted_GetRef();
+			Wall.Component = Component;
+			Wall.FullTransform = Transform;
+			Wall.LowTransform = Transform;
+			const double Squeeze = LowHeight / MeshHeight;
+			Wall.LowTransform.SetScale3D(Transform.GetScale3D() * FVector(1.0, 1.0, Squeeze));
+			Wall.LowTransform.SetLocation(Transform.GetLocation() * FVector(1.0, 1.0, Squeeze));
+			Wall.WorldBounds = MeshBounds.TransformBy(Transform * GetActorTransform());
+		}
 	}
 }
 
@@ -236,6 +253,32 @@ void ACombatGrid::ClearPieces()
 		}
 	}
 	PieceComponents.Reset();
+	WallPieces.Reset();
+}
+
+void ACombatGrid::UpdateWalls(ECombatWallMode Mode, const FVector& CameraLocation, TConstArrayView<FVector> Targets)
+{
+	for (FWallPiece& Wall : WallPieces)
+	{
+		bool bLower = Mode == ECombatWallMode::Down;
+		if (Mode == ECombatWallMode::Cutaway)
+		{
+			for (const FVector& Target : Targets)
+			{
+				if (FMath::LineBoxIntersection(Wall.WorldBounds, CameraLocation, Target, Target - CameraLocation))
+				{
+					bLower = true;
+					break;
+				}
+			}
+		}
+		UStaticMeshComponent* Component = Wall.Component.Get();
+		if (Component && bLower != Wall.bLowered)
+		{
+			Wall.bLowered = bLower;
+			Component->SetRelativeTransform(bLower ? Wall.LowTransform : Wall.FullTransform);
+		}
+	}
 }
 
 void ACombatGrid::ClearLevel()
