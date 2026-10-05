@@ -429,6 +429,15 @@ void UCombatSubsystem::DispatchEvents()
 	}
 }
 
+namespace CombatSubsystemPrivate
+{
+	/** Seed for a unit's look: the same fight seed and unit ID give the same figure (fights, replays, previews). */
+	static int32 GetLookSeed(int32 FightSeed, int32 UnitId)
+	{
+		return static_cast<int32>(HashCombine(GetTypeHash(FightSeed), GetTypeHash(UnitId)));
+	}
+}
+
 void UCombatSubsystem::SpawnUnitActor(const FCombatUnit& Unit)
 {
 	// Unit IDs grow by one with every spawn, so the actor arrays stay indexed by unit ID.
@@ -446,7 +455,7 @@ void UCombatSubsystem::SpawnUnitActor(const FCombatUnit& Unit)
 		if (Definition && Definition->Appearance)
 		{
 			// Same seed and unit ID, same look: a replay shows the same figures.
-			Actor->InitAppearance(Definition->Appearance, static_cast<int32>(HashCombine(GetTypeHash(CurrentSeed), GetTypeHash(Unit.Id))));
+			Actor->InitAppearance(Definition->Appearance, CombatSubsystemPrivate::GetLookSeed(CurrentSeed, Unit.Id));
 		}
 	}
 	UnitActors.Add(Actor);
@@ -1599,6 +1608,10 @@ void UCombatSubsystem::RefreshDesignView(bool bFitCamera)
 		{
 			const bool bRanged = Stats.Attacks.ContainsByPredicate([](const FCombatAttackStats& Attack) { return Attack.IsRanged(); });
 			Actor->InitUnit(Index, Entry.Team, Stats.Radius, Settings->GetTeamColor(Entry.Team), bRanged);
+			if (Definition->Appearance)
+			{
+				Actor->InitAppearance(Definition->Appearance, CombatSubsystemPrivate::GetLookSeed(CurrentSeed, Index));
+			}
 			Actor->SetHealth(1.f);
 			Actor->UpdatePresentation(Location, FVector(Entry.Team == 0 ? 1.0 : -1.0, 0.0, 0.0));
 			DesignPreviews.Add(Actor);
@@ -1629,6 +1642,10 @@ void UCombatSubsystem::RefreshDesignView(bool bFitCamera)
 		{
 			const bool bRanged = Stats.Attacks.ContainsByPredicate([](const FCombatAttackStats& Attack) { return Attack.IsRanged(); });
 			Actor->InitUnit(DesignLevel.Units.Num() + Index, WaveTeam, Stats.Radius, Settings->GetTeamColor(WaveTeam), bRanged);
+			if (Definition->Appearance)
+			{
+				Actor->InitAppearance(Definition->Appearance, CombatSubsystemPrivate::GetLookSeed(CurrentSeed, DesignLevel.Units.Num() + Index));
+			}
 			Actor->SetHealth(1.f);
 			Actor->SetStatusEffects({ { FString::Printf(TEXT("%gs"), Entry.Time), FLinearColor::Yellow } });
 			Actor->UpdatePresentation(Location, FVector(-1.0, 0.0, 0.0));

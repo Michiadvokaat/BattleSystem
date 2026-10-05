@@ -211,7 +211,7 @@ Code: `Source/BattleSystem/{Public,Private}/Combat/`. Layers: grid ← simulatio
 - Every frame `SetAnimationState(|Velocity|, rate)`: `Speed` for locomotion, and `GlobalAnimRateScale` = the fight's time scale (0 while paused), so animations follow pause and the speed buttons. Idle breaks play after a random interval (animation time) of standing still without a montage, from a stream seeded like the look. Turning uses `TurnRate` in animation time.
 - Hit: `Anim.Hit`, unless an attack montage plays or the unit is dead. Death: the widgets, selection ring and move marker hide at once, `UCombatAnimInstance::PlayDeath` plays `Anim.Death` and pauses it just before it would blend out (the last pose stays), and the actor is hidden after the montage length + `CorpseDuration`. Without a death montage the actor hides at once with the "X", as before.
 - The script also creates `/Game/Characters/Animations/DA_AnimSet_Child` (locomotion `BS_Child_Idle_Run`, idle breaks `AM_Child_IdleLookAround/WaveHello/IdleLookPhone`, montages made from the pack's sequences) and sets `ABP_Combat` as its AnimClass once that AnimBP exists.
-- LevelDesigner previews still show the placeholder shape (no look).
+- LevelDesigner previews also show the look (and its idle locomotion), with the look seed of the last fight's seed and the preview's unit ID, so start units look as in a fight with that seed. The first facing is set at once, also for animated figures (`bHasFacing`); after that they turn at `TurnRate`.
 
 ### Control panel (`ACombatHUD`, `SCombatControlPanel`)
 

@@ -216,6 +216,8 @@ private:
 	float NextIdleBreak = 0.f;
 	/** Picks idle breaks and their intervals; seeded per unit like the look. */
 	FRandomStream IdleStream;
+	/** The first facing is taken at once, also for an animated figure (previews get only one update). */
+	bool bHasFacing = false;
 
 	/** Swappable slots, parallel arrays: tag, component and the mesh shown when no override is active. */
 	TArray<FGameplayTag> SwappableSlotTags;

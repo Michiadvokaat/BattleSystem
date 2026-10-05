@@ -437,7 +437,8 @@ void ACombatUnitActor::UpdatePresentation(const FVector& InLocation, const FVect
 	{
 		// An animated figure turns at TurnRate (in animation time); the placeholder turns at once.
 		const FRotator Target = FacingDirection.Rotation();
-		const float TurnRate = AnimSet ? AnimSet->TurnRate : 0.f;
+		const float TurnRate = AnimSet && bHasFacing ? AnimSet->TurnRate : 0.f;
+		bHasFacing = true;
 		SetActorRotation(TurnRate > 0.f
 			? FMath::RInterpConstantTo(GetActorRotation(), Target, GetWorld()->GetDeltaSeconds() * AnimRateScale, TurnRate)
 			: Target);

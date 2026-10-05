@@ -29,7 +29,9 @@ namespace CombatCamera
 		{
 			return false;
 		}
-		const double Distance = (Height - Origin.Z) / Direction.Z;
+		// Never exactly 0 (MSVC C4723 sees the parallel ray of the tests otherwise), and equal to Direction.Z here.
+		const double DirectionZ = FMath::Sign(Direction.Z) * FMath::Max(FMath::Abs(Direction.Z), UE_KINDA_SMALL_NUMBER);
+		const double Distance = (Height - Origin.Z) / DirectionZ;
 		if (Distance < 0.0)
 		{
 			return false;
