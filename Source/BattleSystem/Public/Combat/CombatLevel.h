@@ -18,7 +18,9 @@ struct FCombatLevelUnit
 	UPROPERTY() FString Type;
 	UPROPERTY() int32 Team = 0;
 	UPROPERTY() FIntPoint Cell = FIntPoint::ZeroValue;
-	/** Start pose (presentation only): eighth turns, 0..7, 0 = facing +X; see CombatLevels::GetUnitYaw. */
+	/** Where in its cell it starts: 0..8, row by row (0 = top left, 4 = the middle); see CombatLevels::GetUnitPositionOffset. */
+	UPROPERTY() int32 Position = 4;
+	/** Start pose (presentation only): 1/32 turns (11.25 degrees), 0..31, 0 = facing +X; see CombatLevels::GetUnitYaw. */
 	UPROPERTY() int32 Rotation = 0;
 };
 
@@ -33,7 +35,9 @@ struct FCombatLevelSpawn
 	UPROPERTY() FIntPoint Cell = FIntPoint::ZeroValue;
 	/** Seconds after the start of its wave. */
 	UPROPERTY() float Time = 0.f;
-	/** Pose when it appears (presentation only): eighth turns, 0..7, 0 = facing +X. */
+	/** Where in its cell it appears: 0..8, row by row (4 = the middle). */
+	UPROPERTY() int32 Position = 4;
+	/** Pose when it appears (presentation only): 1/32 turns, 0..31, 0 = facing +X. */
 	UPROPERTY() int32 Rotation = 0;
 };
 
@@ -151,10 +155,12 @@ struct BATTLESYSTEM_API FCombatLevel
 
 	/**
 	 * 1 = no waves; 2 = with waves; 3 = with pieces; 4 = without cell rows; 5 = with unit and spawn rotations; 6 = with
-	 * piece colors; 7 = with wall items (older files load without the missing parts; their rows of walls, hedges and
-	 * water are ignored, their units face the other side: team 0 +X, the rest and spawns -X, and their pieces are white).
+	 * piece colors; 7 = with wall items; 8 = unit and spawn positions in their cell, rotations in 1/32 turns (older files
+	 * load without the missing parts; their rows of walls, hedges and water are ignored, their units face the other
+	 * side: team 0 +X, the rest and spawns -X, their pieces are white, their units stand in the middle of their cell,
+	 * and rotations in eighth turns are converted).
 	 */
-	UPROPERTY() int32 FormatVersion = 7;
+	UPROPERTY() int32 FormatVersion = 8;
 	UPROPERTY() FString Name;
 	UPROPERTY() int32 Width = 20;
 	UPROPERTY() int32 Height = 12;
@@ -176,10 +182,10 @@ struct BATTLESYSTEM_API FCombatLevel
 
 	bool IsInBounds(const FIntPoint& Cell) const { return Cell.X >= 0 && Cell.Y >= 0 && Cell.X < Width && Cell.Y < Height; }
 
-	/** Index in Units of the unit on Cell, or INDEX_NONE. */
-	int32 FindUnitAt(const FIntPoint& Cell) const;
-	/** Index in Waves[WaveIndex].Spawns of the spawn on Cell, or INDEX_NONE. */
-	int32 FindSpawnAt(int32 WaveIndex, const FIntPoint& Cell) const;
+	/** Index in Units of the unit on Position of Cell, or INDEX_NONE. */
+	int32 FindUnitAt(const FIntPoint& Cell, int32 Position) const;
+	/** Index in Waves[WaveIndex].Spawns of the spawn on Position of Cell, or INDEX_NONE. */
+	int32 FindSpawnAt(int32 WaveIndex, const FIntPoint& Cell, int32 Position) const;
 	/** Removes the spawns on Cell from every wave; returns whether there were any. */
 	bool RemoveSpawnsAt(const FIntPoint& Cell);
 
@@ -215,9 +221,20 @@ namespace CombatLevels
 {
 	/** <Project>/Levels/ */
 	BATTLESYSTEM_API FString GetDirectory();
-	/** Rotation steps of a unit or spawn (eighth turns) and the yaw in degrees of one. */
-	static constexpr int32 UnitRotationSteps = 8;
+	/** Rotation steps of a unit or spawn (1/32 turns, 11.25 degrees) and the yaw in degrees of one. */
+	static constexpr int32 UnitRotationSteps = 32;
 	inline float GetUnitYaw(int32 Rotation) { return Rotation * 360.f / UnitRotationSteps; }
+
+	/** Unit positions per cell side (the nav sub-cells, CombatNavigation::Subdivision): 9 per cell, 4 the middle. */
+	static constexpr int32 UnitPositionsPerSide = 3;
+	static constexpr int32 MiddlePosition = UnitPositionsPerSide * UnitPositionsPerSide / 2;
+	/** Offset (cm) of a unit position from its cell's center. */
+	inline FVector2D GetUnitPositionOffset(int32 Position, float CellSize)
+	{
+		const int32 Clamped = FMath::Clamp(Position, 0, UnitPositionsPerSide * UnitPositionsPerSide - 1);
+		const double Step = CellSize / UnitPositionsPerSide;
+		return FVector2D((Clamped % UnitPositionsPerSide - 1) * Step, (Clamped / UnitPositionsPerSide - 1) * Step);
+	}
 
 	/** Names (file names without .json) of all saved levels, sorted. */
 	BATTLESYSTEM_API TArray<FString> FindLevelNames();

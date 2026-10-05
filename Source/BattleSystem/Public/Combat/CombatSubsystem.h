@@ -243,12 +243,17 @@ public:
 	void HideDesignPiecePreview();
 	void SetDesignUnitTeam(int32 Team) { DesignUnitTeam = Team; }
 	int32 GetDesignUnitTeam() const { return DesignUnitTeam; }
-	/** Unit and Spawn Mode: turns the start pose of the next unit or spawn by Steps of 45 degrees (kept for the next one). */
+	/** Unit and Spawn Mode: turns the start pose of the next unit or spawn by Steps of 11.25 degrees (kept for the next one). */
 	void RotateDesignUnit(int32 Steps);
-	int32 GetDesignUnitDegrees() const { return FMath::RoundToInt32(CombatLevels::GetUnitYaw(DesignUnitRotation)); }
+	float GetDesignUnitDegrees() const { return CombatLevels::GetUnitYaw(DesignUnitRotation); }
+	/**
+	 * Whether a unit of Type may stand on Position of Cell: the cell is in the grid and walkable, and the position's
+	 * nav sub-cell is open for the type's clearance class (not against a wall or a blocking piece).
+	 */
+	bool IsDesignSpotFree(const FIntPoint& Cell, int32 Position, const FString& Type);
 	/**
 	 * Unit and Spawn Mode: a see-through ghost of the selected unit type (in the team color, in its rotation) on the
-	 * cell under WorldPoint, with a green cell plate, red where it cannot stand.
+	 * position (one of 9 per cell) under WorldPoint, with a green plate there, red where it cannot stand.
 	 */
 	void UpdateDesignUnitGhost(const FVector& WorldPoint);
 	void HideDesignUnitGhost();
@@ -374,6 +379,8 @@ private:
 	bool GetDesignPiecePlacement(const FVector& WorldPoint, FCombatLevelPiece& OutPiece, const FCombatPieceDefinition*& OutDefinition);
 	/** Whether a unit may stand on Cell of the edited level: no blocking cell kind and no piece that blocks walking. */
 	bool IsDesignCellWalkable(const FIntPoint& Cell) const;
+	/** The cell and the unit position in it (0..8) under a world point. */
+	void GetDesignSpot(const FVector& WorldPoint, FIntPoint& OutCell, int32& OutPosition) const;
 	void DestroyDesignPreviews();
 	/** Lowers the walls for the wall mode, with the units (or LevelDesigner previews) as cutaway targets. */
 	void UpdateWalls();
@@ -482,8 +489,11 @@ private:
 	TObjectPtr<ACombatUnitActor> DesignGhost;
 	FString DesignGhostType;
 	int32 DesignGhostTeam = INDEX_NONE;
-	/** Start rotation (eighth turns) of the next unit or spawn placed. */
+	/** Start rotation (1/32 turns) of the next unit or spawn placed. */
 	int32 DesignUnitRotation = 0;
+	/** Nav grids of the edited level per clearance class (0..CombatNavigation::MaxClass), for IsDesignSpotFree; rebuilt per DesignRevision. */
+	TArray<FCombatGridData> DesignNavGrids;
+	int32 DesignNavRevision = INDEX_NONE;
 	FColor DesignPieceColor = FColor::White;
 	bool bDesignEyedropper = false;
 	ECombatWallMode WallMode = ECombatWallMode::Cutaway;

@@ -400,7 +400,7 @@ void SCombatLevelDesigner::Construct(const FArguments& InArgs)
 					SNew(STextBlock).Text_Lambda([this]()
 					{
 						const UCombatSubsystem* Current = Subsystem.Get();
-						return FText::FromString(FString::Printf(TEXT("%d°"), Current ? Current->GetDesignUnitDegrees() : 0));
+						return FText::FromString(FString::Printf(TEXT("%g°"), Current ? Current->GetDesignUnitDegrees() : 0.f));
 					})
 				]
 				+ SHorizontalBox::Slot().AutoWidth().Padding(0.f, 0.f, 4.f, 0.f)

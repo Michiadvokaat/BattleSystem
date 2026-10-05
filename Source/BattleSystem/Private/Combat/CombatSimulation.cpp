@@ -69,7 +69,7 @@ FCombatSimulation::FCombatSimulation(const FCombatSimConfig& InConfig)
 	for (int32 Index = 0; Index < Config.Units.Num(); ++Index)
 	{
 		const FCombatUnitSpawn& Spawn = Config.Units[Index];
-		AddUnit(Spawn.Stats, Spawn.Team, Spawn.StartCell, Index);
+		AddUnit(Spawn.Stats, Spawn.Team, Spawn.StartCell, Spawn.StartOffset, Index);
 	}
 
 	// Waves: the wave team needs a distance map even when it has no units at the start.
@@ -98,7 +98,7 @@ FCombatSimulation::FCombatSimulation(const FCombatSimConfig& InConfig)
 	Checksum = ComputeChecksum();
 }
 
-FCombatUnit& FCombatSimulation::AddUnit(const FCombatUnitStats& Stats, int32 Team, const FIntPoint& Cell, int32 SourceIndex)
+FCombatUnit& FCombatSimulation::AddUnit(const FCombatUnitStats& Stats, int32 Team, const FIntPoint& Cell, const FVector2D& Offset, int32 SourceIndex)
 {
 	FCombatUnit& Unit = Units.AddDefaulted_GetRef();
 	Unit.Id = Units.Num() - 1;
@@ -111,7 +111,7 @@ FCombatUnit& FCombatSimulation::AddUnit(const FCombatUnitStats& Stats, int32 Tea
 		Attack.WindupTicks = FMath::Max(Attack.WindupTicks, 0);
 	}
 	Unit.AttackCooldowns.Init(0, Unit.Stats.Attacks.Num());
-	Unit.Position = Config.Grid.CellToLocal(Cell);
+	Unit.Position = Config.Grid.CellToLocal(Cell) + Offset;
 	Unit.PreviousPosition = Unit.Position;
 	Unit.HP = Unit.Stats.MaxHP;
 	Unit.bAlive = Unit.HP > 0.f;
@@ -154,7 +154,7 @@ void FCombatSimulation::UpdateWaves()
 			continue;
 		}
 		const FCombatWaveSpawn& Spawn = Config.Waves[Pending.WaveIndex].Spawns[Pending.SpawnIndex];
-		const FCombatUnit& Unit = AddUnit(Spawn.Stats, Config.WaveTeam, Spawn.Cell, WaveFirstSourceIndex[Pending.WaveIndex] + Pending.SpawnIndex);
+		const FCombatUnit& Unit = AddUnit(Spawn.Stats, Config.WaveTeam, Spawn.Cell, Spawn.Offset, WaveFirstSourceIndex[Pending.WaveIndex] + Pending.SpawnIndex);
 		FCombatEvent& Event = Events.Add_GetRef({ ECombatEventType::UnitSpawned, Unit.Id, INDEX_NONE, 0.f });
 		Event.WaveIndex = Pending.WaveIndex;
 		bSpawned = true;

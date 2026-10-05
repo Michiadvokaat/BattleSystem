@@ -33,6 +33,8 @@ private:
 	TSharedRef<SWidget> MakeRowButtons(TFunction<void()> OnMove, TFunction<bool()> IsMoving, TFunction<void()> OnRemove);
 	static TSharedRef<SWidget> MakeHint(const FText& Text);
 	TSharedRef<SWidget> MakeIntBox(int32 Value, int32 Min, int32 Max, TFunction<void(int32)> OnCommitted);
+	/** A start rotation (1/32 turns) as degrees in steps of 11.25; commits the rotation in steps. */
+	TSharedRef<SWidget> MakeRotationBox(int32 Rotation, TFunction<void(int32)> OnCommitted);
 	static TSharedRef<SWidget> MakeColumnLabel(const FText& Label, float Width);
 
 	bool IsEditing() const;
