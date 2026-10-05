@@ -1,317 +1,1057 @@
 {
-	"formatVersion": 4,
+	"formatVersion": 7,
 	"name": "WallWindows",
 	"width": 40,
 	"height": 12,
 	"cellSize": 100,
-	"units": [],
+	"units": [
+		{
+			"type": "DA_Tank",
+			"team": 0,
+			"cell":
+			{
+				"x": 9,
+				"y": 3
+			},
+			"rotation": 2
+		},
+		{
+			"type": "DA_Boogschutter",
+			"team": 0,
+			"cell":
+			{
+				"x": 10,
+				"y": 4
+			},
+			"rotation": 4
+		},
+		{
+			"type": "DA_Krijger",
+			"team": 0,
+			"cell":
+			{
+				"x": 9,
+				"y": 5
+			},
+			"rotation": 5
+		}
+	],
 	"waves": [],
 	"pieces": [
 		{
 			"id": "Building/Walls/SM_Walls_007_300cm",
 			"layer": "Edge",
 			"slot": "",
-			"cell": {
+			"cell":
+			{
 				"x": 1,
 				"y": 2
 			},
 			"rotation": 0,
-			"size": {
+			"size":
+			{
 				"x": 4,
 				"y": 1
 			},
 			"bBlocksWalking": true,
 			"bBlocksSight": true,
 			"detail": -1,
-			"detailGrid": 0
+			"detailGrid": 0,
+			"color":
+			{
+				"b": 255,
+				"g": 255,
+				"r": 255,
+				"a": 255
+			},
+			"facing": 0,
+			"height": 0
 		},
 		{
 			"id": "Building/Walls/SM_Walls_007_300cm",
 			"layer": "Edge",
 			"slot": "",
-			"cell": {
+			"cell":
+			{
 				"x": 5,
 				"y": 2
 			},
 			"rotation": 0,
-			"size": {
+			"size":
+			{
 				"x": 4,
 				"y": 1
 			},
 			"bBlocksWalking": true,
 			"bBlocksSight": true,
 			"detail": -1,
-			"detailGrid": 0
+			"detailGrid": 0,
+			"color":
+			{
+				"b": 255,
+				"g": 255,
+				"r": 255,
+				"a": 255
+			},
+			"facing": 0,
+			"height": 0
 		},
 		{
 			"id": "Building/Walls/SM_Walls_007_300cm",
 			"layer": "Edge",
 			"slot": "",
-			"cell": {
+			"cell":
+			{
 				"x": 9,
 				"y": 2
 			},
 			"rotation": 0,
-			"size": {
+			"size":
+			{
 				"x": 4,
 				"y": 1
 			},
 			"bBlocksWalking": true,
 			"bBlocksSight": true,
 			"detail": -1,
-			"detailGrid": 0
+			"detailGrid": 0,
+			"color":
+			{
+				"b": 255,
+				"g": 255,
+				"r": 255,
+				"a": 255
+			},
+			"facing": 0,
+			"height": 0
 		},
 		{
 			"id": "Building/Walls/SM_Walls_007_300cm",
 			"layer": "Edge",
 			"slot": "",
-			"cell": {
+			"cell":
+			{
 				"x": 13,
 				"y": 2
 			},
 			"rotation": 0,
-			"size": {
+			"size":
+			{
 				"x": 4,
 				"y": 1
 			},
 			"bBlocksWalking": true,
 			"bBlocksSight": true,
 			"detail": -1,
-			"detailGrid": 0
+			"detailGrid": 0,
+			"color":
+			{
+				"b": 255,
+				"g": 255,
+				"r": 255,
+				"a": 255
+			},
+			"facing": 0,
+			"height": 0
 		},
 		{
 			"id": "Building/Walls/SM_Walls_007_300cm",
 			"layer": "Edge",
 			"slot": "",
-			"cell": {
+			"cell":
+			{
 				"x": 17,
 				"y": 2
 			},
 			"rotation": 0,
-			"size": {
+			"size":
+			{
 				"x": 4,
 				"y": 1
 			},
 			"bBlocksWalking": true,
 			"bBlocksSight": true,
 			"detail": -1,
-			"detailGrid": 0
+			"detailGrid": 0,
+			"color":
+			{
+				"b": 255,
+				"g": 255,
+				"r": 255,
+				"a": 255
+			},
+			"facing": 0,
+			"height": 0
 		},
 		{
 			"id": "Building/Walls/SM_Walls_007_300cm",
 			"layer": "Edge",
 			"slot": "",
-			"cell": {
+			"cell":
+			{
 				"x": 21,
 				"y": 2
 			},
 			"rotation": 0,
-			"size": {
+			"size":
+			{
 				"x": 4,
 				"y": 1
 			},
 			"bBlocksWalking": true,
 			"bBlocksSight": true,
 			"detail": -1,
-			"detailGrid": 0
+			"detailGrid": 0,
+			"color":
+			{
+				"b": 255,
+				"g": 255,
+				"r": 255,
+				"a": 255
+			},
+			"facing": 0,
+			"height": 0
 		},
 		{
 			"id": "Building/Walls/SM_Walls_007_300cm",
 			"layer": "Edge",
 			"slot": "",
-			"cell": {
+			"cell":
+			{
 				"x": 25,
 				"y": 2
 			},
 			"rotation": 0,
-			"size": {
+			"size":
+			{
 				"x": 4,
 				"y": 1
 			},
 			"bBlocksWalking": true,
 			"bBlocksSight": true,
 			"detail": -1,
-			"detailGrid": 0
+			"detailGrid": 0,
+			"color":
+			{
+				"b": 255,
+				"g": 255,
+				"r": 255,
+				"a": 255
+			},
+			"facing": 0,
+			"height": 0
 		},
 		{
 			"id": "Building/Walls/SM_Walls_007_300cm",
 			"layer": "Edge",
 			"slot": "",
-			"cell": {
+			"cell":
+			{
 				"x": 29,
 				"y": 2
 			},
 			"rotation": 0,
-			"size": {
+			"size":
+			{
 				"x": 4,
 				"y": 1
 			},
 			"bBlocksWalking": true,
 			"bBlocksSight": true,
 			"detail": -1,
-			"detailGrid": 0
+			"detailGrid": 0,
+			"color":
+			{
+				"b": 255,
+				"g": 255,
+				"r": 255,
+				"a": 255
+			},
+			"facing": 0,
+			"height": 0
 		},
 		{
 			"id": "Building/Windows/SM_window_003",
 			"layer": "Edge",
 			"slot": "Opening",
-			"cell": {
+			"cell":
+			{
 				"x": 2,
 				"y": 2
 			},
 			"rotation": 0,
-			"size": {
+			"size":
+			{
 				"x": 2,
 				"y": 1
 			},
 			"bBlocksWalking": true,
 			"bBlocksSight": true,
 			"detail": -1,
-			"detailGrid": 0
+			"detailGrid": 0,
+			"color":
+			{
+				"b": 255,
+				"g": 255,
+				"r": 255,
+				"a": 255
+			},
+			"facing": 0,
+			"height": 0
 		},
 		{
 			"id": "Building/Windows/SM_window_004",
 			"layer": "Edge",
 			"slot": "Opening",
-			"cell": {
+			"cell":
+			{
 				"x": 5,
 				"y": 2
 			},
 			"rotation": 0,
-			"size": {
+			"size":
+			{
 				"x": 2,
 				"y": 1
 			},
 			"bBlocksWalking": true,
 			"bBlocksSight": true,
 			"detail": -1,
-			"detailGrid": 0
+			"detailGrid": 0,
+			"color":
+			{
+				"b": 255,
+				"g": 255,
+				"r": 255,
+				"a": 255
+			},
+			"facing": 0,
+			"height": 0
 		},
 		{
 			"id": "Building/Windows/SM_window_005",
 			"layer": "Edge",
 			"slot": "Opening",
-			"cell": {
+			"cell":
+			{
 				"x": 7,
 				"y": 2
 			},
 			"rotation": 0,
-			"size": {
+			"size":
+			{
 				"x": 2,
 				"y": 1
 			},
 			"bBlocksWalking": true,
 			"bBlocksSight": true,
 			"detail": -1,
-			"detailGrid": 0
+			"detailGrid": 0,
+			"color":
+			{
+				"b": 255,
+				"g": 255,
+				"r": 255,
+				"a": 255
+			},
+			"facing": 0,
+			"height": 0
 		},
 		{
 			"id": "Building/Windows/SM_window_006",
 			"layer": "Edge",
 			"slot": "Opening",
-			"cell": {
+			"cell":
+			{
 				"x": 10,
 				"y": 2
 			},
 			"rotation": 0,
-			"size": {
+			"size":
+			{
 				"x": 3,
 				"y": 1
 			},
 			"bBlocksWalking": true,
 			"bBlocksSight": true,
 			"detail": -1,
-			"detailGrid": 0
+			"detailGrid": 0,
+			"color":
+			{
+				"b": 255,
+				"g": 255,
+				"r": 255,
+				"a": 255
+			},
+			"facing": 0,
+			"height": 0
 		},
 		{
 			"id": "Building/Windows/SM_window_007",
 			"layer": "Edge",
 			"slot": "Opening",
-			"cell": {
+			"cell":
+			{
 				"x": 14,
 				"y": 2
 			},
 			"rotation": 0,
-			"size": {
+			"size":
+			{
 				"x": 2,
 				"y": 1
 			},
 			"bBlocksWalking": true,
 			"bBlocksSight": true,
 			"detail": -1,
-			"detailGrid": 0
+			"detailGrid": 0,
+			"color":
+			{
+				"b": 255,
+				"g": 255,
+				"r": 255,
+				"a": 255
+			},
+			"facing": 0,
+			"height": 0
 		},
 		{
 			"id": "Building/Windows/SM_window_008",
 			"layer": "Edge",
 			"slot": "Opening",
-			"cell": {
+			"cell":
+			{
 				"x": 17,
 				"y": 2
 			},
 			"rotation": 0,
-			"size": {
+			"size":
+			{
 				"x": 2,
 				"y": 1
 			},
 			"bBlocksWalking": true,
 			"bBlocksSight": true,
 			"detail": -1,
-			"detailGrid": 0
+			"detailGrid": 0,
+			"color":
+			{
+				"b": 255,
+				"g": 255,
+				"r": 255,
+				"a": 255
+			},
+			"facing": 0,
+			"height": 0
 		},
 		{
 			"id": "Building/Windows/SM_window_009",
 			"layer": "Edge",
 			"slot": "Opening",
-			"cell": {
+			"cell":
+			{
 				"x": 20,
 				"y": 2
 			},
 			"rotation": 0,
-			"size": {
+			"size":
+			{
 				"x": 2,
 				"y": 1
 			},
 			"bBlocksWalking": true,
 			"bBlocksSight": true,
 			"detail": -1,
-			"detailGrid": 0
+			"detailGrid": 0,
+			"color":
+			{
+				"b": 255,
+				"g": 255,
+				"r": 255,
+				"a": 255
+			},
+			"facing": 0,
+			"height": 0
 		},
 		{
 			"id": "Building/Windows/SM_window_010",
 			"layer": "Edge",
 			"slot": "Opening",
-			"cell": {
+			"cell":
+			{
 				"x": 23,
 				"y": 2
 			},
 			"rotation": 0,
-			"size": {
+			"size":
+			{
 				"x": 2,
 				"y": 1
 			},
 			"bBlocksWalking": true,
 			"bBlocksSight": true,
 			"detail": -1,
-			"detailGrid": 0
+			"detailGrid": 0,
+			"color":
+			{
+				"b": 255,
+				"g": 255,
+				"r": 255,
+				"a": 255
+			},
+			"facing": 0,
+			"height": 0
 		},
 		{
 			"id": "Building/Windows/SM_window_011",
 			"layer": "Edge",
 			"slot": "Opening",
-			"cell": {
+			"cell":
+			{
 				"x": 26,
 				"y": 2
 			},
 			"rotation": 0,
-			"size": {
+			"size":
+			{
 				"x": 4,
 				"y": 1
 			},
 			"bBlocksWalking": true,
 			"bBlocksSight": true,
 			"detail": -1,
-			"detailGrid": 0
+			"detailGrid": 0,
+			"color":
+			{
+				"b": 255,
+				"g": 255,
+				"r": 255,
+				"a": 255
+			},
+			"facing": 0,
+			"height": 0
+		},
+		{
+			"id": "Building/Floors/SolidFloor_4x4",
+			"layer": "Floor",
+			"slot": "",
+			"cell":
+			{
+				"x": 17,
+				"y": 2
+			},
+			"rotation": 0,
+			"size":
+			{
+				"x": 4,
+				"y": 4
+			},
+			"bBlocksWalking": false,
+			"bBlocksSight": false,
+			"detail": -1,
+			"detailGrid": 0,
+			"color":
+			{
+				"b": 243,
+				"g": 233,
+				"r": 255,
+				"a": 255
+			},
+			"facing": 0,
+			"height": 0
+		},
+		{
+			"id": "Building/Floors/SolidFloor_4x4",
+			"layer": "Floor",
+			"slot": "",
+			"cell":
+			{
+				"x": 17,
+				"y": 6
+			},
+			"rotation": 0,
+			"size":
+			{
+				"x": 4,
+				"y": 4
+			},
+			"bBlocksWalking": false,
+			"bBlocksSight": false,
+			"detail": -1,
+			"detailGrid": 0,
+			"color":
+			{
+				"b": 243,
+				"g": 233,
+				"r": 255,
+				"a": 255
+			},
+			"facing": 0,
+			"height": 0
+		},
+		{
+			"id": "Building/Floors/SolidFloor_4x4",
+			"layer": "Floor",
+			"slot": "",
+			"cell":
+			{
+				"x": 21,
+				"y": 2
+			},
+			"rotation": 0,
+			"size":
+			{
+				"x": 4,
+				"y": 4
+			},
+			"bBlocksWalking": false,
+			"bBlocksSight": false,
+			"detail": -1,
+			"detailGrid": 0,
+			"color":
+			{
+				"b": 243,
+				"g": 233,
+				"r": 255,
+				"a": 255
+			},
+			"facing": 0,
+			"height": 0
+		},
+		{
+			"id": "Building/Floors/SolidFloor_4x4",
+			"layer": "Floor",
+			"slot": "",
+			"cell":
+			{
+				"x": 21,
+				"y": 6
+			},
+			"rotation": 0,
+			"size":
+			{
+				"x": 4,
+				"y": 4
+			},
+			"bBlocksWalking": false,
+			"bBlocksSight": false,
+			"detail": -1,
+			"detailGrid": 0,
+			"color":
+			{
+				"b": 243,
+				"g": 233,
+				"r": 255,
+				"a": 255
+			},
+			"facing": 0,
+			"height": 0
+		},
+		{
+			"id": "Building/Floors/SolidFloor_4x4",
+			"layer": "Floor",
+			"slot": "",
+			"cell":
+			{
+				"x": 13,
+				"y": 2
+			},
+			"rotation": 0,
+			"size":
+			{
+				"x": 4,
+				"y": 4
+			},
+			"bBlocksWalking": false,
+			"bBlocksSight": false,
+			"detail": -1,
+			"detailGrid": 0,
+			"color":
+			{
+				"b": 243,
+				"g": 233,
+				"r": 255,
+				"a": 255
+			},
+			"facing": 0,
+			"height": 0
+		},
+		{
+			"id": "Building/Floors/SolidFloor_4x4",
+			"layer": "Floor",
+			"slot": "",
+			"cell":
+			{
+				"x": 13,
+				"y": 6
+			},
+			"rotation": 0,
+			"size":
+			{
+				"x": 4,
+				"y": 4
+			},
+			"bBlocksWalking": false,
+			"bBlocksSight": false,
+			"detail": -1,
+			"detailGrid": 0,
+			"color":
+			{
+				"b": 243,
+				"g": 233,
+				"r": 255,
+				"a": 255
+			},
+			"facing": 0,
+			"height": 0
+		},
+		{
+			"id": "Building/Floors/SolidFloor_4x4",
+			"layer": "Floor",
+			"slot": "",
+			"cell":
+			{
+				"x": 25,
+				"y": 2
+			},
+			"rotation": 0,
+			"size":
+			{
+				"x": 4,
+				"y": 4
+			},
+			"bBlocksWalking": false,
+			"bBlocksSight": false,
+			"detail": -1,
+			"detailGrid": 0,
+			"color":
+			{
+				"b": 243,
+				"g": 233,
+				"r": 255,
+				"a": 255
+			},
+			"facing": 0,
+			"height": 0
+		},
+		{
+			"id": "Building/Floors/SolidFloor_4x4",
+			"layer": "Floor",
+			"slot": "",
+			"cell":
+			{
+				"x": 25,
+				"y": 6
+			},
+			"rotation": 0,
+			"size":
+			{
+				"x": 4,
+				"y": 4
+			},
+			"bBlocksWalking": false,
+			"bBlocksSight": false,
+			"detail": -1,
+			"detailGrid": 0,
+			"color":
+			{
+				"b": 243,
+				"g": 233,
+				"r": 255,
+				"a": 255
+			},
+			"facing": 0,
+			"height": 0
+		},
+		{
+			"id": "Building/Walls/SM_Walls_007_300cm",
+			"layer": "Edge",
+			"slot": "",
+			"cell":
+			{
+				"x": 13,
+				"y": 10
+			},
+			"rotation": 0,
+			"size":
+			{
+				"x": 4,
+				"y": 1
+			},
+			"bBlocksWalking": true,
+			"bBlocksSight": true,
+			"detail": -1,
+			"detailGrid": 0,
+			"color":
+			{
+				"b": 255,
+				"g": 255,
+				"r": 255,
+				"a": 255
+			},
+			"facing": 0,
+			"height": 0
+		},
+		{
+			"id": "Building/Walls/SM_Walls_007_300cm",
+			"layer": "Edge",
+			"slot": "",
+			"cell":
+			{
+				"x": 17,
+				"y": 10
+			},
+			"rotation": 0,
+			"size":
+			{
+				"x": 4,
+				"y": 1
+			},
+			"bBlocksWalking": true,
+			"bBlocksSight": true,
+			"detail": -1,
+			"detailGrid": 0,
+			"color":
+			{
+				"b": 255,
+				"g": 255,
+				"r": 255,
+				"a": 255
+			},
+			"facing": 0,
+			"height": 0
+		},
+		{
+			"id": "Building/Walls/SM_Walls_007_300cm",
+			"layer": "Edge",
+			"slot": "",
+			"cell":
+			{
+				"x": 21,
+				"y": 10
+			},
+			"rotation": 0,
+			"size":
+			{
+				"x": 4,
+				"y": 1
+			},
+			"bBlocksWalking": true,
+			"bBlocksSight": true,
+			"detail": -1,
+			"detailGrid": 0,
+			"color":
+			{
+				"b": 255,
+				"g": 255,
+				"r": 255,
+				"a": 255
+			},
+			"facing": 0,
+			"height": 0
+		},
+		{
+			"id": "Building/Walls/SM_Walls_007_300cm",
+			"layer": "Edge",
+			"slot": "",
+			"cell":
+			{
+				"x": 25,
+				"y": 10
+			},
+			"rotation": 0,
+			"size":
+			{
+				"x": 4,
+				"y": 1
+			},
+			"bBlocksWalking": true,
+			"bBlocksSight": true,
+			"detail": -1,
+			"detailGrid": 0,
+			"color":
+			{
+				"b": 255,
+				"g": 255,
+				"r": 255,
+				"a": 255
+			},
+			"facing": 0,
+			"height": 0
+		},
+		{
+			"id": "Building/Walls/SM_Walls_007_300cm",
+			"layer": "Edge",
+			"slot": "",
+			"cell":
+			{
+				"x": 29,
+				"y": 10
+			},
+			"rotation": 0,
+			"size":
+			{
+				"x": 4,
+				"y": 1
+			},
+			"bBlocksWalking": true,
+			"bBlocksSight": true,
+			"detail": -1,
+			"detailGrid": 0,
+			"color":
+			{
+				"b": 255,
+				"g": 255,
+				"r": 255,
+				"a": 255
+			},
+			"facing": 0,
+			"height": 0
+		},
+		{
+			"id": "Building/Walls/SM_Walls_007_300cm",
+			"layer": "Edge",
+			"slot": "",
+			"cell":
+			{
+				"x": 33,
+				"y": 10
+			},
+			"rotation": 0,
+			"size":
+			{
+				"x": 4,
+				"y": 1
+			},
+			"bBlocksWalking": true,
+			"bBlocksSight": true,
+			"detail": -1,
+			"detailGrid": 0,
+			"color":
+			{
+				"b": 255,
+				"g": 255,
+				"r": 255,
+				"a": 255
+			},
+			"facing": 0,
+			"height": 0
+		},
+		{
+			"id": "WallProps/SM_picture_102",
+			"layer": "Wall",
+			"slot": "",
+			"cell":
+			{
+				"x": 25,
+				"y": 10
+			},
+			"rotation": 0,
+			"size":
+			{
+				"x": 2,
+				"y": 1
+			},
+			"bBlocksWalking": false,
+			"bBlocksSight": false,
+			"detail": 1,
+			"detailGrid": 4,
+			"color":
+			{
+				"b": 255,
+				"g": 255,
+				"r": 255,
+				"a": 255
+			},
+			"facing": 3,
+			"height": 150
+		},
+		{
+			"id": "WallProps/SM_picture_105",
+			"layer": "Wall",
+			"slot": "",
+			"cell":
+			{
+				"x": 27,
+				"y": 10
+			},
+			"rotation": 0,
+			"size":
+			{
+				"x": 2,
+				"y": 1
+			},
+			"bBlocksWalking": false,
+			"bBlocksSight": false,
+			"detail": 2,
+			"detailGrid": 4,
+			"color":
+			{
+				"b": 255,
+				"g": 255,
+				"r": 255,
+				"a": 255
+			},
+			"facing": 3,
+			"height": 150
+		},
+		{
+			"id": "WallProps/SM_prop_025",
+			"layer": "Wall",
+			"slot": "",
+			"cell":
+			{
+				"x": 29,
+				"y": 10
+			},
+			"rotation": 0,
+			"size":
+			{
+				"x": 2,
+				"y": 1
+			},
+			"bBlocksWalking": false,
+			"bBlocksSight": false,
+			"detail": 2,
+			"detailGrid": 4,
+			"color":
+			{
+				"b": 255,
+				"g": 255,
+				"r": 255,
+				"a": 255
+			},
+			"facing": 3,
+			"height": 150
+		},
+		{
+			"id": "WallProps/SM_picture_040",
+			"layer": "Wall",
+			"slot": "",
+			"cell":
+			{
+				"x": 22,
+				"y": 10
+			},
+			"rotation": 0,
+			"size":
+			{
+				"x": 4,
+				"y": 1
+			},
+			"bBlocksWalking": false,
+			"bBlocksSight": false,
+			"detail": 0,
+			"detailGrid": 4,
+			"color":
+			{
+				"b": 255,
+				"g": 255,
+				"r": 255,
+				"a": 255
+			},
+			"facing": 3,
+			"height": 150
 		}
 	]
 }
