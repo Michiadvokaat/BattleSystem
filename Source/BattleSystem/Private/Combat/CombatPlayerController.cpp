@@ -42,6 +42,7 @@ void ACombatPlayerController::SetupInputComponent()
 	InputComponent->BindKey(EKeys::MouseScrollUp, IE_Pressed, this, &ACombatPlayerController::OnWheelUp);
 	InputComponent->BindKey(EKeys::MouseScrollDown, IE_Pressed, this, &ACombatPlayerController::OnWheelDown);
 	InputComponent->BindKey(EKeys::F, IE_Pressed, this, &ACombatPlayerController::OnResetCamera);
+	InputComponent->BindKey(EKeys::R, IE_Pressed, this, &ACombatPlayerController::OnRotatePiece);
 }
 
 void ACombatPlayerController::PlayerTick(float DeltaTime)
@@ -57,6 +58,16 @@ void ACombatPlayerController::PlayerTick(float DeltaTime)
 	if ((bPainting || bErasing) && Subsystem && Subsystem->IsDesignMode() && GetArenaPointUnderMouse(Subsystem->GetGridHeight(), Point))
 	{
 		Subsystem->DesignPaint(Point, bErasing, true);
+	}
+
+	// Piece tool: the selected piece follows the cursor (orange while Shift is held: erasing).
+	if (Subsystem && Subsystem->IsDesignMode() && Subsystem->GetDesignTool() == ECombatDesignTool::Piece && GetArenaPointUnderMouse(Subsystem->GetGridHeight(), Point))
+	{
+		Subsystem->UpdateDesignPiecePreview(Point, IsInputKeyDown(EKeys::LeftShift) || IsInputKeyDown(EKeys::RightShift));
+	}
+	else if (Subsystem)
+	{
+		Subsystem->HideDesignPiecePreview();
 	}
 
 	UpdateCameraDrag(DeltaTime);
@@ -142,6 +153,15 @@ void ACombatPlayerController::OnWheel(double Steps)
 		return;
 	}
 	ZoomCamera(Steps);
+}
+
+void ACombatPlayerController::OnRotatePiece()
+{
+	UCombatSubsystem* Subsystem = GetWorld()->GetSubsystem<UCombatSubsystem>();
+	if (Subsystem && Subsystem->IsDesignMode() && Subsystem->GetDesignTool() == ECombatDesignTool::Piece)
+	{
+		Subsystem->RotateDesignPiece(IsInputKeyDown(EKeys::LeftShift) || IsInputKeyDown(EKeys::RightShift) ? -1 : 1);
+	}
 }
 
 void ACombatPlayerController::OnResetCamera()

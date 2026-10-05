@@ -2,6 +2,7 @@
 
 #include "SCombatLevelDesigner.h"
 #include "Combat/CombatLevel.h"
+#include "Combat/CombatPieces.h"
 #include "Combat/CombatSettings.h"
 #include "Combat/CombatSubsystem.h"
 #include "HAL/PlatformTime.h"
@@ -11,14 +12,21 @@
 #include "Widgets/Input/SSpinBox.h"
 #include "Widgets/Layout/SBorder.h"
 #include "Widgets/Layout/SBox.h"
+#include "Widgets/Layout/SScrollBox.h"
+#include "Widgets/Layout/SWrapBox.h"
 #include "Widgets/SBoxPanel.h"
 #include "Widgets/Text/STextBlock.h"
+#if WITH_EDITOR
+#include "AssetThumbnail.h"
+#endif
 
 namespace CombatLevelDesigner
 {
 	static const FLinearColor ActiveColor(0.2f, 0.8f, 0.3f);
 	static const FLinearColor ConfirmColor(0.9f, 0.15f, 0.1f);
 	static constexpr double DeleteConfirmSeconds = 3.0;
+	static constexpr float ThumbnailSize = 64.f;
+	static constexpr float PaletteWidth = 440.f;
 }
 
 void SCombatLevelDesigner::Construct(const FArguments& InArgs)
@@ -216,7 +224,8 @@ void SCombatLevelDesigner::Construct(const FArguments& InArgs)
 				+ SHorizontalBox::Slot().AutoWidth().Padding(0.f, 0.f, 4.f, 0.f)[ ToolButton(INVTEXT("Hedge"), ECombatDesignTool::Hedge) ]
 				+ SHorizontalBox::Slot().AutoWidth().Padding(0.f, 0.f, 4.f, 0.f)[ ToolButton(INVTEXT("Water"), ECombatDesignTool::Water) ]
 				+ SHorizontalBox::Slot().AutoWidth().Padding(0.f, 0.f, 4.f, 0.f)[ ToolButton(INVTEXT("Unit"), ECombatDesignTool::Unit) ]
-				+ SHorizontalBox::Slot().AutoWidth()[ ToolButton(INVTEXT("Spawn"), ECombatDesignTool::Spawn) ]
+				+ SHorizontalBox::Slot().AutoWidth().Padding(0.f, 0.f, 4.f, 0.f)[ ToolButton(INVTEXT("Spawn"), ECombatDesignTool::Spawn) ]
+				+ SHorizontalBox::Slot().AutoWidth()[ ToolButton(INVTEXT("Piece"), ECombatDesignTool::Piece) ]
 			]
 
 			// Waves: select, add after the selected one, remove the selected one. The arena shows the selected wave's spawns.
@@ -350,11 +359,60 @@ void SCombatLevelDesigner::Construct(const FArguments& InArgs)
 				]
 			]
 
+			// Piece tool: categories, the pieces of the selected one, and the rotation.
+			+ SVerticalBox::Slot().AutoHeight().Padding(0.f, 2.f)
+			[
+				SNew(SVerticalBox)
+				.Visibility_Lambda([this]() { return IsEditing() && IsPieceTool() ? EVisibility::Visible : EVisibility::Collapsed; })
+				+ SVerticalBox::Slot().AutoHeight().Padding(0.f, 0.f, 0.f, 4.f)
+				[
+					SAssignNew(CategoryBox, SWrapBox).PreferredSize(CombatLevelDesigner::PaletteWidth)
+				]
+				+ SVerticalBox::Slot().AutoHeight()
+				[
+					SNew(SBox)
+					.MaxDesiredHeight(250.f)
+					[
+						SNew(SScrollBox)
+						+ SScrollBox::Slot()
+						[
+							SAssignNew(PaletteBox, SWrapBox).PreferredSize(CombatLevelDesigner::PaletteWidth)
+						]
+					]
+				]
+				+ SVerticalBox::Slot().AutoHeight().Padding(0.f, 4.f, 0.f, 0.f)
+				[
+					SNew(SHorizontalBox)
+					+ SHorizontalBox::Slot().AutoWidth().VAlign(VAlign_Center)[ MakeLabel(INVTEXT("Rotation")) ]
+					+ SHorizontalBox::Slot().AutoWidth().VAlign(VAlign_Center).Padding(0.f, 0.f, 8.f, 0.f)
+					[
+						SNew(STextBlock).Text_Lambda([this]()
+						{
+							const UCombatSubsystem* Current = Subsystem.Get();
+							return FText::FromString(FString::Printf(TEXT("%d\u00B0"), Current ? Current->GetDesignPieceRotation() * 90 : 0));
+						})
+					]
+					+ SHorizontalBox::Slot().AutoWidth().Padding(0.f, 0.f, 4.f, 0.f)
+					[
+						MakeButton(INVTEXT("Rotate (R)"), [this]() { if (UCombatSubsystem* Current = Subsystem.Get()) { Current->RotateDesignPiece(1); } })
+					]
+					+ SHorizontalBox::Slot().AutoWidth()
+					[
+						MakeButton(INVTEXT("Back (Shift+R)"), [this]() { if (UCombatSubsystem* Current = Subsystem.Get()) { Current->RotateDesignPiece(-1); } })
+					]
+				]
+			]
+
 			+ SVerticalBox::Slot().AutoHeight().Padding(0.f, 6.f, 0.f, 0.f)
 			[
 				SNew(STextBlock)
 				.Visibility(this, &SCombatLevelDesigner::GetEditVisibility)
-				.Text(INVTEXT("Left: place (hold to paint)   Shift+Left: erase   Right click: erase cell   Right drag: look"))
+				.Text_Lambda([this]()
+				{
+					return IsPieceTool()
+						? INVTEXT("Left: place   Shift+Left: erase (this layer)   R / Shift+R: rotate   Right drag: look")
+						: INVTEXT("Left: place (hold to paint)   Shift+Left: erase   Right click: erase cell   Right drag: look");
+				})
 				.ColorAndOpacity(FLinearColor(0.75f, 0.75f, 0.75f))
 				.Font(FCoreStyle::GetDefaultFontStyle("Italic", 9))
 			]
@@ -367,6 +425,133 @@ void SCombatLevelDesigner::Construct(const FArguments& InArgs)
 			]
 		]
 	];
+	RebuildPieceCategories();
+}
+
+bool SCombatLevelDesigner::IsPieceTool() const
+{
+	const UCombatSubsystem* Current = Subsystem.Get();
+	return Current && Current->GetDesignTool() == ECombatDesignTool::Piece;
+}
+
+void SCombatLevelDesigner::RebuildPieceCategories()
+{
+	CategoryBox->ClearChildren();
+	UCombatSubsystem* Current = Subsystem.Get();
+	const UCombatPieceCatalog* Catalog = Current ? Current->GetPieceCatalog() : nullptr;
+	if (!Catalog || Catalog->Pieces.IsEmpty())
+	{
+		CategoryBox->AddSlot()[ SNew(STextBlock).Text(INVTEXT("No PieceCatalog (Project Settings > Combat), or it is empty.")) ];
+		return;
+	}
+
+	// Categories in catalog order; the selected piece (or the first one) picks the category shown first.
+	TArray<FString> Categories;
+	for (const FCombatPieceDefinition& Definition : Catalog->Pieces)
+	{
+		Categories.AddUnique(Definition.Category);
+	}
+	const FCombatPieceDefinition* Selected = Catalog->Find(Current->GetDesignPiece());
+	if (!Selected)
+	{
+		Selected = &Catalog->Pieces[0];
+		Current->SetDesignPiece(Selected->Id);
+	}
+	SelectedCategory = Selected->Category;
+
+	for (const FString& Category : Categories)
+	{
+		CategoryBox->AddSlot().Padding(0.f, 0.f, 4.f, 4.f)
+		[
+			MakeButton(FText::FromString(Category),
+				[this, Category]()
+				{
+					SelectedCategory = Category;
+					RebuildPalette();
+				},
+				[this, Category]() { return SelectedCategory == Category; })
+		];
+	}
+	RebuildPalette();
+}
+
+void SCombatLevelDesigner::RebuildPalette()
+{
+	PaletteBox->ClearChildren();
+	Thumbnails.Reset();
+	UCombatSubsystem* Current = Subsystem.Get();
+	const UCombatPieceCatalog* Catalog = Current ? Current->GetPieceCatalog() : nullptr;
+	if (!Catalog)
+	{
+		return;
+	}
+	for (const FCombatPieceDefinition& Definition : Catalog->Pieces)
+	{
+		if (Definition.Category == SelectedCategory)
+		{
+			PaletteBox->AddSlot().Padding(2.f)[ MakePieceButton(Definition) ];
+		}
+	}
+}
+
+TSharedRef<SWidget> SCombatLevelDesigner::MakePieceButton(const FCombatPieceDefinition& Definition)
+{
+	const FString Id = Definition.Id;
+	FString Name = Id;
+	Id.Split(TEXT("/"), nullptr, &Name);
+	Name.RemoveFromStart(TEXT("SM_"));
+
+	TSharedRef<SWidget> Picture = SNew(SBox).WidthOverride(CombatLevelDesigner::ThumbnailSize).HeightOverride(CombatLevelDesigner::ThumbnailSize);
+#if WITH_EDITOR
+	if (Definition.Mesh)
+	{
+		if (!ThumbnailPool)
+		{
+			ThumbnailPool = MakeShared<FAssetThumbnailPool>(64);
+		}
+		const TSharedRef<FAssetThumbnail> Thumbnail = MakeShared<FAssetThumbnail>(Definition.Mesh.Get(),
+			CombatLevelDesigner::ThumbnailSize, CombatLevelDesigner::ThumbnailSize, ThumbnailPool);
+		Thumbnails.Add(Thumbnail);
+		Picture = SNew(SBox)
+			.WidthOverride(CombatLevelDesigner::ThumbnailSize)
+			.HeightOverride(CombatLevelDesigner::ThumbnailSize)
+			[
+				Thumbnail->MakeThumbnailWidget()
+			];
+	}
+#endif
+
+	const FString Layer = StaticEnum<ECombatPieceLayer>()->GetNameStringByValue(static_cast<int64>(Definition.Layer));
+	return SNew(SButton)
+		.ToolTipText(FText::FromString(FString::Printf(TEXT("%s\n%s, %d x %d%s"), *Id, *Layer, Definition.Size.X, Definition.Size.Y,
+			Definition.Layer == ECombatPieceLayer::Floor ? TEXT("") : (Definition.bBlocksWalking || Definition.bBlocksSight ? TEXT(", blocks") : TEXT(", open")))))
+		.ButtonColorAndOpacity_Lambda([this, Id]()
+		{
+			const UCombatSubsystem* Current = Subsystem.Get();
+			const bool bSelected = Current && Current->GetDesignPiece() == Id;
+			return FSlateColor(bSelected ? CombatLevelDesigner::ActiveColor : FLinearColor::White);
+		})
+		.OnClicked_Lambda([this, Id]()
+		{
+			if (UCombatSubsystem* Current = Subsystem.Get())
+			{
+				Current->SetDesignTool(ECombatDesignTool::Piece);
+				Current->SetDesignPiece(Id);
+			}
+			return FReply::Handled();
+		})
+		[
+			SNew(SVerticalBox)
+			+ SVerticalBox::Slot().AutoHeight().HAlign(HAlign_Center)[ Picture ]
+			+ SVerticalBox::Slot().AutoHeight()
+			[
+				SNew(SBox)
+				.WidthOverride(CombatLevelDesigner::ThumbnailSize)
+				[
+					SNew(STextBlock).Text(FText::FromString(Name)).AutoWrapText(true).Font(FCoreStyle::GetDefaultFontStyle("Regular", 8))
+				]
+			]
+		];
 }
 
 bool SCombatLevelDesigner::IsEditing() const

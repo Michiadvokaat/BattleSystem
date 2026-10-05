@@ -12,6 +12,12 @@ public class BattleSystem : ModuleRules
 
 		PrivateDependencyModuleNames.AddRange(new string[] { "AssetRegistry", "Slate", "SlateCore", "Niagara", "Json", "JsonUtilities", "UMG", "SkeletalMerging" });
 
+		if (Target.bBuildEditor)
+		{
+			// LevelDesigner palette thumbnails (editor and PIE only; packaged builds show the names).
+			PrivateDependencyModuleNames.Add("UnrealEd");
+		}
+
 		
 		// Uncomment if you are using online features
 		// PrivateDependencyModuleNames.Add("OnlineSubsystem");

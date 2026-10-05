@@ -2204,4 +2204,35 @@ bool FCombatPieceTransformTest::RunTest(const FString& Parameters)
 	return true;
 }
 
+IMPLEMENT_SIMPLE_AUTOMATION_TEST(FCombatPiecePlacementTest, "BattleSystem.Combat.PiecePlacement",
+	EAutomationTestFlags::EditorContext | EAutomationTestFlags::ProductFilter)
+
+bool FCombatPiecePlacementTest::RunTest(const FString& Parameters)
+{
+	FCombatPieceDefinition Chair;
+	Chair.Layer = ECombatPieceLayer::Cell;
+	TestEqual(TEXT("A 1x1 piece goes on the cell under the point"), CombatPieces::PlaceAt(Chair, FVector2D(350.0, 120.0), 0, 100.f).Cell, FIntPoint(3, 1));
+
+	FCombatPieceDefinition Floor;
+	Floor.Layer = ECombatPieceLayer::Floor;
+	Floor.Size = FIntPoint(4, 2);
+	TestEqual(TEXT("A 4x2 floor is centered on the cell under the point (rounded down)"), CombatPieces::PlaceAt(Floor, FVector2D(550.0, 550.0), 0, 100.f).Cell, FIntPoint(4, 5));
+	TestEqual(TEXT("... turned it is 2x4"), CombatPieces::PlaceAt(Floor, FVector2D(550.0, 550.0), 1, 100.f).Cell, FIntPoint(5, 4));
+
+	FCombatPieceDefinition Wall;
+	Wall.Layer = ECombatPieceLayer::Edge;
+	Wall.Size = FIntPoint(4, 1);
+	FCombatLevelPiece Piece = CombatPieces::PlaceAt(Wall, FVector2D(520.0, 340.0), 0, 100.f);
+	TestEqual(TEXT("Horizontal wall: nearest row border, centered along it"), Piece.Cell, FIntPoint(3, 3));
+	Piece = CombatPieces::PlaceAt(Wall, FVector2D(520.0, 340.0), 1, 100.f);
+	TestEqual(TEXT("Vertical wall: nearest column border, centered along it"), Piece.Cell, FIntPoint(5, 1));
+	TestEqual(TEXT("The rotation is kept"), Piece.Rotation, 1);
+
+	FCombatPieceDefinition Door = Wall;
+	Door.Size = FIntPoint(1, 1);
+	TestEqual(TEXT("A 1-border door goes on the border segment under the point"), CombatPieces::PlaceAt(Door, FVector2D(520.0, 340.0), 0, 100.f).Cell, FIntPoint(5, 3));
+	TestEqual(TEXT("Rotation 7 is rotation 3"), CombatPieces::PlaceAt(Door, FVector2D(0.0, 0.0), 7, 100.f).Rotation, 3);
+	return true;
+}
+
 #endif // WITH_DEV_AUTOMATION_TESTS

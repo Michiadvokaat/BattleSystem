@@ -89,4 +89,11 @@ namespace CombatPieces
 	 */
 	BATTLESYSTEM_API FTransform ComputeMeshTransform(const FCombatLevelPiece& Piece, float CellSize, const FBox& MeshBounds,
 		float MeshYaw, const FVector& Offset, bool bScaleToFit = false);
+
+	/**
+	 * The piece a definition makes under a grid-local point (LevelDesigner): Floor and Cell pieces are centered on the
+	 * cell under the point (rounded down for even sizes), Edge pieces lie on the nearest border of their direction and
+	 * are centered along it.
+	 */
+	BATTLESYSTEM_API FCombatLevelPiece PlaceAt(const FCombatPieceDefinition& Definition, const FVector2D& Local, int32 Rotation, float CellSize);
 }

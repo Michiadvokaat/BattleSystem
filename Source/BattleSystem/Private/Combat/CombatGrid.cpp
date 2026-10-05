@@ -46,6 +46,61 @@ ACombatGrid::ACombatGrid()
 	WallBlocks = MakeBlocks(TEXT("WallBlocks"));
 	HedgeBlocks = MakeBlocks(TEXT("HedgeBlocks"));
 	WaterBlocks = MakeBlocks(TEXT("WaterBlocks"));
+
+	PreviewMarks = MakeBlocks(TEXT("PreviewMarks"));
+	PreviewMarks->SetCastShadow(false);
+	PreviewMarks->SetVisibility(false);
+	PreviewMesh = CreateDefaultSubobject<UStaticMeshComponent>(TEXT("PreviewMesh"));
+	PreviewMesh->SetupAttachment(RootComponent);
+	PreviewMesh->SetCollisionEnabled(ECollisionEnabled::NoCollision);
+	PreviewMesh->SetVisibility(false);
+}
+
+void ACombatGrid::ShowPiecePreview(const FCombatLevelPiece& Piece, float InCellSize, UStaticMesh* Mesh, const FTransform& MeshTransform, bool bFits, bool bErase)
+{
+	PreviewMesh->SetStaticMesh(Mesh);
+	PreviewMesh->SetRelativeTransform(MeshTransform);
+	PreviewMesh->SetVisibility(!bErase && Mesh != nullptr);
+
+	if (!PreviewMaterial && BlockMaterialBase)
+	{
+		PreviewMaterial = PreviewMarks->CreateAndSetMaterialInstanceDynamicFromMaterial(0, BlockMaterialBase);
+	}
+	if (PreviewMaterial)
+	{
+		PreviewMaterial->SetVectorParameterValue(TEXT("Color"), bErase ? PreviewEraseColor : (bFits ? PreviewPlaceColor : PreviewBlockedColor));
+	}
+
+	// Flat plates just above the floor pieces; bars along borders. The engine cube is 100 cm.
+	PreviewMarks->ClearInstances();
+	const double Size = InCellSize;
+	TArray<FIntPoint> Cells;
+	Piece.GetCells(Cells);
+	for (const FIntPoint& Cell : Cells)
+	{
+		PreviewMarks->AddInstance(FTransform(FRotator::ZeroRotator, FVector((Cell.X + 0.5) * Size, (Cell.Y + 0.5) * Size, 3.0),
+			FVector(Size * 0.9 / 100.0, Size * 0.9 / 100.0, 0.04)));
+	}
+	TArray<TPair<FIntPoint, FIntPoint>> Edges;
+	Piece.GetEdges(Edges);
+	for (const TPair<FIntPoint, FIntPoint>& Edge : Edges)
+	{
+		const FIntPoint& After = Edge.Value;
+		const bool bHorizontal = Edge.Key.Y != After.Y;
+		const FVector Center = bHorizontal ? FVector((After.X + 0.5) * Size, After.Y * Size, 4.0) : FVector(After.X * Size, (After.Y + 0.5) * Size, 4.0);
+		const FVector Scale = bHorizontal ? FVector(Size * 0.9 / 100.0, 0.1, 0.06) : FVector(0.1, Size * 0.9 / 100.0, 0.06);
+		PreviewMarks->AddInstance(FTransform(FRotator::ZeroRotator, Center, Scale));
+	}
+	PreviewMarks->SetVisibility(true);
+}
+
+void ACombatGrid::HidePiecePreview()
+{
+	if (PreviewMesh->IsVisible() || PreviewMarks->IsVisible())
+	{
+		PreviewMesh->SetVisibility(false);
+		PreviewMarks->SetVisibility(false);
+	}
 }
 
 void ACombatGrid::OnConstruction(const FTransform& Transform)

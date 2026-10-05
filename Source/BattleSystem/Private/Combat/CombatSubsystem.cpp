@@ -7,6 +7,7 @@
 #include "Combat/CombatCommandScript.h"
 #include "Combat/CombatCueTable.h"
 #include "Combat/CombatGrid.h"
+#include "Combat/CombatPieces.h"
 #include "Combat/CombatProjectileActor.h"
 #include "Combat/CombatSettings.h"
 #include "Combat/CombatSetup.h"
@@ -1301,6 +1302,7 @@ void UCombatSubsystem::ExitDesignMode()
 	bDesignMode = false;
 	DesignSpawnMove.Reset();
 	DestroyDesignPreviews();
+	HideDesignPiecePreview();
 	if (ACombatGrid* Grid = ACombatGrid::Find(GetWorld()))
 	{
 		Grid->ClearLevel();
@@ -1477,7 +1479,36 @@ void UCombatSubsystem::DesignPaint(const FVector& WorldPoint, bool bErase, bool 
 	const TCHAR OldKind = DesignLevel.GetCell(Cell);
 	bool bChanged = false;
 
-	if (bErase)
+	if (DesignTool == ECombatDesignTool::Piece)
+	{
+		// Erasing removes the pieces of the selected piece's layer that it would cover; placing happens on a press only.
+		FCombatLevelPiece Piece;
+		const FCombatPieceDefinition* Definition = nullptr;
+		if (!GetDesignPiecePlacement(WorldPoint, Piece, Definition))
+		{
+			return;
+		}
+		if (bErase)
+		{
+			bChanged = DesignLevel.Pieces.RemoveAll([&Piece](const FCombatLevelPiece& Other) { return Other.Overlaps(Piece); }) > 0;
+		}
+		else if (!bStroke && DesignLevel.PlacePiece(Piece))
+		{
+			// A piece that blocks walking cannot stand on a unit or a spawn (of any wave).
+			if (Piece.Layer == ECombatPieceLayer::Cell && Piece.bBlocksWalking)
+			{
+				TArray<FIntPoint> Cells;
+				Piece.GetCells(Cells);
+				for (const FIntPoint& Covered : Cells)
+				{
+					DesignLevel.Units.RemoveAll([&Covered](const FCombatLevelUnit& Unit) { return Unit.Cell == Covered; });
+					DesignLevel.RemoveSpawnsAt(Covered);
+				}
+			}
+			bChanged = true;
+		}
+	}
+	else if (bErase)
 	{
 		if (UnitIndex != INDEX_NONE)
 		{
@@ -1497,8 +1528,8 @@ void UCombatSubsystem::DesignPaint(const FVector& WorldPoint, bool bErase, bool 
 	}
 	else if (DesignTool == ECombatDesignTool::Unit)
 	{
-		// One unit per cell, not on walls or water; placing on a unit replaces it.
-		const bool bWalkable = !EnumHasAnyFlags(FCombatLevel::FlagsFor(OldKind), ECombatCellFlags::Blocked);
+		// One unit per cell, not on walls, water or blocking pieces; placing on a unit replaces it.
+		const bool bWalkable = IsDesignCellWalkable(Cell);
 		if (bStroke || !bWalkable || DesignUnitType.IsEmpty())
 		{
 			return;
@@ -1519,8 +1550,8 @@ void UCombatSubsystem::DesignPaint(const FVector& WorldPoint, bool bErase, bool 
 	}
 	else if (DesignTool == ECombatDesignTool::Spawn)
 	{
-		// One spawn per cell and wave, not on walls or water; placing on a spawn replaces it. Without waves, wave 1 is made.
-		const bool bWalkable = !EnumHasAnyFlags(FCombatLevel::FlagsFor(OldKind), ECombatCellFlags::Blocked);
+		// One spawn per cell and wave, not on walls, water or blocking pieces; placing on a spawn replaces it. Without waves, wave 1 is made.
+		const bool bWalkable = IsDesignCellWalkable(Cell);
 		if (bStroke || !bWalkable || DesignUnitType.IsEmpty())
 		{
 			return;
@@ -1569,6 +1600,66 @@ void UCombatSubsystem::DesignPaint(const FVector& WorldPoint, bool bErase, bool 
 	{
 		RefreshDesignView(false);
 	}
+}
+
+const UCombatPieceCatalog* UCombatSubsystem::GetPieceCatalog()
+{
+	if (!PieceCatalog)
+	{
+		PieceCatalog = GetDefault<UCombatSettings>()->PieceCatalog.LoadSynchronous();
+	}
+	return PieceCatalog;
+}
+
+bool UCombatSubsystem::GetDesignPiecePlacement(const FVector& WorldPoint, FCombatLevelPiece& OutPiece, const FCombatPieceDefinition*& OutDefinition)
+{
+	const UCombatPieceCatalog* Catalog = GetPieceCatalog();
+	OutDefinition = Catalog ? Catalog->Find(DesignPieceId) : nullptr;
+	if (!OutDefinition)
+	{
+		return false;
+	}
+	const ACombatGrid* Grid = ACombatGrid::Find(GetWorld());
+	const FVector Origin = Grid ? Grid->GetActorLocation() : FVector::ZeroVector;
+	OutPiece = CombatPieces::PlaceAt(*OutDefinition, FVector2D(WorldPoint - Origin), DesignPieceRotation, DesignLevel.CellSize);
+	return true;
+}
+
+void UCombatSubsystem::UpdateDesignPiecePreview(const FVector& WorldPoint, bool bErase)
+{
+	ACombatGrid* Grid = ACombatGrid::Find(GetWorld());
+	if (!Grid)
+	{
+		return;
+	}
+	FCombatLevelPiece Piece;
+	const FCombatPieceDefinition* Definition = nullptr;
+	if (!bDesignMode || !GetDesignPiecePlacement(WorldPoint, Piece, Definition) || !Definition->Mesh)
+	{
+		Grid->HidePiecePreview();
+		return;
+	}
+	const FTransform MeshTransform = CombatPieces::ComputeMeshTransform(Piece, DesignLevel.CellSize, Definition->Mesh->GetBoundingBox(),
+		Definition->MeshYaw, Definition->Offset, Definition->bScaleToFit);
+	Grid->ShowPiecePreview(Piece, DesignLevel.CellSize, Definition->Mesh, MeshTransform, DesignLevel.IsPieceInBounds(Piece), bErase);
+}
+
+void UCombatSubsystem::HideDesignPiecePreview()
+{
+	if (ACombatGrid* Grid = ACombatGrid::Find(GetWorld()))
+	{
+		Grid->HidePiecePreview();
+	}
+}
+
+bool UCombatSubsystem::IsDesignCellWalkable(const FIntPoint& Cell) const
+{
+	if (EnumHasAnyFlags(FCombatLevel::FlagsFor(DesignLevel.GetCell(Cell)), ECombatCellFlags::Blocked))
+	{
+		return false;
+	}
+	const int32 PieceIndex = DesignLevel.FindPieceAt(ECombatPieceLayer::Cell, Cell);
+	return PieceIndex == INDEX_NONE || !DesignLevel.Pieces[PieceIndex].bBlocksWalking;
 }
 
 void UCombatSubsystem::RefreshDesignView(bool bFitCamera)
@@ -1690,7 +1781,7 @@ bool UCombatSubsystem::SetDesignSpawn(int32 WaveIndex, int32 SpawnIndex, const F
 
 	const int32 Occupant = DesignLevel.FindSpawnAt(WaveIndex, Spawn.Cell);
 	const bool bValidCell = DesignLevel.IsInBounds(Spawn.Cell)
-		&& !EnumHasAnyFlags(FCombatLevel::FlagsFor(DesignLevel.GetCell(Spawn.Cell)), ECombatCellFlags::Blocked)
+		&& IsDesignCellWalkable(Spawn.Cell)
 		&& (Occupant == INDEX_NONE || Occupant == SpawnIndex);
 	if (!bValidCell || Spawn.Type.IsEmpty())
 	{
@@ -1768,7 +1859,7 @@ bool UCombatSubsystem::SetDesignUnit(int32 UnitIndex, const FCombatLevelUnit& Un
 
 	const int32 Occupant = DesignLevel.FindUnitAt(Unit.Cell);
 	const bool bValidCell = DesignLevel.IsInBounds(Unit.Cell)
-		&& !EnumHasAnyFlags(FCombatLevel::FlagsFor(DesignLevel.GetCell(Unit.Cell)), ECombatCellFlags::Blocked)
+		&& IsDesignCellWalkable(Unit.Cell)
 		&& (Occupant == INDEX_NONE || Occupant == UnitIndex);
 	if (!bValidCell || Unit.Type.IsEmpty())
 	{

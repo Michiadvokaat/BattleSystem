@@ -11,6 +11,8 @@
 #include "CombatSubsystem.generated.h"
 
 class ACameraActor;
+class UCombatPieceCatalog;
+struct FCombatPieceDefinition;
 class ACombatProjectileActor;
 class UCombatCommandScript;
 class UCombatCueTable;
@@ -29,6 +31,8 @@ enum class ECombatDesignTool : uint8
 	Unit,
 	/** Enemies that appear during the selected wave. */
 	Spawn,
+	/** A piece of the catalog (wall, floor, furniture). */
+	Piece,
 };
 
 /** What a fight is built from: a setup asset on the arena's own grid, or a level from the LevelDesigner. */
@@ -182,6 +186,16 @@ public:
 	ECombatDesignTool GetDesignTool() const { return DesignTool; }
 	void SetDesignUnitType(const FString& Type) { DesignUnitType = Type; }
 	const FString& GetDesignUnitType() const { return DesignUnitType; }
+	/** Piece tool: the catalog piece to place (its Id) and its rotation in quarter turns (R, Shift+R, Rotate). */
+	void SetDesignPiece(const FString& Id) { DesignPieceId = Id; }
+	const FString& GetDesignPiece() const { return DesignPieceId; }
+	void RotateDesignPiece(int32 QuarterTurns) { DesignPieceRotation = ((DesignPieceRotation + QuarterTurns) % 4 + 4) % 4; }
+	int32 GetDesignPieceRotation() const { return DesignPieceRotation; }
+	/** The settings' PieceCatalog, loaded on first use; null if none is set. */
+	const UCombatPieceCatalog* GetPieceCatalog();
+	/** Piece tool: shows where the selected piece goes under WorldPoint (green; red if it does not fit; orange when erasing). */
+	void UpdateDesignPiecePreview(const FVector& WorldPoint, bool bErase);
+	void HideDesignPiecePreview();
 	void SetDesignUnitTeam(int32 Team) { DesignUnitTeam = Team; }
 	int32 GetDesignUnitTeam() const { return DesignUnitTeam; }
 
@@ -294,6 +308,10 @@ private:
 	void ShowOverviewIfChanged(bool bLevel);
 	/** Shows the edited level in the arena and rebuilds the preview units. */
 	void RefreshDesignView(bool bFitCamera);
+	/** The selected piece under WorldPoint and its definition; false without a catalog or a valid selection. */
+	bool GetDesignPiecePlacement(const FVector& WorldPoint, FCombatLevelPiece& OutPiece, const FCombatPieceDefinition*& OutDefinition);
+	/** Whether a unit may stand on Cell of the edited level: no blocking cell kind and no piece that blocks walking. */
+	bool IsDesignCellWalkable(const FIntPoint& Cell) const;
 	void DestroyDesignPreviews();
 	FVector SimToWorld(const FVector2D& Local) const { return GridOrigin + FVector(Local.X, Local.Y, 0.0); }
 
@@ -359,6 +377,11 @@ private:
 	float DesignSpawnTime = 0.f;
 	/** (wave, spawn index) of the spawn the next arena click moves; (INDEX_NONE, unit index) for a start unit. */
 	TOptional<FIntPoint> DesignSpawnMove;
+	FString DesignPieceId;
+	int32 DesignPieceRotation = 0;
+
+	UPROPERTY(Transient)
+	TObjectPtr<UCombatPieceCatalog> PieceCatalog;
 	int32 DesignRevision = 0;
 
 	UPROPERTY(Transient)

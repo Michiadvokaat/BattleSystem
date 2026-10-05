@@ -29,7 +29,8 @@ enum class ECombatCameraDrag : uint8
 /**
  * Mouse input on the arena: left click selects an own unit or picks a Move target, right click cancels.
  * In LevelDesigner edit mode instead: left places with the current tool and Shift + left erases (holding paints or
- * erases a stroke); a right click erases one cell.
+ * erases a stroke); a right click erases one cell. With the Piece tool the selected piece follows the cursor as a
+ * preview (R / Shift+R turn it) and erasing removes pieces of its layer.
  * Clicks are turned into points on the grid plane, so they do not depend on collision. Clicks on the HUD
  * panels go to the UI instead.
  * The camera moves like the editor viewport: right drag looks (+ WASD/QE), middle drag pans, left + right drag moves
@@ -56,6 +57,8 @@ private:
 	void OnWheelDown() { OnWheel(-1.0); }
 	void OnWheel(double Steps);
 	void OnResetCamera();
+	/** LevelDesigner Piece tool: R turns the piece a quarter clockwise, Shift+R back. */
+	void OnRotatePiece();
 
 	/** Edit mode: a mouse button is held and painting/erasing follows the cursor. */
 	bool bPainting = false;

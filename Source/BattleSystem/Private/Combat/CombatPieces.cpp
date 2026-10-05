@@ -64,4 +64,25 @@ namespace CombatPieces
 			+ Rotation.RotateVector(Offset);
 		return FTransform(Rotation, Location, Scale);
 	}
+
+	FCombatLevelPiece PlaceAt(const FCombatPieceDefinition& Definition, const FVector2D& Local, int32 Rotation, float CellSize)
+	{
+		FCombatLevelPiece Piece = Definition.MakePiece(FIntPoint::ZeroValue, Rotation);
+		const FVector2D InCells = Local / FMath::Max(CellSize, 1.f);
+		if (Piece.Layer == ECombatPieceLayer::Edge)
+		{
+			// The nearest border line across, and the start so that the piece's middle is at the point along it.
+			const double HalfLength = Piece.Size.X * 0.5;
+			Piece.Cell = Piece.IsHorizontalEdge()
+				? FIntPoint(FMath::RoundToInt32(InCells.X - HalfLength), FMath::RoundToInt32(InCells.Y))
+				: FIntPoint(FMath::RoundToInt32(InCells.X), FMath::RoundToInt32(InCells.Y - HalfLength));
+		}
+		else
+		{
+			const FIntPoint RotatedSize = Piece.GetRotatedSize();
+			const FIntPoint Under(FMath::FloorToInt32(InCells.X), FMath::FloorToInt32(InCells.Y));
+			Piece.Cell = Under - FIntPoint((RotatedSize.X - 1) / 2, (RotatedSize.Y - 1) / 2);
+		}
+		return Piece;
+	}
 }

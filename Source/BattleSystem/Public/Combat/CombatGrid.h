@@ -9,7 +9,9 @@
 #include "CombatGrid.generated.h"
 
 class UInstancedStaticMeshComponent;
+class UMaterialInstanceDynamic;
 class UMaterialInterface;
+class UStaticMesh;
 class UStaticMeshComponent;
 
 /**
@@ -51,6 +53,13 @@ public:
 	bool HasLevel() const { return bHasLevel; }
 	/** Grid shown right now: the level's, or the arena's own. */
 	const FCombatGridData& GetShownGridData();
+
+	/**
+	 * LevelDesigner preview of a piece: its mesh at MeshTransform (when placing) and a colored plate per footprint cell
+	 * or bar per border: PreviewPlaceColor, PreviewBlockedColor when it does not fit, PreviewEraseColor when erasing.
+	 */
+	void ShowPiecePreview(const FCombatLevelPiece& Piece, float InCellSize, UStaticMesh* Mesh, const FTransform& MeshTransform, bool bFits, bool bErase);
+	void HidePiecePreview();
 
 	FIntPoint WorldToCell(const FVector& World) const;
 	/** World position of the center of a cell, at the grid's height. */
@@ -100,6 +109,25 @@ private:
 
 	UPROPERTY(EditAnywhere, Category = "Grid|Level", meta = (ClampMin = 1, Units = "cm"))
 	float WaterHeight = 6.f;
+
+	UPROPERTY(EditDefaultsOnly, Category = "Grid|Preview")
+	FLinearColor PreviewPlaceColor = FLinearColor(0.2f, 0.9f, 0.3f);
+
+	UPROPERTY(EditDefaultsOnly, Category = "Grid|Preview")
+	FLinearColor PreviewBlockedColor = FLinearColor(0.95f, 0.15f, 0.1f);
+
+	UPROPERTY(EditDefaultsOnly, Category = "Grid|Preview")
+	FLinearColor PreviewEraseColor = FLinearColor(1.f, 0.5f, 0.05f);
+
+	/** LevelDesigner piece preview: the piece's mesh, and its footprint marks (engine cubes in the preview color). */
+	UPROPERTY(VisibleAnywhere, Category = "Grid")
+	TObjectPtr<UStaticMeshComponent> PreviewMesh;
+
+	UPROPERTY(VisibleAnywhere, Category = "Grid")
+	TObjectPtr<UInstancedStaticMeshComponent> PreviewMarks;
+
+	UPROPERTY(Transient)
+	TObjectPtr<UMaterialInstanceDynamic> PreviewMaterial;
 
 	/** How far the grid's own floor sinks while a level has floor pieces, so the two never fight at the same height. */
 	UPROPERTY(EditAnywhere, Category = "Grid|Level", meta = (ClampMin = 0, Units = "cm"))
