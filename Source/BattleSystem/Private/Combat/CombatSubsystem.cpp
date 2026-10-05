@@ -586,10 +586,11 @@ void UCombatSubsystem::DrawDebug(float Alpha) const
 		}
 	}
 
-	const FCombatDistanceMap* Map = Level >= 2 ? Simulation->GetDistanceMap(0) : nullptr;
+	// Team 0's distance map on the nav grid of the smallest class (sub-cells).
+	const FCombatDistanceMap* Map = Level >= 2 ? Simulation->GetDistanceMap(0, 0) : nullptr;
 	if (Map)
 	{
-		const FCombatGridData& Grid = Simulation->GetGrid();
+		const FCombatGridData& Grid = Simulation->GetNavGrid(0);
 		for (int32 Y = 0; Y < Grid.Height; ++Y)
 		{
 			for (int32 X = 0; X < Grid.Width; ++X)

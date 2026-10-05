@@ -1,6 +1,6 @@
 # Ontwerp: autobattle-gevechtssysteem
 
-Status: fase 1 t/m 5 klaar (2026-10-03). Fase 6 alleen als het nodig blijkt. Dit document is zelfstandig: het gaat uit van een **leeg Unreal Engine 5 C++-project** zonder bestaande gameplaycode. Werk het bij als besluiten veranderen of een fase klaar is (zet dan "Status" en de tabel "Besluiten" bij).
+Status: fase 1 t/m 5 klaar (2026-10-03). Fase 6 (navigatielaag) klaar (2026-10-05). Dit document is zelfstandig: het gaat uit van een **leeg Unreal Engine 5 C++-project** zonder bestaande gameplaycode. Werk het bij als besluiten veranderen of een fase klaar is (zet dan "Status" en de tabel "Besluiten" bij).
 
 In dit document staat `<Module>` voor de naam van de gamemodule van het project. Alle code komt in `Source/<Module>/Public|Private/Combat/`.
 
@@ -165,7 +165,9 @@ Elke fase levert iets op dat je kunt spelen en testen. Nieuwe C++-klassen vereis
 - **Balans:** `Combat.Batch <aantal> <setup>` draait N gevechten zonder weergave met verschillende seeds. Het geeft het winstpercentage per team, de gemiddelde duur en de schade per unit-type, en exporteert dat optioneel naar CSV in `Saved/`.
 - **Klaar als:** 1000 gevechten zonder weergave in een paar seconden klaar zijn met bruikbare statistieken.
 
-### Fase 6: navigatiegrid verfijnen (pas als het nodig blijkt)
+### Fase 6: navigatiegrid verfijnen
+
+**Status:** klaar (2026-10-05), gecontroleerd in PIE. Vaste onderverdeling 3 (33 cm), een navigatiegrid per clearanceklasse uit de straal, begrensd op de deurmaat (klasse 1, 50 cm) zodat elke unit door een deur van één cel past. Bewegen en botsen bleven zoals ze waren. Kosten: ongeveer 8× per tick.
 
 **Doel:** nauwkeurigere paden en units van verschillende groottes.
 
@@ -181,7 +183,7 @@ Elke fase levert iets op dat je kunt spelen en testen. Nieuwe C++-klassen vereis
 | Simulatiekern | Losse C++-klasse, headless te draaien | Logica direct in het subsystem |
 | "Dichtstbijzijnd" | Via looppaden (afstandskaart) | Hemelsbreed |
 | Projectielen | Homing, raken altijd tenzij geblokkeerd | Vrije vlucht, kunnen missen |
-| Navigatiegrid | 100 cm met smoothing, verfijnen in fase 6 | Direct 25 cm |
+| Navigatiegrid | Fase 6: routes op 3×3 subcellen (33 cm) per clearanceklasse, begrensd op de deurmaat; bewegen op hele cellen | Instelbare factor; strenge clearance (grote units passen niet door smalle deuren) |
 | Afstemming | Eigen `UCombatSettings` | Hardcoded constanten |
 | Weergave | Placeholder-meshes, later skeletal | Direct skeletal met animaties |
 | GAS | Alleen GameplayTags en het datamodel (eigen structs op ticks) | Volledig GAS (vervalt: vaste tick, checksum, headless batch) |

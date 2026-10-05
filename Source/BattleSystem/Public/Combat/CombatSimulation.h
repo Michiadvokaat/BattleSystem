@@ -232,8 +232,17 @@ struct FCombatUnit
 	float DamageDealt = 0.f;
 	float DamageTaken = 0.f;
 
-	/** Own A* route (start to goal cell): to a target the team map does not lead to, or to a move order's cell. */
+	/**
+	 * Own A* route on the nav grid of its class (start to goal sub-cell): to a target the team map does not lead to,
+	 * or to a move order's cell.
+	 */
 	TArray<FIntPoint> Path;
+
+	/** Index of its clearance class in the simulation's nav classes (from its radius); not part of the checksum. */
+	int32 NavClass = 0;
+	/** The last start and goal sub-cell A* found no route between: not searched again until either changes. */
+	FIntPoint NoPathStart = FIntPoint(INDEX_NONE, INDEX_NONE);
+	FIntPoint NoPathGoal = FIntPoint(INDEX_NONE, INDEX_NONE);
 
 	/** Player Move command: walk to MoveTargetCell, ignoring enemies, until there. */
 	bool bHasMoveOrder = false;
@@ -365,8 +374,12 @@ public:
 	/** CRC32 of the state after the last step. */
 	uint32 GetChecksum() const { return Checksum; }
 
-	/** The distance map towards the enemies of a team, or null if the team has no units. */
-	const FCombatDistanceMap* GetDistanceMap(int32 Team) const;
+	/** The distance map (on the nav grid of a class) towards the enemies of a team, or null if the team has no units. */
+	const FCombatDistanceMap* GetDistanceMap(int32 Team, int32 NavClass = 0) const;
+	/** The nav grids, one per clearance class in this fight (ascending), and those classes. */
+	const FCombatGridData& GetNavGrid(int32 NavClass) const { return NavGrids[NavClass]; }
+	int32 GetNavClassCount() const { return NavGrids.Num(); }
+	int32 GetClearanceClass(int32 NavClass) const { return NavClasses[NavClass]; }
 
 	int32 GetWaveCount() const { return Config.Waves.Num(); }
 	/** Waves started so far (the next wave's index). */
@@ -405,6 +418,8 @@ private:
 	/** After the step: once the field is clear, the pause until the next wave starts. */
 	void UpdateWaveClear();
 	void RebuildDistanceMaps();
+	/** The open sub-cell of a position on the nav grid of a class (the cell under it if none is near). */
+	FIntPoint GetNavCell(int32 NavClass, const FVector2D& Position) const;
 	int32 FindNearestEnemy(const FCombatUnit& Unit) const;
 	/** Taunt immediately; otherwise every RetargetIntervalTicks (or without a valid target) by priority, with hysteresis. */
 	void UpdateTarget(FCombatUnit& Unit);
@@ -424,7 +439,7 @@ private:
 	void ExecuteCommand(const FCombatCommand& Command);
 	/** Movement for a unit with a move order (clears the order on arrival). */
 	FVector2D UpdateMoveOrder(FCombatUnit& Unit);
-	/** Steers along the unit's own A* path to GoalCell; returns the steer point (Fallback if there is no path). */
+	/** Steers along the unit's own A* path to GoalCell (a sub-cell); returns the steer point (Fallback if there is no path). */
 	FVector2D SteerAlongPath(FCombatUnit& Unit, const FIntPoint& GoalCell, const FVector2D& Fallback) const;
 	/** For units with a ranged attack: the nearest enemy that attack can hit right now, or INDEX_NONE. */
 	int32 FindVisibleEnemyInRange(const FCombatUnit& Unit) const;
@@ -481,8 +496,12 @@ private:
 	TArray<FCombatCommand> PendingCommands;
 	TArray<FCombatCommand> CommandLog;
 
-	/** Team values in order of first appearance, and the distance map towards each team's enemies. */
+	/** Team values in order of first appearance. */
 	TArray<int32> TeamIds;
+	/** Clearance classes of all units (and wave spawns), ascending, and their nav grids. */
+	TArray<int32> NavClasses;
+	TArray<FCombatGridData> NavGrids;
+	/** Per team (TeamIds order) and nav class: the distance map towards the team's enemies; index Team * classes + class. */
 	TArray<FCombatDistanceMap> DistanceMaps;
 	bool bDistanceMapsDirty = true;
 
