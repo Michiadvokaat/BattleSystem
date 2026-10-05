@@ -9,6 +9,51 @@ void FCombatGridData::Init(int32 InWidth, int32 InHeight, float InCellSize)
 	Height = FMath::Max(InHeight, 1);
 	CellSize = FMath::Max(InCellSize, 1.f);
 	Cells.Init(ECombatCellFlags::None, Width * Height);
+	Edges.Reset();
+}
+
+namespace CombatGridDataPrivate
+{
+	/** The cell that stores the border between two orthogonal neighbors, and its bit; false for other pairs. */
+	static bool FindEdge(const FCombatGridData& Grid, const FIntPoint& A, const FIntPoint& B, FIntPoint& OutOwner, uint8& OutBit)
+	{
+		const FIntPoint Delta = B - A;
+		if (FMath::Abs(Delta.X) + FMath::Abs(Delta.Y) != 1)
+		{
+			return false;
+		}
+		// The border is stored on the cell with the larger coordinate: west for X, north for Y.
+		OutOwner = (Delta.X > 0 || Delta.Y > 0) ? B : A;
+		OutBit = Delta.X != 0 ? FCombatGridData::EdgeWest : FCombatGridData::EdgeNorth;
+		// The outer border of the grid already blocks: only borders between two cells of the grid count.
+		return Grid.IsInBounds(A) && Grid.IsInBounds(B);
+	}
+}
+
+void FCombatGridData::AddEdgeWall(const FIntPoint& A, const FIntPoint& B)
+{
+	FIntPoint Owner;
+	uint8 Bit = 0;
+	if (CombatGridDataPrivate::FindEdge(*this, A, B, Owner, Bit))
+	{
+		if (Edges.IsEmpty())
+		{
+			Edges.Init(0, Width * Height);
+		}
+		Edges[CellIndex(Owner)] |= Bit;
+	}
+}
+
+bool FCombatGridData::HasEdgeWall(const FIntPoint& A, const FIntPoint& B) const
+{
+	FIntPoint Owner;
+	uint8 Bit = 0;
+	return !Edges.IsEmpty() && CombatGridDataPrivate::FindEdge(*this, A, B, Owner, Bit) && (Edges[CellIndex(Owner)] & Bit) != 0;
+}
+
+bool FCombatGridData::CrossesNoEdgeWall(const FVector2D& From, const FVector2D& To) const
+{
+	return !HasEdgeWalls() || IsLineClear(From, To, [](const FIntPoint&) { return true; });
 }
 
 FIntPoint FCombatGridData::LocalToCell(const FVector2D& Local) const
@@ -26,7 +71,8 @@ uint32 FCombatGridData::ComputeChecksum() const
 	uint32 Crc = FCrc::MemCrc32(&Width, sizeof(Width));
 	Crc = FCrc::MemCrc32(&Height, sizeof(Height), Crc);
 	Crc = FCrc::MemCrc32(&CellSize, sizeof(CellSize), Crc);
-	return FCrc::MemCrc32(Cells.GetData(), Cells.Num() * sizeof(ECombatCellFlags), Crc);
+	Crc = FCrc::MemCrc32(Cells.GetData(), Cells.Num() * sizeof(ECombatCellFlags), Crc);
+	return HasEdgeWalls() ? FCrc::MemCrc32(Edges.GetData(), Edges.Num(), Crc) : Crc;
 }
 
 bool FCombatGridData::HasFlags(const FIntPoint& Cell, ECombatCellFlags Flags) const
@@ -50,15 +96,20 @@ const FIntPoint FCombatGridData::NeighborOffsets[8] =
 
 bool FCombatGridData::CanStep(const FIntPoint& Cell, const FIntPoint& Offset) const
 {
-	if (!IsWalkable(Cell + Offset))
+	const FIntPoint Target = Cell + Offset;
+	if (!IsWalkable(Target))
 	{
 		return false;
 	}
 	if (Offset.X != 0 && Offset.Y != 0)
 	{
-		return IsWalkable(FIntPoint(Cell.X + Offset.X, Cell.Y)) && IsWalkable(FIntPoint(Cell.X, Cell.Y + Offset.Y));
+		const FIntPoint SideX(Cell.X + Offset.X, Cell.Y);
+		const FIntPoint SideY(Cell.X, Cell.Y + Offset.Y);
+		return IsWalkable(SideX) && IsWalkable(SideY)
+			&& !HasEdgeWall(Cell, SideX) && !HasEdgeWall(SideX, Target)
+			&& !HasEdgeWall(Cell, SideY) && !HasEdgeWall(SideY, Target);
 	}
-	return true;
+	return !HasEdgeWall(Cell, Target);
 }
 
 bool FCombatGridData::IsLineWalkable(const FVector2D& From, const FVector2D& To) const
@@ -97,18 +148,30 @@ bool FCombatGridData::IsLineClear(const FVector2D& From, const FVector2D& To, TF
 	{
 		if (TMaxX < TMaxY)
 		{
+			if (HasEdgeWall(Cell, FIntPoint(Cell.X + StepX, Cell.Y)))
+			{
+				return false;
+			}
 			Cell.X += StepX;
 			TMaxX += TDeltaX;
 		}
 		else if (TMaxY < TMaxX)
 		{
+			if (HasEdgeWall(Cell, FIntPoint(Cell.X, Cell.Y + StepY)))
+			{
+				return false;
+			}
 			Cell.Y += StepY;
 			TMaxY += TDeltaY;
 		}
 		else
 		{
-			// Exactly through a corner: both side cells must be clear.
-			if (!IsCellClear(FIntPoint(Cell.X + StepX, Cell.Y)) || !IsCellClear(FIntPoint(Cell.X, Cell.Y + StepY)))
+			// Exactly through a corner: both side cells must be clear, and no edge wall may touch the corner on either route.
+			const FIntPoint SideX(Cell.X + StepX, Cell.Y);
+			const FIntPoint SideY(Cell.X, Cell.Y + StepY);
+			const FIntPoint Diagonal(Cell.X + StepX, Cell.Y + StepY);
+			if (!IsCellClear(SideX) || !IsCellClear(SideY)
+				|| HasEdgeWall(Cell, SideX) || HasEdgeWall(SideX, Diagonal) || HasEdgeWall(Cell, SideY) || HasEdgeWall(SideY, Diagonal))
 			{
 				return false;
 			}

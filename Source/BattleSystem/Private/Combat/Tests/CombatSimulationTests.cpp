@@ -62,6 +62,18 @@ namespace CombatTests
 		return Config;
 	}
 
+	/** 10x10 open grid with edge walls between columns 4 and 5 on rows 0..8: the only way across is row 9. */
+	static FCombatGridData MakeEdgeWallGrid()
+	{
+		FCombatGridData Grid;
+		Grid.Init(10, 10, 100.f);
+		for (int32 Y = 0; Y < 9; ++Y)
+		{
+			Grid.AddEdgeWall(FIntPoint(4, Y), FIntPoint(5, Y));
+		}
+		return Grid;
+	}
+
 	static TArray<uint32> RunAndCollectChecksums(const FCombatSimConfig& Config)
 	{
 		TArray<uint32> Checksums;
@@ -1945,6 +1957,90 @@ bool FCombatAnimSetTest::RunTest(const FString& Parameters)
 	Instance->SetLocomotion(nullptr);
 	Instance->SetSpeed(220.f);
 	TestTrue(TEXT("Speed on X, Y stays 0"), Instance->Speed == 220.f && Instance->LocomotionX == 220.f && Instance->LocomotionY == 0.f);
+	return true;
+}
+
+IMPLEMENT_SIMPLE_AUTOMATION_TEST(FCombatEdgeWallGridTest, "BattleSystem.Combat.EdgeWallGrid",
+	EAutomationTestFlags::EditorContext | EAutomationTestFlags::ProductFilter)
+
+bool FCombatEdgeWallGridTest::RunTest(const FString& Parameters)
+{
+	FCombatGridData Grid;
+	Grid.Init(5, 5, 100.f);
+	const uint32 OpenChecksum = Grid.ComputeChecksum();
+	Grid.AddEdgeWall(FIntPoint(1, 1), FIntPoint(3, 1));
+	Grid.AddEdgeWall(FIntPoint(0, 0), FIntPoint(-1, 0));
+	TestFalse(TEXT("Non-neighbors and grid borders add no edge wall"), Grid.HasEdgeWalls());
+	TestEqual(TEXT("Without edge walls the checksum is the old one"), Grid.ComputeChecksum(), OpenChecksum);
+
+	Grid.AddEdgeWall(FIntPoint(2, 1), FIntPoint(1, 1));
+	TestTrue(TEXT("The wall is on the border, seen from both sides"), Grid.HasEdgeWall(FIntPoint(1, 1), FIntPoint(2, 1)) && Grid.HasEdgeWall(FIntPoint(2, 1), FIntPoint(1, 1)));
+	TestFalse(TEXT("Other borders stay open"), Grid.HasEdgeWall(FIntPoint(1, 0), FIntPoint(2, 0)) || Grid.HasEdgeWall(FIntPoint(1, 1), FIntPoint(1, 2)));
+	TestNotEqual(TEXT("An edge wall changes the checksum"), Grid.ComputeChecksum(), OpenChecksum);
+
+	TestFalse(TEXT("No step across the wall"), Grid.CanStep(FIntPoint(1, 1), FIntPoint(1, 0)) || Grid.CanStep(FIntPoint(2, 1), FIntPoint(-1, 0)));
+	TestTrue(TEXT("A step beside it is fine"), Grid.CanStep(FIntPoint(1, 0), FIntPoint(1, 0)) && Grid.CanStep(FIntPoint(1, 1), FIntPoint(0, 1)));
+	TestFalse(TEXT("No diagonal step past the end of the wall"), Grid.CanStep(FIntPoint(1, 1), FIntPoint(1, 1)) || Grid.CanStep(FIntPoint(1, 0), FIntPoint(1, 1)));
+	TestTrue(TEXT("A diagonal step away from the wall is fine"), Grid.CanStep(FIntPoint(1, 2), FIntPoint(1, 1)));
+
+	const FVector2D Left = Grid.CellToLocal(FIntPoint(1, 1));
+	const FVector2D Right = Grid.CellToLocal(FIntPoint(3, 1));
+	TestFalse(TEXT("No walking line through the wall"), Grid.IsLineWalkable(Left, Right));
+	TestFalse(TEXT("No line of sight through the wall"), Grid.HasLineOfSight(Left, Right));
+	TestFalse(TEXT("A move through the wall crosses it"), Grid.CrossesNoEdgeWall(Left, Right));
+	TestTrue(TEXT("A line one row lower is clear"), Grid.IsLineWalkable(Grid.CellToLocal(FIntPoint(1, 2)), Grid.CellToLocal(FIntPoint(3, 2))));
+	TestFalse(TEXT("A line exactly through the wall's end corner is blocked"), Grid.HasLineOfSight(FVector2D(150.0, 150.0), FVector2D(250.0, 250.0)));
+	return true;
+}
+
+IMPLEMENT_SIMPLE_AUTOMATION_TEST(FCombatEdgeWallPathTest, "BattleSystem.Combat.EdgeWallPath",
+	EAutomationTestFlags::EditorContext | EAutomationTestFlags::ProductFilter)
+
+bool FCombatEdgeWallPathTest::RunTest(const FString& Parameters)
+{
+	const FCombatGridData Grid = CombatTests::MakeEdgeWallGrid();
+	TArray<FIntPoint> Path;
+	TestTrue(TEXT("A path exists around the wall"), CombatPathfinding::FindPath(Grid, FIntPoint(2, 2), FIntPoint(7, 2), Path));
+
+	bool bNeverCrosses = true;
+	for (int32 Index = 1; Index < Path.Num(); ++Index)
+	{
+		bNeverCrosses &= Grid.CanStep(Path[Index - 1], Path[Index] - Path[Index - 1]);
+	}
+	TestTrue(TEXT("Every step of the path is allowed"), bNeverCrosses);
+	TestTrue(TEXT("It goes through the gap in row 9"), Path.ContainsByPredicate([](const FIntPoint& Cell) { return Cell.Y == 9; }));
+	return true;
+}
+
+IMPLEMENT_SIMPLE_AUTOMATION_TEST(FCombatEdgeWallFightTest, "BattleSystem.Combat.EdgeWallFight",
+	EAutomationTestFlags::EditorContext | EAutomationTestFlags::ProductFilter)
+
+bool FCombatEdgeWallFightTest::RunTest(const FString& Parameters)
+{
+	FCombatSimConfig Config;
+	Config.Grid = CombatTests::MakeEdgeWallGrid();
+	Config.MaxFirstAttackDelayTicks = 0;
+	CombatTests::AddUnit(Config, CombatTests::MakeStats(100.f, 10.f, 20, 6), 0, FIntPoint(2, 2));
+	CombatTests::AddUnit(Config, CombatTests::MakeDummyStats(), 1, FIntPoint(7, 2));
+
+	FCombatSimulation Simulation(Config);
+	bool bNeverThroughWall = true;
+	bool bAttacked = false;
+	for (int32 Step = 0; Step < 900 && !bAttacked; ++Step)
+	{
+		Simulation.Step();
+		const FCombatUnit& Unit = Simulation.GetUnits()[0];
+		bNeverThroughWall &= Config.Grid.CrossesNoEdgeWall(Unit.PreviousPosition, Unit.Position);
+		bAttacked = Simulation.GetEvents().ContainsByPredicate([](const FCombatEvent& Event)
+		{
+			return Event.Type == ECombatEventType::Attack && Event.SourceId == 0;
+		});
+	}
+	TestTrue(TEXT("Never moves through the edge wall"), bNeverThroughWall);
+	TestTrue(TEXT("Walks around it and attacks"), bAttacked);
+
+	TestTrue(TEXT("Same seed, same checksum after every step, with edge walls"),
+		CombatTests::RunAndCollectChecksums(Config) == CombatTests::RunAndCollectChecksums(Config));
 	return true;
 }
 

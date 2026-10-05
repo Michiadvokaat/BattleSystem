@@ -801,20 +801,25 @@ FVector2D FCombatSimulation::ComputeSeparation(const FCombatUnit& Unit) const
 
 FVector2D FCombatSimulation::ResolveMove(const FVector2D& From, const FVector2D& To) const
 {
+	// A position is allowed in a walkable cell that the unit reaches without crossing an edge wall.
 	const FCombatGridData& Grid = Config.Grid;
-	if (Grid.IsWalkable(Grid.LocalToCell(To)))
+	auto CanMoveTo = [&Grid, &From](const FVector2D& Position)
+	{
+		return Grid.IsWalkable(Grid.LocalToCell(Position)) && Grid.CrossesNoEdgeWall(From, Position);
+	};
+	if (CanMoveTo(To))
 	{
 		return To;
 	}
 
 	const FVector2D SlideX(To.X, From.Y);
-	if (Grid.IsWalkable(Grid.LocalToCell(SlideX)))
+	if (CanMoveTo(SlideX))
 	{
 		return SlideX;
 	}
 
 	const FVector2D SlideY(From.X, To.Y);
-	if (Grid.IsWalkable(Grid.LocalToCell(SlideY)))
+	if (CanMoveTo(SlideY))
 	{
 		return SlideY;
 	}
