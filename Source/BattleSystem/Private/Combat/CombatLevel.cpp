@@ -23,15 +23,6 @@ void FCombatLevel::Normalize()
 {
 	Width = FMath::Clamp(Width, MinSize, MaxSize);
 	Height = FMath::Clamp(Height, MinSize, MaxSize);
-	Rows.SetNum(Height);
-	for (FString& Row : Rows)
-	{
-		Row = Row.Left(Width);
-		while (Row.Len() < Width)
-		{
-			Row.AppendChar(Open);
-		}
-	}
 }
 
 void FCombatLevel::Resize(int32 NewWidth, int32 NewHeight)
@@ -44,34 +35,6 @@ void FCombatLevel::Resize(int32 NewWidth, int32 NewHeight)
 	for (FCombatLevelWave& Wave : Waves)
 	{
 		Wave.Spawns.RemoveAll([this](const FCombatLevelSpawn& Spawn) { return !IsInBounds(Spawn.Cell); });
-	}
-}
-
-TCHAR FCombatLevel::GetCell(const FIntPoint& Cell) const
-{
-	if (!IsInBounds(Cell) || !Rows.IsValidIndex(Cell.Y) || Cell.X >= Rows[Cell.Y].Len())
-	{
-		return Open;
-	}
-	return Rows[Cell.Y][Cell.X];
-}
-
-void FCombatLevel::SetCell(const FIntPoint& Cell, TCHAR Kind)
-{
-	if (IsInBounds(Cell) && Rows.IsValidIndex(Cell.Y) && Cell.X < Rows[Cell.Y].Len())
-	{
-		Rows[Cell.Y][Cell.X] = Kind;
-	}
-}
-
-ECombatCellFlags FCombatLevel::FlagsFor(TCHAR Kind)
-{
-	switch (Kind)
-	{
-	case Wall: return ECombatCellFlags::Blocked | ECombatCellFlags::BlocksSight;
-	case Hedge: return ECombatCellFlags::BlocksSight;
-	case Water: return ECombatCellFlags::Blocked;
-	default: return ECombatCellFlags::None;
 	}
 }
 
@@ -309,13 +272,6 @@ int32 FCombatLevel::FindPieceUnder(const FVector2D& Local, float EdgeReach) cons
 void FCombatLevel::ToGridData(FCombatGridData& OutGrid) const
 {
 	OutGrid.Init(Width, Height, CellSize);
-	for (int32 Y = 0; Y < Height; ++Y)
-	{
-		for (int32 X = 0; X < Width; ++X)
-		{
-			OutGrid.AddFlags(FIntPoint(X, Y), FlagsFor(GetCell(FIntPoint(X, Y))));
-		}
-	}
 
 	// Borders with a door frame (an opening that does not block): a wall there is passable; a leaf or window still blocks.
 	TArray<TPair<FIntPoint, FIntPoint>> OpenBorders;
@@ -388,7 +344,7 @@ bool CombatLevels::FromJson(const FString& Json, FCombatLevel& OutLevel)
 		return false;
 	}
 	OutLevel.Normalize();
-	// Older files have no waves; saved again they get the current version.
+	// Older files have no waves or pieces (and rows, which are ignored); saved again they get the current version.
 	OutLevel.FormatVersion = FCombatLevel().FormatVersion;
 	return true;
 }

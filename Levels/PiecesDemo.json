@@ -1,23 +1,9 @@
 {
-	"formatVersion": 3,
+	"formatVersion": 4,
 	"name": "PiecesDemo",
 	"width": 20,
 	"height": 12,
 	"cellSize": 100,
-	"rows": [
-		"....................",
-		"....................",
-		"....................",
-		"....................",
-		"....................",
-		"....................",
-		"....................",
-		"....................",
-		"....................",
-		"....................",
-		"....................",
-		"...................."
-	],
 	"units": [
 		{
 			"type": "DA_Krijger",
@@ -71,7 +57,7 @@
 	"waves": [],
 	"pieces": [
 		{
-			"id": "Floors/SM_floor_002",
+			"id": "Building/Floors/SM_floor_002",
 			"layer": "Floor",
 			"cell": {
 				"x": 0,
@@ -87,7 +73,7 @@
 			"detail": -1
 		},
 		{
-			"id": "Floors/SM_floor_002",
+			"id": "Building/Floors/SM_floor_002",
 			"layer": "Floor",
 			"cell": {
 				"x": 4,
@@ -103,7 +89,7 @@
 			"detail": -1
 		},
 		{
-			"id": "Floors/SM_floor_002",
+			"id": "Building/Floors/SM_floor_002",
 			"layer": "Floor",
 			"cell": {
 				"x": 8,
@@ -119,7 +105,7 @@
 			"detail": -1
 		},
 		{
-			"id": "Floors/SM_floor_002",
+			"id": "Building/Floors/SM_floor_002",
 			"layer": "Floor",
 			"cell": {
 				"x": 12,
@@ -135,7 +121,7 @@
 			"detail": -1
 		},
 		{
-			"id": "Floors/SM_floor_002",
+			"id": "Building/Floors/SM_floor_002",
 			"layer": "Floor",
 			"cell": {
 				"x": 16,
@@ -151,7 +137,7 @@
 			"detail": -1
 		},
 		{
-			"id": "Floors/SM_floor_002",
+			"id": "Building/Floors/SM_floor_002",
 			"layer": "Floor",
 			"cell": {
 				"x": 0,
@@ -167,7 +153,7 @@
 			"detail": -1
 		},
 		{
-			"id": "Floors/SM_floor_002",
+			"id": "Building/Floors/SM_floor_002",
 			"layer": "Floor",
 			"cell": {
 				"x": 4,
@@ -183,7 +169,7 @@
 			"detail": -1
 		},
 		{
-			"id": "Floors/SM_floor_002",
+			"id": "Building/Floors/SM_floor_002",
 			"layer": "Floor",
 			"cell": {
 				"x": 8,
@@ -199,7 +185,7 @@
 			"detail": -1
 		},
 		{
-			"id": "Floors/SM_floor_002",
+			"id": "Building/Floors/SM_floor_002",
 			"layer": "Floor",
 			"cell": {
 				"x": 12,
@@ -215,7 +201,7 @@
 			"detail": -1
 		},
 		{
-			"id": "Floors/SM_floor_002",
+			"id": "Building/Floors/SM_floor_002",
 			"layer": "Floor",
 			"cell": {
 				"x": 16,
@@ -231,7 +217,7 @@
 			"detail": -1
 		},
 		{
-			"id": "Floors/SM_floor_002",
+			"id": "Building/Floors/SM_floor_002",
 			"layer": "Floor",
 			"cell": {
 				"x": 0,
@@ -247,7 +233,7 @@
 			"detail": -1
 		},
 		{
-			"id": "Floors/SM_floor_002",
+			"id": "Building/Floors/SM_floor_002",
 			"layer": "Floor",
 			"cell": {
 				"x": 4,
@@ -263,7 +249,7 @@
 			"detail": -1
 		},
 		{
-			"id": "Floors/SM_floor_002",
+			"id": "Building/Floors/SM_floor_002",
 			"layer": "Floor",
 			"cell": {
 				"x": 8,
@@ -279,7 +265,7 @@
 			"detail": -1
 		},
 		{
-			"id": "Floors/SM_floor_002",
+			"id": "Building/Floors/SM_floor_002",
 			"layer": "Floor",
 			"cell": {
 				"x": 12,
@@ -295,7 +281,7 @@
 			"detail": -1
 		},
 		{
-			"id": "Floors/SM_floor_002",
+			"id": "Building/Floors/SM_floor_002",
 			"layer": "Floor",
 			"cell": {
 				"x": 16,
@@ -311,7 +297,7 @@
 			"detail": -1
 		},
 		{
-			"id": "Walls/SM_Walls_008",
+			"id": "Building/Walls/SM_Walls_008",
 			"layer": "Edge",
 			"cell": {
 				"x": 2,
@@ -327,7 +313,7 @@
 			"detail": -1
 		},
 		{
-			"id": "Windows/SM_window_007",
+			"id": "Building/Windows/SM_window_007",
 			"layer": "Edge",
 			"cell": {
 				"x": 6,
@@ -344,7 +330,7 @@
 			"slot": "Opening"
 		},
 		{
-			"id": "Windows/SM_window_007",
+			"id": "Building/Windows/SM_window_007",
 			"layer": "Edge",
 			"cell": {
 				"x": 8,
@@ -361,7 +347,7 @@
 			"slot": "Opening"
 		},
 		{
-			"id": "Walls/SM_Walls_008",
+			"id": "Building/Walls/SM_Walls_008",
 			"layer": "Edge",
 			"cell": {
 				"x": 10,
@@ -377,7 +363,7 @@
 			"detail": -1
 		},
 		{
-			"id": "Walls/SM_Walls_008",
+			"id": "Building/Walls/SM_Walls_008",
 			"layer": "Edge",
 			"cell": {
 				"x": 2,
@@ -393,7 +379,7 @@
 			"detail": -1
 		},
 		{
-			"id": "Walls/SM_Walls_008",
+			"id": "Building/Walls/SM_Walls_008",
 			"layer": "Edge",
 			"cell": {
 				"x": 6,
@@ -409,7 +395,7 @@
 			"detail": -1
 		},
 		{
-			"id": "Walls/SM_Walls_008",
+			"id": "Building/Walls/SM_Walls_008",
 			"layer": "Edge",
 			"cell": {
 				"x": 10,
@@ -425,7 +411,7 @@
 			"detail": -1
 		},
 		{
-			"id": "Walls/SM_Walls_008",
+			"id": "Building/Walls/SM_Walls_008",
 			"layer": "Edge",
 			"cell": {
 				"x": 2,
@@ -441,7 +427,7 @@
 			"detail": -1
 		},
 		{
-			"id": "Walls/SM_Walls_008",
+			"id": "Building/Walls/SM_Walls_008",
 			"layer": "Edge",
 			"cell": {
 				"x": 2,
@@ -457,7 +443,7 @@
 			"detail": -1
 		},
 		{
-			"id": "Furniture/SM_kitchen_table_025",
+			"id": "Furniture/Tables/SM_kitchen_table_025",
 			"layer": "Cell",
 			"cell": {
 				"x": 6,
@@ -473,7 +459,7 @@
 			"detail": -1
 		},
 		{
-			"id": "Furniture/SM_kitchen_table_025",
+			"id": "Furniture/Tables/SM_kitchen_table_025",
 			"layer": "Cell",
 			"cell": {
 				"x": 9,
@@ -489,7 +475,7 @@
 			"detail": -1
 		},
 		{
-			"id": "Furniture/SM_kitchen_table_025",
+			"id": "Furniture/Tables/SM_kitchen_table_025",
 			"layer": "Cell",
 			"cell": {
 				"x": 6,
@@ -505,7 +491,7 @@
 			"detail": -1
 		},
 		{
-			"id": "Furniture/SM_kitchen_table_025",
+			"id": "Furniture/Tables/SM_kitchen_table_025",
 			"layer": "Cell",
 			"cell": {
 				"x": 9,
@@ -521,7 +507,7 @@
 			"detail": -1
 		},
 		{
-			"id": "Furniture/SM_kitchen_chair_003",
+			"id": "Furniture/Chairs/SM_kitchen_chair_003",
 			"layer": "Cell",
 			"cell": {
 				"x": 7,
@@ -537,7 +523,7 @@
 			"detail": -1
 		},
 		{
-			"id": "Furniture/SM_kitchen_chair_003",
+			"id": "Furniture/Chairs/SM_kitchen_chair_003",
 			"layer": "Cell",
 			"cell": {
 				"x": 10,
@@ -553,7 +539,7 @@
 			"detail": -1
 		},
 		{
-			"id": "Walls/SM_Walls_008",
+			"id": "Building/Walls/SM_Walls_008",
 			"layer": "Edge",
 			"cell": {
 				"x": 14,
@@ -569,7 +555,7 @@
 			"detail": -1
 		},
 		{
-			"id": "Walls/SM_Walls_008_1m",
+			"id": "Building/Walls/SM_Walls_008_1m",
 			"layer": "Edge",
 			"cell": {
 				"x": 14,
@@ -585,7 +571,7 @@
 			"detail": -1
 		},
 		{
-			"id": "Doors/SM_door_006",
+			"id": "Building/Doors/SM_door_006",
 			"layer": "Edge",
 			"cell": {
 				"x": 14,
@@ -602,7 +588,7 @@
 			"slot": "Opening"
 		},
 		{
-			"id": "Walls/SM_Walls_008_2m",
+			"id": "Building/Walls/SM_Walls_008_2m",
 			"layer": "Edge",
 			"cell": {
 				"x": 14,

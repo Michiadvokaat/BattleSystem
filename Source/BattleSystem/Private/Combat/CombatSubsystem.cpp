@@ -1283,11 +1283,13 @@ void UCombatSubsystem::EnterDesignMode()
 	{
 		DesignLevel = LastLevel.GetValue();
 	}
-	else if (DesignLevel.Rows.IsEmpty())
+	else if (!bHasDesignLevel)
 	{
+		bHasDesignLevel = true;
 		NewDesignLevel();
 		return;
 	}
+	bHasDesignLevel = true;
 	if (DesignUnitType.IsEmpty())
 	{
 		const TArray<FString> Types = GetAllUnitDefinitionNames();
@@ -1488,10 +1490,9 @@ void UCombatSubsystem::DesignPaint(const FVector& WorldPoint, bool bErase, bool 
 
 	const int32 UnitIndex = DesignLevel.FindUnitAt(Cell);
 	const int32 SpawnIndex = DesignLevel.FindSpawnAt(DesignWave, Cell);
-	const TCHAR OldKind = DesignLevel.GetCell(Cell);
 	bool bChanged = false;
 
-	if (DesignTool == ECombatDesignTool::Piece)
+	if (DesignTool == ECombatDesignTool::Build)
 	{
 		// Erasing removes the pieces of the selected piece's layer that it would cover; placing happens on a press only.
 		FCombatLevelPiece Piece;
@@ -1547,15 +1548,10 @@ void UCombatSubsystem::DesignPaint(const FVector& WorldPoint, bool bErase, bool 
 			DesignLevel.Waves[DesignWave].Spawns.RemoveAt(SpawnIndex);
 			bChanged = true;
 		}
-		if (OldKind != FCombatLevel::Open)
-		{
-			DesignLevel.SetCell(Cell, FCombatLevel::Open);
-			bChanged = true;
-		}
 	}
 	else if (DesignTool == ECombatDesignTool::Unit)
 	{
-		// One unit per cell, not on walls, water or blocking pieces; placing on a unit replaces it.
+		// One unit per cell, not on blocking pieces; placing on a unit replaces it.
 		const bool bWalkable = IsDesignCellWalkable(Cell);
 		if (bStroke || !bWalkable || DesignUnitType.IsEmpty())
 		{
@@ -1577,7 +1573,7 @@ void UCombatSubsystem::DesignPaint(const FVector& WorldPoint, bool bErase, bool 
 	}
 	else if (DesignTool == ECombatDesignTool::Spawn)
 	{
-		// One spawn per cell and wave, not on walls, water or blocking pieces; placing on a spawn replaces it. Without waves, wave 1 is made.
+		// One spawn per cell and wave, not on blocking pieces; placing on a spawn replaces it. Without waves, wave 1 is made.
 		const bool bWalkable = IsDesignCellWalkable(Cell);
 		if (bStroke || !bWalkable || DesignUnitType.IsEmpty())
 		{
@@ -1602,27 +1598,6 @@ void UCombatSubsystem::DesignPaint(const FVector& WorldPoint, bool bErase, bool 
 		}
 		bChanged = true;
 	}
-	else
-	{
-		const TCHAR Kind = DesignTool == ECombatDesignTool::Wall ? FCombatLevel::Wall
-			: DesignTool == ECombatDesignTool::Hedge ? FCombatLevel::Hedge : FCombatLevel::Water;
-		if (OldKind == Kind)
-		{
-			return;
-		}
-		DesignLevel.SetCell(Cell, Kind);
-		// Walls and water cannot hold a unit or a spawn (of any wave).
-		if (EnumHasAnyFlags(FCombatLevel::FlagsFor(Kind), ECombatCellFlags::Blocked))
-		{
-			if (UnitIndex != INDEX_NONE)
-			{
-				DesignLevel.Units.RemoveAt(UnitIndex);
-			}
-			DesignLevel.RemoveSpawnsAt(Cell);
-		}
-		bChanged = true;
-	}
-
 	if (bChanged)
 	{
 		RefreshDesignView(false);
@@ -1770,7 +1745,7 @@ bool UCombatSubsystem::PickDesignPiece(const FVector& WorldPoint)
 		return false;
 	}
 	const FCombatLevelPiece Piece = DesignLevel.Pieces[Index];
-	DesignTool = ECombatDesignTool::Piece;
+	DesignTool = ECombatDesignTool::Build;
 	DesignPieceId = Piece.Id;
 	// The rotation is kept in eighths.
 	DesignPieceRotation = Piece.Layer == ECombatPieceLayer::Detail ? Piece.Rotation : Piece.Rotation * 2;
@@ -1815,7 +1790,7 @@ void UCombatSubsystem::DesignRightClick(const FVector& WorldPoint, bool bHasPoin
 		CancelDesignPieceMove();
 		return;
 	}
-	if (DesignTool == ECombatDesignTool::Piece && HasDesignPieceSelected())
+	if (DesignTool == ECombatDesignTool::Build && HasDesignPieceSelected())
 	{
 		DesignPieceId.Reset();
 		HideDesignPiecePreview();
@@ -1898,10 +1873,6 @@ void UCombatSubsystem::HideDesignPiecePreview()
 
 bool UCombatSubsystem::IsDesignCellWalkable(const FIntPoint& Cell) const
 {
-	if (EnumHasAnyFlags(FCombatLevel::FlagsFor(DesignLevel.GetCell(Cell)), ECombatCellFlags::Blocked))
-	{
-		return false;
-	}
 	const int32 PieceIndex = DesignLevel.FindPieceAt(ECombatPieceLayer::Cell, Cell);
 	return PieceIndex == INDEX_NONE || !DesignLevel.Pieces[PieceIndex].bBlocksWalking;
 }

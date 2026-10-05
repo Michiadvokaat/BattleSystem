@@ -36,7 +36,12 @@ void SCombatSpawnList::Construct(const FArguments& InArgs)
 		SNew(SBorder)
 		.BorderImage(FCoreStyle::Get().GetBrush("ToolPanel.GroupBorder"))
 		.Padding(10.f)
-		.Visibility_Lambda([this]() { return IsEditing() ? EVisibility::Visible : EVisibility::Collapsed; })
+		// Only in Spawn Mode; it stays built in the other modes.
+		.Visibility_Lambda([this]()
+		{
+			const UCombatSubsystem* Current = Subsystem.Get();
+			return IsEditing() && Current->GetDesignTool() == ECombatDesignTool::Spawn ? EVisibility::Visible : EVisibility::Collapsed;
+		})
 		[
 			SNew(SVerticalBox)
 

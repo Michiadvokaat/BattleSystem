@@ -14,11 +14,12 @@ class UCombatSubsystem;
 struct FCombatPieceDefinition;
 
 /**
- * LevelDesigner menu (bottom left): edit mode, grid size, tools (wall, hedge, water, unit with type and team,
- * spawn with type and time in the selected wave), waves (select, add, remove), and new/load/save/play, plus
- * rename and delete (with a second click to confirm) of the level selected in the dropdown. The Piece tool shows the
- * piece catalog: category buttons, the pieces of the selected category (thumbnails in the editor and PIE), and the
- * rotation with Rotate buttons. Painting itself happens with the mouse on the arena (ACombatPlayerController).
+ * LevelDesigner menu (bottom left): edit mode, grid size, new/load/save/play, plus rename and delete (with a second
+ * click to confirm) of the level selected in the dropdown, and the modes with only their own controls: Build Mode
+ * shows the piece catalog (a row of main categories, a row of their subcategories, the pieces of the selected one
+ * from small to large with thumbnails in the editor and PIE) and the rotation; Unit Mode the unit type and team;
+ * Spawn Mode the unit type, the time and the waves (select, add, remove). Placing itself happens with the mouse on
+ * the arena (ACombatPlayerController).
  */
 class SCombatLevelDesigner : public SCompoundWidget
 {
@@ -33,11 +34,16 @@ public:
 
 private:
 	bool IsEditing() const;
-	bool IsPieceTool() const;
-	/** Fills the category buttons from the catalog and shows the selected category. */
+	bool IsTool(ECombatDesignTool Tool) const;
+	EVisibility GetToolVisibility(ECombatDesignTool Tool) const { return IsEditing() && IsTool(Tool) ? EVisibility::Visible : EVisibility::Collapsed; }
+	/** Fills the main category buttons from the catalog and shows the selected piece's category. */
 	void RebuildPieceCategories();
-	/** Fills the palette with the pieces of SelectedCategory. */
+	/** Fills the subcategory buttons of SelectedGroup, then the palette. */
+	void RebuildSubCategories();
+	/** Fills the palette with the pieces of SelectedCategory, from small to large footprint. */
 	void RebuildPalette();
+	/** Selects a catalog category ("Group/Sub") and shows it. */
+	void ShowCategory(const FString& Category);
 	TSharedRef<SWidget> MakePieceButton(const FCombatPieceDefinition& Definition);
 	EVisibility GetEditVisibility() const { return IsEditing() ? EVisibility::Visible : EVisibility::Collapsed; }
 
@@ -63,7 +69,11 @@ private:
 	double DeleteConfirmUntil = 0.0;
 
 	TSharedPtr<SWrapBox> CategoryBox;
+	TSharedPtr<SWrapBox> SubCategoryBox;
 	TSharedPtr<SWrapBox> PaletteBox;
+	/** Main category (Building, Furniture, Props): the part of a catalog category before its first "/". */
+	FString SelectedGroup;
+	/** Full catalog category, "Group/Sub". */
 	FString SelectedCategory;
 	/** The selected piece the palette last followed. */
 	FString FollowedPiece;

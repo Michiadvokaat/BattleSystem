@@ -113,28 +113,9 @@ private:
 	UPROPERTY(VisibleAnywhere, Category = "Grid")
 	TObjectPtr<UStaticMeshComponent> FloorMesh;
 
-	/** Level blocks: one instance per wall, hedge or water cell. */
-	UPROPERTY(VisibleAnywhere, Category = "Grid")
-	TObjectPtr<UInstancedStaticMeshComponent> WallBlocks;
-
-	UPROPERTY(VisibleAnywhere, Category = "Grid")
-	TObjectPtr<UInstancedStaticMeshComponent> HedgeBlocks;
-
-	UPROPERTY(VisibleAnywhere, Category = "Grid")
-	TObjectPtr<UInstancedStaticMeshComponent> WaterBlocks;
-
+	/** Base material of the preview marks (engine shape material with a Color parameter). */
 	UPROPERTY(EditDefaultsOnly, Category = "Grid|Level")
 	TObjectPtr<UMaterialInterface> BlockMaterialBase;
-
-	/** Block heights in a level; low, so they read like a game board next to the 10 cm units. */
-	UPROPERTY(EditAnywhere, Category = "Grid|Level", meta = (ClampMin = 1, Units = "cm"))
-	float WallHeight = 30.f;
-
-	UPROPERTY(EditAnywhere, Category = "Grid|Level", meta = (ClampMin = 1, Units = "cm"))
-	float HedgeHeight = 20.f;
-
-	UPROPERTY(EditAnywhere, Category = "Grid|Level", meta = (ClampMin = 1, Units = "cm"))
-	float WaterHeight = 6.f;
 
 	UPROPERTY(EditDefaultsOnly, Category = "Grid|Preview")
 	FLinearColor PreviewPlaceColor = FLinearColor(0.2f, 0.9f, 0.3f);
@@ -158,15 +139,6 @@ private:
 	/** How far the grid's own floor sinks while a level has floor pieces, so the two never fight at the same height. */
 	UPROPERTY(EditAnywhere, Category = "Grid|Level", meta = (ClampMin = 0, Units = "cm"))
 	float PieceFloorDrop = 2.f;
-
-	UPROPERTY(EditDefaultsOnly, Category = "Grid|Level")
-	FLinearColor WallColor = FLinearColor(0.3f, 0.3f, 0.32f);
-
-	UPROPERTY(EditDefaultsOnly, Category = "Grid|Level")
-	FLinearColor HedgeColor = FLinearColor(0.1f, 0.45f, 0.12f);
-
-	UPROPERTY(EditDefaultsOnly, Category = "Grid|Level")
-	FLinearColor WaterColor = FLinearColor(0.08f, 0.3f, 0.85f);
 
 	/**
 	 * Shows the level's pieces with the meshes of the settings' PieceCatalog: one plain static mesh component per piece

@@ -64,7 +64,7 @@ void ACombatPlayerController::PlayerTick(float DeltaTime)
 	}
 
 	// Piece tool: the selected piece follows the cursor (orange while Shift is held: erasing).
-	if (Subsystem && Subsystem->IsDesignMode() && Subsystem->GetDesignTool() == ECombatDesignTool::Piece && GetArenaPointUnderMouse(Subsystem->GetGridHeight(), Point))
+	if (Subsystem && Subsystem->IsDesignMode() && Subsystem->GetDesignTool() == ECombatDesignTool::Build && GetArenaPointUnderMouse(Subsystem->GetGridHeight(), Point))
 	{
 		Subsystem->UpdateDesignPiecePreview(Point, IsInputKeyDown(EKeys::LeftShift) || IsInputKeyDown(EKeys::RightShift));
 	}
@@ -167,7 +167,7 @@ void ACombatPlayerController::OnWheel(double Steps)
 void ACombatPlayerController::OnRotatePiece()
 {
 	UCombatSubsystem* Subsystem = GetWorld()->GetSubsystem<UCombatSubsystem>();
-	if (Subsystem && Subsystem->IsDesignMode() && Subsystem->GetDesignTool() == ECombatDesignTool::Piece)
+	if (Subsystem && Subsystem->IsDesignMode() && Subsystem->GetDesignTool() == ECombatDesignTool::Build)
 	{
 		Subsystem->RotateDesignPiece(IsInputKeyDown(EKeys::LeftShift) || IsInputKeyDown(EKeys::RightShift) ? -1 : 1);
 	}

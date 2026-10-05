@@ -50,10 +50,6 @@ ACombatGrid::ACombatGrid()
 		}
 		return Blocks;
 	};
-	WallBlocks = MakeBlocks(TEXT("WallBlocks"));
-	HedgeBlocks = MakeBlocks(TEXT("HedgeBlocks"));
-	WaterBlocks = MakeBlocks(TEXT("WaterBlocks"));
-
 	PreviewMarks = MakeBlocks(TEXT("PreviewMarks"));
 	PreviewMarks->SetCastShadow(false);
 	PreviewMarks->SetVisibility(false);
@@ -159,42 +155,6 @@ void ACombatGrid::ApplyLevel(const FCombatLevel& Level)
 		FloorMesh->SetRelativeLocation(FloorMesh->GetRelativeLocation() - FVector(0.0, 0.0, PieceFloorDrop));
 	}
 
-	// One block per wall, hedge and water cell (WallHeight, HedgeHeight, WaterHeight); the engine cube is 100 cm.
-	struct FBlockKind
-	{
-		UInstancedStaticMeshComponent* Blocks;
-		TCHAR Kind;
-		float BlockHeight;
-		FLinearColor Color;
-	};
-	const FBlockKind Kinds[] =
-	{
-		{ WallBlocks, FCombatLevel::Wall, WallHeight, WallColor },
-		{ HedgeBlocks, FCombatLevel::Hedge, HedgeHeight, HedgeColor },
-		{ WaterBlocks, FCombatLevel::Water, WaterHeight, WaterColor },
-	};
-	const float Size = Level.CellSize;
-	for (const FBlockKind& Kind : Kinds)
-	{
-		Kind.Blocks->ClearInstances();
-		if (BlockMaterialBase)
-		{
-			UMaterialInstanceDynamic* Material = Kind.Blocks->CreateAndSetMaterialInstanceDynamicFromMaterial(0, BlockMaterialBase);
-			Material->SetVectorParameterValue(TEXT("Color"), Kind.Color);
-		}
-		for (int32 Y = 0; Y < Level.Height; ++Y)
-		{
-			for (int32 X = 0; X < Level.Width; ++X)
-			{
-				if (Level.GetCell(FIntPoint(X, Y)) == Kind.Kind)
-				{
-					const FVector Location((X + 0.5) * Size, (Y + 0.5) * Size, Kind.BlockHeight * 0.5);
-					const FVector Scale(Size * 0.98 / 100.0, Size * 0.98 / 100.0, Kind.BlockHeight / 100.0);
-					Kind.Blocks->AddInstance(FTransform(FRotator::ZeroRotator, Location, Scale));
-				}
-			}
-		}
-	}
 	ShowPieces(Level);
 }
 
@@ -549,9 +509,6 @@ void ACombatGrid::ClearLevel()
 		return;
 	}
 	bHasLevel = false;
-	WallBlocks->ClearInstances();
-	HedgeBlocks->ClearInstances();
-	WaterBlocks->ClearInstances();
 	ClearPieces();
 	SetObstaclesHidden(false);
 	ShowGrid(GetGridData());
