@@ -447,7 +447,7 @@ void SCombatLevelDesigner::Construct(const FArguments& InArgs)
 						SNew(STextBlock).Text_Lambda([this]()
 						{
 							UCombatSubsystem* Current = Subsystem.Get();
-							return FText::FromString(FString::Printf(TEXT("%d\u00B0"), Current ? Current->GetDesignPieceDegrees() : 0));
+							return FText::FromString(FString::Printf(TEXT("%g\u00B0"), Current ? Current->GetDesignPieceDegrees() : 0.f));
 						})
 					]
 					+ SHorizontalBox::Slot().AutoWidth().Padding(0.f, 0.f, 4.f, 0.f)
@@ -457,6 +457,33 @@ void SCombatLevelDesigner::Construct(const FArguments& InArgs)
 					+ SHorizontalBox::Slot().AutoWidth()
 					[
 						MakeButton(INVTEXT("Back (Shift+R)"), [this]() { if (UCombatSubsystem* Current = Subsystem.Get()) { Current->RotateDesignPiece(-1); } })
+					]
+				]
+				// Wall items: the height of the next one (PageUp / PageDown).
+				+ SVerticalBox::Slot().AutoHeight().Padding(0.f, 4.f, 0.f, 0.f)
+				[
+					SNew(SHorizontalBox)
+					.Visibility_Lambda([this]()
+					{
+						UCombatSubsystem* Current = Subsystem.Get();
+						return Current && Current->IsDesignPieceWallItem() ? EVisibility::Visible : EVisibility::Collapsed;
+					})
+					+ SHorizontalBox::Slot().AutoWidth().VAlign(VAlign_Center)[ MakeLabel(INVTEXT("Height")) ]
+					+ SHorizontalBox::Slot().AutoWidth().VAlign(VAlign_Center).Padding(0.f, 0.f, 8.f, 0.f)
+					[
+						SNew(STextBlock).Text_Lambda([this]()
+						{
+							const UCombatSubsystem* Current = Subsystem.Get();
+							return FText::FromString(FString::Printf(TEXT("%g cm"), Current ? Current->GetDesignWallItemHeight() : 0.f));
+						})
+					]
+					+ SHorizontalBox::Slot().AutoWidth().Padding(0.f, 0.f, 4.f, 0.f)
+					[
+						MakeButton(INVTEXT("Up (PgUp)"), [this]() { if (UCombatSubsystem* Current = Subsystem.Get()) { Current->RaiseDesignWallItem(1); } })
+					]
+					+ SHorizontalBox::Slot().AutoWidth()
+					[
+						MakeButton(INVTEXT("Down (PgDn)"), [this]() { if (UCombatSubsystem* Current = Subsystem.Get()) { Current->RaiseDesignWallItem(-1); } })
 					]
 				]
 				// Tintable pieces (solid floors): the swatches, the current color (opens the color picker) and the eyedropper.
@@ -504,7 +531,7 @@ void SCombatLevelDesigner::Construct(const FArguments& InArgs)
 				.Text_Lambda([this]()
 				{
 					return IsTool(ECombatDesignTool::Build)
-						? INVTEXT("Left: place   Ctrl+Left: move a piece   Shift+Left: erase   R / Shift+R: rotate   I: pick a floor color   Right click: deselect / put back / erase   Right drag: look")
+						? INVTEXT("Left: place   Ctrl+Left: move a piece   Shift+Left: erase   R / Shift+R: rotate   PgUp / PgDn: wall item height   I: pick a floor color   Right click: deselect / put back / erase   Right drag: look")
 						: INVTEXT("Left: place   Shift+Left: erase   R / Shift+R: rotate   Right click: erase   Right drag: look");
 				})
 				.ColorAndOpacity(FLinearColor(0.75f, 0.75f, 0.75f))
@@ -678,6 +705,7 @@ TSharedRef<SWidget> SCombatLevelDesigner::MakePieceButton(const FCombatPieceDefi
 	Name.RemoveFromStart(TEXT("SM_"));
 	// The footprint on the button (details are always one position).
 	const FString SizeLabel = Definition.Layer == ECombatPieceLayer::Detail ? FString()
+		: Definition.Layer == ECombatPieceLayer::Wall ? FString::Printf(TEXT("%g m"), FMath::Max(Definition.Size.X, 1) / static_cast<float>(FMath::Max(Definition.DetailGrid, 1)))
 		: FString::Printf(TEXT("%dx%d"), Definition.Size.X, Definition.Size.Y);
 
 	TSharedRef<SWidget> Picture = SNew(SBox).WidthOverride(CombatLevelDesigner::ThumbnailSize).HeightOverride(CombatLevelDesigner::ThumbnailSize);

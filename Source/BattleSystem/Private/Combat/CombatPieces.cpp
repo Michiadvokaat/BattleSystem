@@ -16,14 +16,20 @@ FCombatLevelPiece FCombatPieceDefinition::MakePiece(const FIntPoint& Cell, int32
 	const int32 Steps = CombatPieces::GetRotationSteps(Layer);
 	Piece.Rotation = ((Rotation % Steps) + Steps) % Steps;
 	Piece.Size = Layer == ECombatPieceLayer::Detail ? FIntPoint(1, 1) : FIntPoint(FMath::Max(Size.X, 1), FMath::Max(Size.Y, 1));
-	if (Layer == ECombatPieceLayer::Detail)
+	if (Layer == ECombatPieceLayer::Detail || Layer == ECombatPieceLayer::Wall)
 	{
 		Piece.Detail = 0;
 		Piece.DetailGrid = FMath::Max(DetailGrid, 1);
 	}
-	// Floors never block.
-	Piece.bBlocksWalking = Layer != ECombatPieceLayer::Floor && bBlocksWalking;
-	Piece.bBlocksSight = Layer != ECombatPieceLayer::Floor && bBlocksSight;
+	if (Layer == ECombatPieceLayer::Wall)
+	{
+		Piece.Size.Y = 1;
+		Piece.Height = MountHeight;
+	}
+	// Floors and wall items never block.
+	const bool bCanBlock = Layer != ECombatPieceLayer::Floor && Layer != ECombatPieceLayer::Wall;
+	Piece.bBlocksWalking = bCanBlock && bBlocksWalking;
+	Piece.bBlocksSight = bCanBlock && bBlocksSight;
 	return Piece;
 }
 
@@ -85,6 +91,57 @@ namespace CombatPieces
 		return FTransform(Rotation, Location, Scale);
 	}
 
+	FTransform ComputeWallItemTransform(const FCombatLevelPiece& Piece, float CellSize, const FBox& MeshBounds, float MeshYaw, const FVector& Offset, double SurfaceOffset)
+	{
+		const int32 Grid = FMath::Max(Piece.DetailGrid, 1);
+		const double Along = (Piece.GetWallStart() + FMath::Max(Piece.Size.X, 1) * 0.5) / Grid * CellSize;
+		const bool bHorizontal = Piece.IsWallItemHorizontal();
+		const double Line = (bHorizontal ? Piece.Cell.Y : Piece.Cell.X) * CellSize;
+		const FVector2D Front = Piece.GetFacingDirection();
+
+		// Its depth once MeshYaw put its width along X (front -Y).
+		const FQuat MeshTurn(FRotator(0.0, MeshYaw, 0.0));
+		const double Depth = MeshBounds.TransformBy(FTransform(MeshTurn)).GetSize().Y;
+		const FVector Target = (bHorizontal ? FVector(Along, Line, Piece.Height) : FVector(Line, Along, Piece.Height))
+			+ FVector(Front.X, Front.Y, 0.0) * (SurfaceOffset + Depth * 0.5);
+
+		// MeshYaw, then the tilt around the front axis, then the turn from -Y to its facing.
+		const FQuat Tilt(FVector::YAxisVector, FMath::DegreesToRadians(360.0 / GetRotationSteps(ECombatPieceLayer::Wall) * Piece.Rotation));
+		const FQuat Face(FRotator(0.0, Piece.Facing * 90.0 + 90.0, 0.0));
+		const FQuat Rotation = Face * Tilt * MeshTurn;
+		const FVector Location = Target - Rotation.RotateVector(MeshBounds.GetCenter()) + Rotation.RotateVector(Offset);
+		return FTransform(Rotation, Location);
+	}
+
+	double FindWallSurfaceOffset(const FCombatLevel& Level, const UCombatPieceCatalog& Catalog, const FCombatLevelPiece& Item)
+	{
+		const bool bHorizontal = Item.IsWallItemHorizontal();
+		const double Line = (bHorizontal ? Item.Cell.Y : Item.Cell.X) * Level.CellSize;
+		const FVector2D Front = Item.GetFacingDirection();
+		double Surface = 0.0;
+		for (const FCombatLevelPiece& Wall : Level.Pieces)
+		{
+			if (Wall.Layer != ECombatPieceLayer::Edge || !Wall.Slot.IsEmpty() || !SharesBorder(Wall, Item))
+			{
+				continue;
+			}
+			const FCombatPieceDefinition* Definition = Catalog.Find(Wall.Id);
+			const UStaticMesh* Mesh = Definition ? Definition->Mesh.Get() : nullptr;
+			if (!Mesh)
+			{
+				continue;
+			}
+			const FBox Bounds = Mesh->GetBoundingBox().TransformBy(ComputeMeshTransform(Wall, Level.CellSize, Mesh->GetBoundingBox(),
+				Definition->MeshYaw, Definition->Offset, Definition->bScaleToFit));
+			// The face on the item's side: the bounds' far side in its facing direction, measured from the line.
+			const double Face = bHorizontal
+				? (Front.Y > 0.0 ? Bounds.Max.Y - Line : Line - Bounds.Min.Y)
+				: (Front.X > 0.0 ? Bounds.Max.X - Line : Line - Bounds.Min.X);
+			Surface = FMath::Max(Surface, Face);
+		}
+		return Surface;
+	}
+
 	void ApplyTint(UMeshComponent& Mesh, const FColor& Color)
 	{
 		UMaterialInterface* Base = GetDefault<UCombatSettings>()->TintMaterial.LoadSynchronous();
@@ -107,7 +164,7 @@ namespace CombatPieces
 
 	int32 GetRotationSteps(ECombatPieceLayer Layer)
 	{
-		return Layer == ECombatPieceLayer::Detail ? 8 : 4;
+		return Layer == ECombatPieceLayer::Detail ? 8 : Layer == ECombatPieceLayer::Wall ? 32 : 4;
 	}
 
 	double GetSurfaceHeight(const FBox& PieceBounds, float SurfaceHeight, const FVector2D& Point)
@@ -211,6 +268,20 @@ namespace CombatPieces
 			const int32 X = FMath::Clamp(FMath::FloorToInt32((InCells.X - Piece.Cell.X) * Grid), 0, Grid - 1);
 			const int32 Y = FMath::Clamp(FMath::FloorToInt32((InCells.Y - Piece.Cell.Y) * Grid), 0, Grid - 1);
 			Piece.Detail = X + Y * Grid;
+		}
+		else if (Piece.Layer == ECombatPieceLayer::Wall)
+		{
+			// The nearest border line, the side the point is on, and the start so that its middle is at the point.
+			const double RowDistance = FMath::Abs(InCells.Y - FMath::RoundToDouble(InCells.Y));
+			const double ColumnDistance = FMath::Abs(InCells.X - FMath::RoundToDouble(InCells.X));
+			const bool bRow = RowDistance <= ColumnDistance;
+			const int32 Line = FMath::RoundToInt32(bRow ? InCells.Y : InCells.X);
+			Piece.Facing = bRow ? (InCells.Y < Line ? 3 : 1) : (InCells.X < Line ? 2 : 0);
+			const int32 Grid = Piece.DetailGrid;
+			const int32 Start = FMath::RoundToInt32((bRow ? InCells.X : InCells.Y) * Grid - Piece.Size.X * 0.5);
+			const int32 AlongCell = FMath::FloorToInt32(static_cast<double>(Start) / Grid);
+			Piece.Detail = Start - AlongCell * Grid;
+			Piece.Cell = bRow ? FIntPoint(AlongCell, Line) : FIntPoint(Line, AlongCell);
 		}
 		else if (Piece.Layer == ECombatPieceLayer::Edge)
 		{

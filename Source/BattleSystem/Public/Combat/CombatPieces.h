@@ -88,7 +88,14 @@ struct BATTLESYSTEM_API FCombatPieceDefinition
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Piece")
 	bool bTintable = false;
 
-	/** Detail layer: positions per cell side, so DetailGrid x DetailGrid positions per cell. */
+	/** Wall layer: default height of its center above the floor (the LevelDesigner raises or lowers it per item). */
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Fit", meta = (ClampMin = 0, Units = "cm"))
+	float MountHeight = 150.f;
+
+	/**
+	 * Detail layer: positions per cell side, so DetailGrid x DetailGrid positions per cell. Wall layer: positions per
+	 * cell along the wall (Size.X = the positions it covers).
+	 */
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Piece", meta = (ClampMin = 1, ClampMax = 8))
 	int32 DetailGrid = 3;
 
@@ -124,10 +131,21 @@ namespace CombatPieces
 	BATTLESYSTEM_API FTransform ComputeMeshTransform(const FCombatLevelPiece& Piece, float CellSize, const FBox& MeshBounds,
 		float MeshYaw, const FVector& Offset, bool bScaleToFit = false, double BaseHeight = 0.0);
 
+	/**
+	 * Wall items: where the mesh goes. MeshYaw turns it so that its width lies along X and its front faces -Y; then it is
+	 * tilted in the wall (Rotation, 1/32 turns), turned to face its Facing, centered over its positions at its Height,
+	 * and set off the border line by SurfaceOffset (the wall's face) plus half its depth. Offset moves it in mesh axes.
+	 */
+	BATTLESYSTEM_API FTransform ComputeWallItemTransform(const FCombatLevelPiece& Piece, float CellSize, const FBox& MeshBounds,
+		float MeshYaw, const FVector& Offset, double SurfaceOffset);
+
+	/** How far the face of the walls a wall item hangs on lies from the border line on its side (catalog meshes); 0 without. */
+	BATTLESYSTEM_API double FindWallSurfaceOffset(const FCombatLevel& Level, const UCombatPieceCatalog& Catalog, const FCombatLevelPiece& Item);
+
 	/** Gives every material slot of Mesh a dynamic instance of the settings' TintMaterial with "Color" = the piece color. */
 	BATTLESYSTEM_API void ApplyTint(UMeshComponent& Mesh, const FColor& Color);
 
-	/** Rotation steps per full turn of a layer: 8 for details (45 degrees), 4 for the others. */
+	/** Rotation steps per full turn of a layer: 8 for details (45 degrees), 32 for wall items (tilt, 11.25), 4 for the others. */
 	BATTLESYSTEM_API int32 GetRotationSteps(ECombatPieceLayer Layer);
 
 	/**
@@ -142,7 +160,7 @@ namespace CombatPieces
 	/**
 	 * The piece a definition makes under a grid-local point (LevelDesigner): Floor and Cell pieces are centered on the
 	 * cell under the point (rounded down for even sizes), Edge pieces lie on the nearest border of their direction and
-	 * are centered along it.
+	 * are centered along it, wall items hang on the nearest border line on the point's side, centered on the point.
 	 */
 	BATTLESYSTEM_API FCombatLevelPiece PlaceAt(const FCombatPieceDefinition& Definition, const FVector2D& Local, int32 Rotation, float CellSize);
 

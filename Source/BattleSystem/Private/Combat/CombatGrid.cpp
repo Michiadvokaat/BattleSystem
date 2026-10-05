@@ -104,7 +104,23 @@ void ACombatGrid::ShowPiecePreview(const FCombatLevelPiece& Piece, float InCellS
 			FVector(Size * 0.9 / 100.0, Size * 0.9 / 100.0, 0.04)));
 	}
 	TArray<TPair<FIntPoint, FIntPoint>> Edges;
-	Piece.GetEdges(Edges);
+	if (Piece.Layer == ECombatPieceLayer::Wall)
+	{
+		// One bar over its positions, just in front of the border line on its side.
+		const double Grid = FMath::Max(Piece.DetailGrid, 1);
+		const double Along = (Piece.GetWallStart() + FMath::Max(Piece.Size.X, 1) * 0.5) / Grid * Size;
+		const double Length = FMath::Max(Piece.Size.X, 1) / Grid * Size * 0.95;
+		const FVector2D Front = Piece.GetFacingDirection() * 8.0;
+		const bool bHorizontal = Piece.IsWallItemHorizontal();
+		const double Line = (bHorizontal ? Piece.Cell.Y : Piece.Cell.X) * Size;
+		const FVector Center = bHorizontal ? FVector(Along, Line + Front.Y, 4.0) : FVector(Line + Front.X, Along, 4.0);
+		const FVector Scale = bHorizontal ? FVector(Length / 100.0, 0.1, 0.06) : FVector(0.1, Length / 100.0, 0.06);
+		PreviewMarks->AddInstance(FTransform(FRotator::ZeroRotator, Center, Scale));
+	}
+	else
+	{
+		Piece.GetEdges(Edges);
+	}
 	for (const TPair<FIntPoint, FIntPoint>& Edge : Edges)
 	{
 		const FIntPoint& After = Edge.Value;
@@ -209,8 +225,11 @@ void ACombatGrid::ShowPieces(const FCombatLevel& Level)
 		Entry.Definition = Definition;
 		Entry.Mesh = Mesh;
 		Entry.MeshBounds = Mesh->GetBoundingBox();
-		Entry.Transform = CombatPieces::ComputeMeshTransform(Piece, Level.CellSize, Entry.MeshBounds,
-			Definition->MeshYaw, Definition->Offset, Definition->bScaleToFit, BaseHeight);
+		Entry.Transform = Piece.Layer == ECombatPieceLayer::Wall
+			? CombatPieces::ComputeWallItemTransform(Piece, Level.CellSize, Entry.MeshBounds, Definition->MeshYaw, Definition->Offset,
+				CombatPieces::FindWallSurfaceOffset(Level, *Catalog, Piece))
+			: CombatPieces::ComputeMeshTransform(Piece, Level.CellSize, Entry.MeshBounds, Definition->MeshYaw, Definition->Offset,
+				Definition->bScaleToFit, BaseHeight);
 	}
 
 	// One cell deep on both sides of the border: through any wall.
@@ -220,6 +239,8 @@ void ACombatGrid::ShowPieces(const FCombatLevel& Level)
 	int32 CutFromCache = 0;
 	int32 LowVersions = 0;
 	int32 LowFromCache = 0;
+	const float LowHeight = GetDefault<UCombatSettings>()->LowWallHeight;
+	TArray<TPair<const FCombatLevelPiece*, UPrimitiveComponent*>> WallItems;
 	for (const FPlaced& Entry : Placed)
 	{
 		const FCombatLevelPiece& Piece = *Entry.Piece;
@@ -263,6 +284,10 @@ void ACombatGrid::ShowPieces(const FCombatLevel& Level)
 		Component->SetRelativeTransform(Transform);
 		Component->RegisterComponent();
 		PieceComponents.Add(Component);
+		if (Piece.Layer == ECombatPieceLayer::Wall && MeshBounds.TransformBy(Transform).Max.Z > LowHeight)
+		{
+			WallItems.Emplace(&Piece, Component);
+		}
 		if (Piece.Layer == ECombatPieceLayer::Edge && Piece.Slot.IsEmpty())
 		{
 			FShownWall& Shown = ShownWalls.AddDefaulted_GetRef();
@@ -275,7 +300,6 @@ void ACombatGrid::ShowPieces(const FCombatLevel& Level)
 
 		// Border pieces reaching above the low height can be lowered: a version cut off there (with the same openings),
 		// hidden until the wall mode lowers the piece. Pieces wholly above it have no low version.
-		const float LowHeight = GetDefault<UCombatSettings>()->LowWallHeight;
 		const FBox PlacedBounds = MeshBounds.TransformBy(Transform);
 		if (Piece.Layer == ECombatPieceLayer::Edge && PlacedBounds.Max.Z > LowHeight)
 		{
@@ -305,6 +329,18 @@ void ACombatGrid::ShowPieces(const FCombatLevel& Level)
 			}
 		}
 	}
+	// Wall items above the low height go down with the walls they hang on.
+	for (const TPair<const FCombatLevelPiece*, UPrimitiveComponent*>& Item : WallItems)
+	{
+		for (const FShownWall& Shown : ShownWalls)
+		{
+			if (WallPieces.IsValidIndex(Shown.WallPiece) && CombatPieces::SharesBorder(Shown.Piece, *Item.Key))
+			{
+				WallPieces[Shown.WallPiece].Attached.Add(Item.Value);
+			}
+		}
+	}
+
 	if (CutWalls > 0 || LowVersions > 0)
 	{
 		UE_LOG(LogCombat, Display, TEXT("Level %s: %d walls with openings (%d from the cache), %d low versions (%d from the cache) in %.2f ms."),
@@ -512,6 +548,13 @@ void ACombatGrid::UpdateWalls(ECombatWallMode Mode, const FVector& CameraLocatio
 			if (UPrimitiveComponent* Low = Wall.Low.Get())
 			{
 				Low->SetVisibility(bLower);
+			}
+			for (const TWeakObjectPtr<UPrimitiveComponent>& Item : Wall.Attached)
+			{
+				if (Item.IsValid())
+				{
+					Item->SetVisibility(!bLower);
+				}
 			}
 		}
 	}

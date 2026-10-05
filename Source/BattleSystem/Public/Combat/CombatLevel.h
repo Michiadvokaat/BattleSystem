@@ -57,6 +57,11 @@ enum class ECombatPieceLayer : uint8
 	Edge,
 	/** Small objects on the detail grid inside a cell, one per position; they stand on the Cell piece under them. */
 	Detail,
+	/**
+	 * Hung on a wall (paintings, clocks, posters): on one side of a border line, over positions along it (DetailGrid
+	 * per cell), at a height. Only on borders with a wall and no opening; never blocks.
+	 */
+	Wall,
 };
 
 /**
@@ -99,6 +104,15 @@ struct BATTLESYSTEM_API FCombatLevelPiece
 	UPROPERTY() int32 DetailGrid = 0;
 	/** Tint of a tintable piece (solid floors; FCombatPieceDefinition::bTintable), sRGB; presentation only. */
 	UPROPERTY() FColor Color = FColor::White;
+	/**
+	 * Wall layer: the direction its front faces, in quarter turns (0 = +X, 1 = +Y, 2 = -X, 3 = -Y). Facing +-Y it hangs
+	 * on the border between rows Cell.Y - 1 and Cell.Y, facing +-X on the border between columns Cell.X - 1 and Cell.X;
+	 * on the side it faces. Cell is the cell after the border of its first position (as for Edge), Detail that position
+	 * (0..DetailGrid - 1) and Size.X the number of positions it covers along the line.
+	 */
+	UPROPERTY() int32 Facing = 0;
+	/** Wall layer: height of its center above the floor in cm. (Its Rotation is the tilt in the wall, 1/32 turns.) */
+	UPROPERTY() float Height = 0.f;
 
 	/** Size after rotation (X and Y swap on odd rotations). */
 	FIntPoint GetRotatedSize() const;
@@ -107,10 +121,20 @@ struct BATTLESYSTEM_API FCombatLevelPiece
 	FVector2D GetDetailCenter(float CellSize) const;
 	/** Floor and Cell: the footprint cells; Detail: its cell; nothing for Edge. */
 	void GetCells(TArray<FIntPoint>& OutCells) const;
-	/** Edge: the cell pairs on both sides of each border it covers; nothing for the other layers. */
+	/** Edge and Wall: the cell pairs on both sides of each border it covers (Wall: that its positions touch); nothing for the other layers. */
 	void GetEdges(TArray<TPair<FIntPoint, FIntPoint>>& OutEdges) const;
-	/** Whether it shares a cell (Floor, Cell), a border (Edge) or a detail position (Detail) with another piece of the same layer and slot. */
+	/**
+	 * Whether it shares a cell (Floor, Cell), a border (Edge), a detail position (Detail) or a wall position on the same
+	 * side (Wall) with another piece of the same layer and slot.
+	 */
 	bool Overlaps(const FCombatLevelPiece& Other) const;
+
+	/** Wall layer: whether it hangs on a border between rows (facing +-Y). */
+	bool IsWallItemHorizontal() const { return Facing % 2 == 1; }
+	/** Wall layer: its first position, counted along the whole line (DetailGrid per cell). */
+	int32 GetWallStart() const;
+	/** Wall layer: the direction its front faces. */
+	FVector2D GetFacingDirection() const;
 };
 
 /**
@@ -127,10 +151,10 @@ struct BATTLESYSTEM_API FCombatLevel
 
 	/**
 	 * 1 = no waves; 2 = with waves; 3 = with pieces; 4 = without cell rows; 5 = with unit and spawn rotations; 6 = with
-	 * piece colors (older files load without the missing parts; their rows of walls, hedges and water are ignored,
-	 * their units face the other side: team 0 +X, the rest and spawns -X, and their pieces are white).
+	 * piece colors; 7 = with wall items (older files load without the missing parts; their rows of walls, hedges and
+	 * water are ignored, their units face the other side: team 0 +X, the rest and spawns -X, and their pieces are white).
 	 */
-	UPROPERTY() int32 FormatVersion = 6;
+	UPROPERTY() int32 FormatVersion = 7;
 	UPROPERTY() FString Name;
 	UPROPERTY() int32 Width = 20;
 	UPROPERTY() int32 Height = 12;
@@ -162,16 +186,25 @@ struct BATTLESYSTEM_API FCombatLevel
 	/** Whether a piece fits in the grid. Edge pieces may lie on the outer border (visual only there). */
 	bool IsPieceInBounds(const FCombatLevelPiece& Piece) const;
 
-	/** Adds a piece and removes the pieces of its layer that it overlaps; false (nothing changes) if it does not fit. */
+	/**
+	 * Adds a piece and removes the pieces of its layer that it overlaps; false (nothing changes) if it does not fit,
+	 * or for a wall item, if it is not supported. A border piece placed (an opening) removes the wall items it leaves
+	 * unsupported.
+	 */
 	bool PlacePiece(const FCombatLevelPiece& Piece);
+
+	/** Wall item: whether every border it touches has a wall (Edge piece without a slot) and no opening. */
+	bool IsWallItemSupported(const FCombatLevelPiece& Item) const;
+	/** Removes the wall items that are no longer supported (their wall removed, or an opening put there); how many. */
+	int32 RemoveUnsupportedWallItems();
 
 	/** Index of the piece of a Floor or Cell layer that covers Cell, or INDEX_NONE. */
 	int32 FindPieceAt(ECombatPieceLayer Layer, const FIntPoint& Cell) const;
 
 	/**
 	 * Index of the topmost piece under a grid-local point (move, erase), or INDEX_NONE: the detail on the detail position
-	 * under it, else the Cell piece of its cell, else the Edge piece on the nearest border within EdgeReach cells, else
-	 * the Floor piece. Within a layer a piece with a slot (on top, like a door leaf) comes before one without.
+	 * under it, else the wall item on the nearest border within EdgeReach cells on the point's side, else the Cell piece
+	 * of its cell, else the Edge piece on the nearest border within EdgeReach cells, else the Floor piece. Within a layer a piece with a slot (on top, like a door leaf) comes before one without.
 	 */
 	int32 FindPieceUnder(const FVector2D& Local, float EdgeReach = 0.25f) const;
 

@@ -1776,8 +1776,16 @@ bool UCombatSubsystem::PickDesignPiece(const FVector& WorldPoint)
 	const FCombatLevelPiece Piece = DesignLevel.Pieces[Index];
 	DesignTool = ECombatDesignTool::Build;
 	DesignPieceId = Piece.Id;
-	// The rotation is kept in eighths.
-	DesignPieceRotation = Piece.Layer == ECombatPieceLayer::Detail ? Piece.Rotation : Piece.Rotation * 2;
+	// The rotation is kept in eighths; a wall item keeps its tilt and height.
+	if (Piece.Layer == ECombatPieceLayer::Wall)
+	{
+		DesignWallItemTilt = Piece.Rotation;
+		DesignWallItemHeight = Piece.Height;
+	}
+	else
+	{
+		DesignPieceRotation = Piece.Layer == ECombatPieceLayer::Detail ? Piece.Rotation : Piece.Rotation * 2;
+	}
 
 	// The pick-up is a stroke of its own; putting it down joins it, so both are one undo step.
 	DesignMovingPiece = Piece;
@@ -1836,10 +1844,46 @@ void UCombatSubsystem::DesignRightClick(const FVector& WorldPoint, bool bHasPoin
 	}
 }
 
+void UCombatSubsystem::SetDesignPiece(const FString& Id)
+{
+	if (DesignMovingPiece.IsSet() && Id != DesignPieceId)
+	{
+		CancelDesignPieceMove();
+	}
+	if (Id != DesignPieceId)
+	{
+		const UCombatPieceCatalog* Catalog = GetPieceCatalog();
+		const FCombatPieceDefinition* Definition = Catalog ? Catalog->Find(Id) : nullptr;
+		if (Definition && Definition->Layer == ECombatPieceLayer::Wall)
+		{
+			DesignWallItemHeight = Definition->MountHeight;
+		}
+	}
+	DesignPieceId = Id;
+}
+
+bool UCombatSubsystem::IsDesignPieceWallItem()
+{
+	const UCombatPieceCatalog* Catalog = GetPieceCatalog();
+	const FCombatPieceDefinition* Definition = Catalog ? Catalog->Find(DesignPieceId) : nullptr;
+	return Definition && Definition->Layer == ECombatPieceLayer::Wall;
+}
+
+void UCombatSubsystem::RaiseDesignWallItem(int32 Steps)
+{
+	DesignWallItemHeight = FMath::Max(DesignWallItemHeight + Steps * GetDefault<UCombatSettings>()->WallItemHeightStep, 0.f);
+}
+
 void UCombatSubsystem::RotateDesignPiece(int32 Steps)
 {
 	const UCombatPieceCatalog* Catalog = GetPieceCatalog();
 	const FCombatPieceDefinition* Definition = Catalog ? Catalog->Find(DesignPieceId) : nullptr;
+	if (Definition && Definition->Layer == ECombatPieceLayer::Wall)
+	{
+		const int32 TiltSteps = CombatPieces::GetRotationSteps(ECombatPieceLayer::Wall);
+		DesignWallItemTilt = ((DesignWallItemTilt + Steps) % TiltSteps + TiltSteps) % TiltSteps;
+		return;
+	}
 	const int32 EighthsPerStep = Definition && Definition->Layer == ECombatPieceLayer::Detail ? 1 : 2;
 	// A quarter-turn piece starts from a whole quarter, so a 45 degree detail rotation never leaves it halfway.
 	const int32 Start = EighthsPerStep == 2 ? DesignPieceRotation / 2 * 2 : DesignPieceRotation;
@@ -1850,14 +1894,18 @@ int32 UCombatSubsystem::GetDesignPieceSteps()
 {
 	const UCombatPieceCatalog* Catalog = GetPieceCatalog();
 	const FCombatPieceDefinition* Definition = Catalog ? Catalog->Find(DesignPieceId) : nullptr;
+	if (Definition && Definition->Layer == ECombatPieceLayer::Wall)
+	{
+		return DesignWallItemTilt;
+	}
 	return Definition && Definition->Layer == ECombatPieceLayer::Detail ? DesignPieceRotation : DesignPieceRotation / 2;
 }
 
-int32 UCombatSubsystem::GetDesignPieceDegrees()
+float UCombatSubsystem::GetDesignPieceDegrees()
 {
 	const UCombatPieceCatalog* Catalog = GetPieceCatalog();
 	const FCombatPieceDefinition* Definition = Catalog ? Catalog->Find(DesignPieceId) : nullptr;
-	return GetDesignPieceSteps() * 360 / CombatPieces::GetRotationSteps(Definition ? Definition->Layer : ECombatPieceLayer::Cell);
+	return GetDesignPieceSteps() * 360.f / CombatPieces::GetRotationSteps(Definition ? Definition->Layer : ECombatPieceLayer::Cell);
 }
 
 bool UCombatSubsystem::GetDesignPiecePlacement(const FVector& WorldPoint, FCombatLevelPiece& OutPiece, const FCombatPieceDefinition*& OutDefinition)
@@ -1871,6 +1919,10 @@ bool UCombatSubsystem::GetDesignPiecePlacement(const FVector& WorldPoint, FComba
 	const ACombatGrid* Grid = ACombatGrid::Find(GetWorld());
 	const FVector Origin = Grid ? Grid->GetActorLocation() : FVector::ZeroVector;
 	OutPiece = CombatPieces::PlaceAt(*OutDefinition, FVector2D(WorldPoint - Origin), GetDesignPieceSteps(), DesignLevel.CellSize);
+	if (OutDefinition->Layer == ECombatPieceLayer::Wall)
+	{
+		OutPiece.Height = DesignWallItemHeight;
+	}
 	// A moved piece keeps its own color.
 	if (OutDefinition->bTintable)
 	{
@@ -1901,9 +1953,15 @@ void UCombatSubsystem::UpdateDesignPiecePreview(const FVector& WorldPoint, bool 
 		return;
 	}
 	const double BaseHeight = Piece.Layer == ECombatPieceLayer::Detail ? CombatPieces::FindDetailBaseHeight(DesignLevel, *GetPieceCatalog(), Piece) : 0.0;
-	const FTransform MeshTransform = CombatPieces::ComputeMeshTransform(Piece, DesignLevel.CellSize, Definition->Mesh->GetBoundingBox(),
-		Definition->MeshYaw, Definition->Offset, Definition->bScaleToFit, BaseHeight);
-	Grid->ShowPiecePreview(Piece, DesignLevel.CellSize, Definition->Mesh, MeshTransform, DesignLevel.IsPieceInBounds(Piece), bErase, Definition->bTintable);
+	const bool bWallItem = Piece.Layer == ECombatPieceLayer::Wall;
+	const FTransform MeshTransform = bWallItem
+		? CombatPieces::ComputeWallItemTransform(Piece, DesignLevel.CellSize, Definition->Mesh->GetBoundingBox(), Definition->MeshYaw,
+			Definition->Offset, CombatPieces::FindWallSurfaceOffset(DesignLevel, *GetPieceCatalog(), Piece))
+		: CombatPieces::ComputeMeshTransform(Piece, DesignLevel.CellSize, Definition->Mesh->GetBoundingBox(),
+			Definition->MeshYaw, Definition->Offset, Definition->bScaleToFit, BaseHeight);
+	// A wall item fits only on a wall without an opening.
+	const bool bFits = DesignLevel.IsPieceInBounds(Piece) && (!bWallItem || DesignLevel.IsWallItemSupported(Piece));
+	Grid->ShowPiecePreview(Piece, DesignLevel.CellSize, Definition->Mesh, MeshTransform, bFits, bErase, Definition->bTintable);
 	// An opening being placed shows its cut in the walls it would stand in.
 	const bool bOpening = !bErase && Piece.Layer == ECombatPieceLayer::Edge && Piece.Slot == FCombatLevelPiece::OpeningSlot;
 	Grid->UpdatePreviewCuts(bOpening ? &Piece : nullptr, MeshTransform, Definition->GetCutBox(Definition->Mesh->GetBoundingBox()), DesignLevel.CellSize);
@@ -1996,6 +2054,8 @@ bool UCombatSubsystem::IsDesignCellWalkable(const FIntPoint& Cell) const
 
 void UCombatSubsystem::RefreshDesignView(bool bFitCamera)
 {
+	// Wall items whose wall went (removed, moved, or an opening put there) go with it, in the same undo step.
+	DesignLevel.RemoveUnsupportedWallItems();
 	RecordDesignChange();
 	++DesignRevision;
 	ACombatGrid* Grid = ACombatGrid::Find(GetWorld());

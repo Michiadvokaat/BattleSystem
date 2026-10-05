@@ -23,6 +23,8 @@ _Last updated: 2026-10-05_
 
 - Solid floors (checked by the user in PIE; merged to `main` from `solid-floors`, tag `before-solid-floors`): `Building/Floors/SolidFloor_1x1`..`_4x4` with a color per placed piece (swatches, color picker, eyedropper I), level format 6.
 
+- Wall items (checked by the user in PIE; merged to `main` from `wall-items`, tag `before-wall-items`): catalog group `WallProps` (166 meshes from the user) hung on walls, on positions along them, with a height and a tilt; level format 7.
+
 ## Open work
 
 - Balance (from the batch): team 0 wins `DA_Setup_AoE` 86.5% and `DA_Setup_Mixed` 99.7%; the Brutes win `DA_Setup_Test` and `DA_Setup_Taunt`.
