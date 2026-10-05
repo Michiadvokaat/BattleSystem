@@ -51,6 +51,8 @@ WALL_GRID = 4
 WALL_MOUNT_HEIGHT = 150.0
 # How far (cm) a mesh may reach past its pivot and still count as having the pivot on its back.
 PIVOT_TOLERANCE = 1.0
+# Wall items centered on their pivot whose front faces the other way than guessed (checked in PIE): half a turn more.
+WALL_FRONT_FLIPPED = ("SM_entertainment_049", "SM_entertainment_050", "SM_entertainment_051", "SM_entertainment_052", "SM_entertainment_053")
 DETAIL_GRID = 3
 # Border piece id -> lengths in cells of its scaled-to-fit variants.
 VARIANTS = {"Building/Walls/SM_Walls_008": (1, 2, 3)}
@@ -110,6 +112,8 @@ def make_definition(category, mesh):
         # mesh -X the front; when the depth lies on the positive side instead, turn half a turn more.
         depth_min, depth_max = (box.min.y, box.max.y) if long_along_x else (box.min.x, box.max.x)
         if depth_min >= -PIVOT_TOLERANCE and depth_max > PIVOT_TOLERANCE:
+            yaw += 180.0
+        if mesh.get_name() in WALL_FRONT_FLIPPED:
             yaw += 180.0
         definition.set_editor_property("detail_grid", WALL_GRID)
         definition.set_editor_property("mount_height", WALL_MOUNT_HEIGHT)

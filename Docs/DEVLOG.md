@@ -199,3 +199,5 @@ Dated history: decisions, bugs, rejected approaches. Newest entries at the botto
 - Checked by the user in PIE.
 - Mouse in Unit and Spawn Mode like Build Mode (the user's choice): Ctrl + click picks up a unit (or a spawn of the selected wave) and the next click puts it down, one undo step; a right click puts a moved one back, else deselects the unit type, else erases. No simulation change; 62/62 tests (the designer has no automated tests).
 - Checked by the user in PIE; merged to `main`.
+
+- 2026-10-05. Wall props `SM_entertainment_049` to `053` (centered on their pivot, so the front was a guess) hung back to front (user report). `MeshYaw` 0 -> 180 in `DA_PieceCatalog` (local, one-off editor-Python run), and `CreatePieceCatalog.py` got `WALL_FRONT_FLIPPED` so a rebuilt catalog turns them too.
