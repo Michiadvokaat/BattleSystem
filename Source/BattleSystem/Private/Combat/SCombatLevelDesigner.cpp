@@ -1,6 +1,7 @@
 // Copyright Epic Games, Inc. All Rights Reserved.
 
 #include "SCombatLevelDesigner.h"
+#include "Algo/StableSort.h"
 #include "Combat/CombatLevel.h"
 #include "Combat/CombatPieces.h"
 #include "Combat/CombatSettings.h"
@@ -27,6 +28,20 @@ namespace CombatLevelDesigner
 	static constexpr double DeleteConfirmSeconds = 3.0;
 	static constexpr float ThumbnailSize = 64.f;
 	static constexpr float PaletteWidth = 440.f;
+
+	/** The main category of a catalog category: the part before its first "/" (the whole name without one). */
+	static FString GetGroup(const FString& Category)
+	{
+		FString Group;
+		return Category.Split(TEXT("/"), &Group, nullptr) ? Group : Category;
+	}
+
+	/** The subcategory: the part after the first "/" (empty without one). */
+	static FString GetSubCategory(const FString& Category)
+	{
+		FString Sub;
+		return Category.Split(TEXT("/"), nullptr, &Sub) ? Sub : FString();
+	}
 }
 
 void SCombatLevelDesigner::Construct(const FArguments& InArgs)
@@ -242,20 +257,17 @@ void SCombatLevelDesigner::Construct(const FArguments& InArgs)
 			[
 				SNew(SHorizontalBox)
 				.Visibility(this, &SCombatLevelDesigner::GetEditVisibility)
-				+ SHorizontalBox::Slot().AutoWidth().VAlign(VAlign_Center)[ MakeLabel(INVTEXT("Tool")) ]
-				+ SHorizontalBox::Slot().AutoWidth().Padding(0.f, 0.f, 4.f, 0.f)[ ToolButton(INVTEXT("Wall"), ECombatDesignTool::Wall) ]
-				+ SHorizontalBox::Slot().AutoWidth().Padding(0.f, 0.f, 4.f, 0.f)[ ToolButton(INVTEXT("Hedge"), ECombatDesignTool::Hedge) ]
-				+ SHorizontalBox::Slot().AutoWidth().Padding(0.f, 0.f, 4.f, 0.f)[ ToolButton(INVTEXT("Water"), ECombatDesignTool::Water) ]
-				+ SHorizontalBox::Slot().AutoWidth().Padding(0.f, 0.f, 4.f, 0.f)[ ToolButton(INVTEXT("Unit"), ECombatDesignTool::Unit) ]
-				+ SHorizontalBox::Slot().AutoWidth().Padding(0.f, 0.f, 4.f, 0.f)[ ToolButton(INVTEXT("Spawn"), ECombatDesignTool::Spawn) ]
-				+ SHorizontalBox::Slot().AutoWidth()[ ToolButton(INVTEXT("Piece"), ECombatDesignTool::Piece) ]
+				+ SHorizontalBox::Slot().AutoWidth().VAlign(VAlign_Center)[ MakeLabel(INVTEXT("Mode")) ]
+				+ SHorizontalBox::Slot().AutoWidth().Padding(0.f, 0.f, 4.f, 0.f)[ ToolButton(INVTEXT("Build Mode"), ECombatDesignTool::Build) ]
+				+ SHorizontalBox::Slot().AutoWidth().Padding(0.f, 0.f, 4.f, 0.f)[ ToolButton(INVTEXT("Unit Mode"), ECombatDesignTool::Unit) ]
+				+ SHorizontalBox::Slot().AutoWidth()[ ToolButton(INVTEXT("Spawn Mode"), ECombatDesignTool::Spawn) ]
 			]
 
-			// Waves: select, add after the selected one, remove the selected one. The arena shows the selected wave's spawns.
+			// Spawn Mode, waves: select, add after the selected one, remove the selected one. The arena shows the selected wave's spawns.
 			+ SVerticalBox::Slot().AutoHeight().Padding(0.f, 2.f)
 			[
 				SNew(SHorizontalBox)
-				.Visibility(this, &SCombatLevelDesigner::GetEditVisibility)
+				.Visibility(this, &SCombatLevelDesigner::GetToolVisibility, ECombatDesignTool::Spawn)
 				+ SHorizontalBox::Slot().AutoWidth().VAlign(VAlign_Center)[ MakeLabel(INVTEXT("Wave")) ]
 				+ SHorizontalBox::Slot().AutoWidth().Padding(0.f, 0.f, 4.f, 0.f)
 				[
@@ -309,9 +321,7 @@ void SCombatLevelDesigner::Construct(const FArguments& InArgs)
 				SNew(SHorizontalBox)
 				.Visibility_Lambda([this]()
 				{
-					const UCombatSubsystem* Current = Subsystem.Get();
-					const bool bPlacesUnits = Current && (Current->GetDesignTool() == ECombatDesignTool::Unit || Current->GetDesignTool() == ECombatDesignTool::Spawn);
-					return IsEditing() && bPlacesUnits ? EVisibility::Visible : EVisibility::Collapsed;
+					return IsEditing() && (IsTool(ECombatDesignTool::Unit) || IsTool(ECombatDesignTool::Spawn)) ? EVisibility::Visible : EVisibility::Collapsed;
 				})
 				+ SHorizontalBox::Slot().AutoWidth().VAlign(VAlign_Center)[ MakeLabel(INVTEXT("Unit")) ]
 				+ SHorizontalBox::Slot().FillWidth(1.f).Padding(0.f, 0.f, 4.f, 0.f)
@@ -339,22 +349,14 @@ void SCombatLevelDesigner::Construct(const FArguments& InArgs)
 				[
 					// Unit: the team. Spawn: the time after the wave start (spawns are always the wave team).
 					SNew(SHorizontalBox)
-					.Visibility_Lambda([this]()
-					{
-						const UCombatSubsystem* Current = Subsystem.Get();
-						return Current && Current->GetDesignTool() == ECombatDesignTool::Unit ? EVisibility::Visible : EVisibility::Collapsed;
-					})
+					.Visibility(this, &SCombatLevelDesigner::GetToolVisibility, ECombatDesignTool::Unit)
 					+ SHorizontalBox::Slot().AutoWidth().Padding(0.f, 0.f, 4.f, 0.f)[ TeamButton(0) ]
 					+ SHorizontalBox::Slot().AutoWidth()[ TeamButton(1) ]
 				]
 				+ SHorizontalBox::Slot().AutoWidth()
 				[
 					SNew(SHorizontalBox)
-					.Visibility_Lambda([this]()
-					{
-						const UCombatSubsystem* Current = Subsystem.Get();
-						return Current && Current->GetDesignTool() == ECombatDesignTool::Spawn ? EVisibility::Visible : EVisibility::Collapsed;
-					})
+					.Visibility(this, &SCombatLevelDesigner::GetToolVisibility, ECombatDesignTool::Spawn)
 					+ SHorizontalBox::Slot().AutoWidth().VAlign(VAlign_Center).Padding(0.f, 0.f, 4.f, 0.f)[ SNew(STextBlock).Text(INVTEXT("Time (s)")) ]
 					+ SHorizontalBox::Slot().AutoWidth()
 					[
@@ -382,14 +384,18 @@ void SCombatLevelDesigner::Construct(const FArguments& InArgs)
 				]
 			]
 
-			// Piece tool: categories, the pieces of the selected one, and the rotation.
+			// Build Mode: main categories, their subcategories, the pieces of the selected one, and the rotation.
 			+ SVerticalBox::Slot().AutoHeight().Padding(0.f, 2.f)
 			[
 				SNew(SVerticalBox)
-				.Visibility_Lambda([this]() { return IsEditing() && IsPieceTool() ? EVisibility::Visible : EVisibility::Collapsed; })
-				+ SVerticalBox::Slot().AutoHeight().Padding(0.f, 0.f, 0.f, 4.f)
+				.Visibility(this, &SCombatLevelDesigner::GetToolVisibility, ECombatDesignTool::Build)
+				+ SVerticalBox::Slot().AutoHeight().Padding(0.f, 0.f, 0.f, 2.f)
 				[
 					SAssignNew(CategoryBox, SWrapBox).PreferredSize(CombatLevelDesigner::PaletteWidth)
+				]
+				+ SVerticalBox::Slot().AutoHeight().Padding(0.f, 0.f, 0.f, 4.f)
+				[
+					SAssignNew(SubCategoryBox, SWrapBox).PreferredSize(CombatLevelDesigner::PaletteWidth)
 				]
 				+ SVerticalBox::Slot().AutoHeight()
 				[
@@ -432,9 +438,9 @@ void SCombatLevelDesigner::Construct(const FArguments& InArgs)
 				.Visibility(this, &SCombatLevelDesigner::GetEditVisibility)
 				.Text_Lambda([this]()
 				{
-					return IsPieceTool()
+					return IsTool(ECombatDesignTool::Build)
 						? INVTEXT("Left: place   Ctrl+Left: move a piece   Shift+Left: erase   R / Shift+R: rotate   Right click: deselect / put back / erase   Right drag: look")
-						: INVTEXT("Left: place (hold to paint)   Shift+Left: erase   Right click: erase cell   Right drag: look");
+						: INVTEXT("Left: place   Shift+Left: erase   Right click: erase   Right drag: look");
 				})
 				.ColorAndOpacity(FLinearColor(0.75f, 0.75f, 0.75f))
 				.Font(FCoreStyle::GetDefaultFontStyle("Italic", 9))
@@ -455,7 +461,7 @@ void SCombatLevelDesigner::Tick(const FGeometry& AllottedGeometry, const double 
 {
 	SCompoundWidget::Tick(AllottedGeometry, InCurrentTime, InDeltaTime);
 	UCombatSubsystem* Current = Subsystem.Get();
-	const UCombatPieceCatalog* Catalog = Current && IsPieceTool() ? Current->GetPieceCatalog() : nullptr;
+	const UCombatPieceCatalog* Catalog = Current && IsTool(ECombatDesignTool::Build) ? Current->GetPieceCatalog() : nullptr;
 	if (!Catalog || Current->GetDesignPiece() == FollowedPiece)
 	{
 		return;
@@ -464,15 +470,14 @@ void SCombatLevelDesigner::Tick(const FGeometry& AllottedGeometry, const double 
 	const FCombatPieceDefinition* Selected = Catalog->Find(FollowedPiece);
 	if (Selected && Selected->Category != SelectedCategory)
 	{
-		SelectedCategory = Selected->Category;
-		RebuildPalette();
+		ShowCategory(Selected->Category);
 	}
 }
 
-bool SCombatLevelDesigner::IsPieceTool() const
+bool SCombatLevelDesigner::IsTool(ECombatDesignTool Tool) const
 {
 	const UCombatSubsystem* Current = Subsystem.Get();
-	return Current && Current->GetDesignTool() == ECombatDesignTool::Piece;
+	return Current && Current->GetDesignTool() == Tool;
 }
 
 void SCombatLevelDesigner::RebuildPieceCategories()
@@ -486,11 +491,11 @@ void SCombatLevelDesigner::RebuildPieceCategories()
 		return;
 	}
 
-	// Categories in catalog order; the selected piece (or the first one) picks the category shown first.
-	TArray<FString> Categories;
+	// Main categories in catalog order; the selected piece (or the first one) picks the category shown first.
+	TArray<FString> Groups;
 	for (const FCombatPieceDefinition& Definition : Catalog->Pieces)
 	{
-		Categories.AddUnique(Definition.Category);
+		Groups.AddUnique(CombatLevelDesigner::GetGroup(Definition.Category));
 	}
 	const FCombatPieceDefinition* Selected = Catalog->Find(Current->GetDesignPiece());
 	if (!Selected)
@@ -498,19 +503,65 @@ void SCombatLevelDesigner::RebuildPieceCategories()
 		Selected = &Catalog->Pieces[0];
 		Current->SetDesignPiece(Selected->Id);
 	}
-	SelectedCategory = Selected->Category;
 	FollowedPiece = Selected->Id;
 
-	for (const FString& Category : Categories)
+	for (const FString& Group : Groups)
 	{
 		CategoryBox->AddSlot().Padding(0.f, 0.f, 4.f, 4.f)
 		[
-			MakeButton(FText::FromString(Category),
-				[this, Category]()
+			MakeButton(FText::FromString(Group),
+				[this, Group]()
 				{
-					SelectedCategory = Category;
-					RebuildPalette();
+					// The group's first subcategory (catalog order).
+					UCombatSubsystem* Clicked = Subsystem.Get();
+					const UCombatPieceCatalog* ClickedCatalog = Clicked ? Clicked->GetPieceCatalog() : nullptr;
+					const FCombatPieceDefinition* First = ClickedCatalog ? ClickedCatalog->Pieces.FindByPredicate(
+						[&Group](const FCombatPieceDefinition& Definition) { return CombatLevelDesigner::GetGroup(Definition.Category) == Group; }) : nullptr;
+					if (First)
+					{
+						ShowCategory(First->Category);
+					}
 				},
+				[this, Group]() { return SelectedGroup == Group; })
+		];
+	}
+	ShowCategory(Selected->Category);
+}
+
+void SCombatLevelDesigner::ShowCategory(const FString& Category)
+{
+	SelectedCategory = Category;
+	SelectedGroup = CombatLevelDesigner::GetGroup(Category);
+	RebuildSubCategories();
+}
+
+void SCombatLevelDesigner::RebuildSubCategories()
+{
+	SubCategoryBox->ClearChildren();
+	UCombatSubsystem* Current = Subsystem.Get();
+	const UCombatPieceCatalog* Catalog = Current ? Current->GetPieceCatalog() : nullptr;
+	TArray<FString> Categories;
+	if (Catalog)
+	{
+		for (const FCombatPieceDefinition& Definition : Catalog->Pieces)
+		{
+			if (CombatLevelDesigner::GetGroup(Definition.Category) == SelectedGroup)
+			{
+				Categories.AddUnique(Definition.Category);
+			}
+		}
+	}
+	for (const FString& Category : Categories)
+	{
+		const FString Sub = CombatLevelDesigner::GetSubCategory(Category);
+		if (Sub.IsEmpty())
+		{
+			continue;
+		}
+		SubCategoryBox->AddSlot().Padding(0.f, 0.f, 4.f, 4.f)
+		[
+			MakeButton(FText::FromString(Sub),
+				[this, Category]() { ShowCategory(Category); },
 				[this, Category]() { return SelectedCategory == Category; })
 		];
 	}
@@ -527,12 +578,30 @@ void SCombatLevelDesigner::RebuildPalette()
 	{
 		return;
 	}
+	// Small to large: by area, then the longer side, then the id; large and small pieces share a subcategory.
+	TArray<const FCombatPieceDefinition*> Shown;
 	for (const FCombatPieceDefinition& Definition : Catalog->Pieces)
 	{
 		if (Definition.Category == SelectedCategory)
 		{
-			PaletteBox->AddSlot().Padding(2.f)[ MakePieceButton(Definition) ];
+			Shown.Add(&Definition);
 		}
+	}
+	Algo::StableSort(Shown, [](const FCombatPieceDefinition* A, const FCombatPieceDefinition* B)
+	{
+		const int32 AreaA = A->Size.X * A->Size.Y;
+		const int32 AreaB = B->Size.X * B->Size.Y;
+		if (AreaA != AreaB)
+		{
+			return AreaA < AreaB;
+		}
+		const int32 SideA = FMath::Max(A->Size.X, A->Size.Y);
+		const int32 SideB = FMath::Max(B->Size.X, B->Size.Y);
+		return SideA != SideB ? SideA < SideB : A->Id < B->Id;
+	});
+	for (const FCombatPieceDefinition* Definition : Shown)
+	{
+		PaletteBox->AddSlot().Padding(2.f)[ MakePieceButton(*Definition) ];
 	}
 }
 
@@ -540,8 +609,11 @@ TSharedRef<SWidget> SCombatLevelDesigner::MakePieceButton(const FCombatPieceDefi
 {
 	const FString Id = Definition.Id;
 	FString Name = Id;
-	Id.Split(TEXT("/"), nullptr, &Name);
+	Id.Split(TEXT("/"), nullptr, &Name, ESearchCase::IgnoreCase, ESearchDir::FromEnd);
 	Name.RemoveFromStart(TEXT("SM_"));
+	// The footprint on the button (details are always one position).
+	const FString SizeLabel = Definition.Layer == ECombatPieceLayer::Detail ? FString()
+		: FString::Printf(TEXT("%dx%d"), Definition.Size.X, Definition.Size.Y);
 
 	TSharedRef<SWidget> Picture = SNew(SBox).WidthOverride(CombatLevelDesigner::ThumbnailSize).HeightOverride(CombatLevelDesigner::ThumbnailSize);
 #if WITH_EDITOR
@@ -577,7 +649,7 @@ TSharedRef<SWidget> SCombatLevelDesigner::MakePieceButton(const FCombatPieceDefi
 		{
 			if (UCombatSubsystem* Current = Subsystem.Get())
 			{
-				Current->SetDesignTool(ECombatDesignTool::Piece);
+				Current->SetDesignTool(ECombatDesignTool::Build);
 				Current->SetDesignPiece(Id);
 			}
 			return FReply::Handled();
@@ -585,6 +657,14 @@ TSharedRef<SWidget> SCombatLevelDesigner::MakePieceButton(const FCombatPieceDefi
 		[
 			SNew(SVerticalBox)
 			+ SVerticalBox::Slot().AutoHeight().HAlign(HAlign_Center)[ Picture ]
+			+ SVerticalBox::Slot().AutoHeight()
+			[
+				SNew(STextBlock)
+				.Visibility(SizeLabel.IsEmpty() ? EVisibility::Collapsed : EVisibility::Visible)
+				.Text(FText::FromString(SizeLabel))
+				.Font(FCoreStyle::GetDefaultFontStyle("Bold", 8))
+				.ColorAndOpacity(FLinearColor(1.f, 0.85f, 0.3f))
+			]
 			+ SVerticalBox::Slot().AutoHeight()
 			[
 				SNew(SBox)

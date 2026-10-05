@@ -108,52 +108,42 @@ struct BATTLESYSTEM_API FCombatLevelPiece
 };
 
 /**
- * A level built with the LevelDesigner: grid size, cells, starting units and enemy waves. Saved as readable JSON in
- * <Project>/Levels/<Name>.json and copied into replays. Cells are text rows, one character per cell.
+ * A level built with the LevelDesigner: grid size, starting units, enemy waves and placed pieces. Saved as readable
+ * JSON in <Project>/Levels/<Name>.json and copied into replays. Every cell is open; only pieces block.
  */
 USTRUCT()
 struct BATTLESYSTEM_API FCombatLevel
 {
 	GENERATED_BODY()
 
-	static constexpr TCHAR Open = TEXT('.');
-	/** Blocks walking and sight. */
-	static constexpr TCHAR Wall = TEXT('#');
-	/** Blocks sight only. */
-	static constexpr TCHAR Hedge = TEXT('h');
-	/** Blocks walking only. */
-	static constexpr TCHAR Water = TEXT('~');
-
 	static constexpr int32 MinSize = 5;
 	static constexpr int32 MaxSize = 40;
 
-	/** 1 = no waves; 2 = with waves; 3 = with pieces (older files load without them). */
-	UPROPERTY() int32 FormatVersion = 3;
+	/**
+	 * 1 = no waves; 2 = with waves; 3 = with pieces; 4 = without cell rows (older files load without the missing parts;
+	 * their rows of walls, hedges and water are ignored).
+	 */
+	UPROPERTY() int32 FormatVersion = 4;
 	UPROPERTY() FString Name;
 	UPROPERTY() int32 Width = 20;
 	UPROPERTY() int32 Height = 12;
 	UPROPERTY() float CellSize = 100.f;
-	/** Height rows of Width characters; row Y is cells (0..Width-1, Y). Unknown characters count as open. */
-	UPROPERTY() TArray<FString> Rows;
 	UPROPERTY() TArray<FCombatLevelUnit> Units;
 	/** Enemy waves, in order; see FCombatSimConfig::Waves for when each starts. */
 	UPROPERTY() TArray<FCombatLevelWave> Waves;
-	/** Placed pieces (walls, floors, furniture); their blocking is added to the cells of Rows. */
+	/** Placed pieces (walls, floors, furniture); only their blocking makes cells and borders unwalkable. */
 	UPROPERTY() TArray<FCombatLevelPiece> Pieces;
 
 	/** An open level of the given size (clamped to MinSize..MaxSize). */
 	static FCombatLevel MakeEmpty(const FString& InName, int32 InWidth, int32 InHeight);
 
-	/** Clamps the size and makes every row exactly Width characters (padding with open cells). */
+	/** Clamps the size to MinSize..MaxSize. */
 	void Normalize();
 
-	/** Changes the size; cells, units, spawns and pieces outside the new size are removed. */
+	/** Changes the size; units, spawns and pieces outside the new size are removed. */
 	void Resize(int32 NewWidth, int32 NewHeight);
 
 	bool IsInBounds(const FIntPoint& Cell) const { return Cell.X >= 0 && Cell.Y >= 0 && Cell.X < Width && Cell.Y < Height; }
-	TCHAR GetCell(const FIntPoint& Cell) const;
-	void SetCell(const FIntPoint& Cell, TCHAR Kind);
-	static ECombatCellFlags FlagsFor(TCHAR Kind);
 
 	/** Index in Units of the unit on Cell, or INDEX_NONE. */
 	int32 FindUnitAt(const FIntPoint& Cell) const;

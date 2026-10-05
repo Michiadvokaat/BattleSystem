@@ -1,37 +1,21 @@
 {
-	"formatVersion": 3,
+	"formatVersion": 4,
 	"name": "BuildTest01",
 	"width": 20,
 	"height": 12,
 	"cellSize": 100,
-	"rows": [
-		"....................",
-		"....................",
-		"....................",
-		"....................",
-		"....................",
-		"....................",
-		"....................",
-		"....................",
-		"....................",
-		"....................",
-		"....................",
-		"...................."
-	],
 	"units": [],
 	"waves": [],
 	"pieces": [
 		{
-			"id": "Furniture/SM_kitchen_chair_022",
+			"id": "Furniture/Chairs/SM_kitchen_chair_022",
 			"layer": "Cell",
-			"cell":
-			{
+			"cell": {
 				"x": 11,
 				"y": 5
 			},
 			"rotation": 0,
-			"size":
-			{
+			"size": {
 				"x": 1,
 				"y": 1
 			},
@@ -40,16 +24,14 @@
 			"detail": -1
 		},
 		{
-			"id": "Furniture/SM_kitchen_chair_022",
+			"id": "Furniture/Chairs/SM_kitchen_chair_022",
 			"layer": "Cell",
-			"cell":
-			{
+			"cell": {
 				"x": 10,
 				"y": 5
 			},
 			"rotation": 0,
-			"size":
-			{
+			"size": {
 				"x": 1,
 				"y": 1
 			},
@@ -58,16 +40,14 @@
 			"detail": -1
 		},
 		{
-			"id": "Furniture/SM_kitchen_chair_003",
+			"id": "Furniture/Chairs/SM_kitchen_chair_003",
 			"layer": "Cell",
-			"cell":
-			{
+			"cell": {
 				"x": 9,
 				"y": 5
 			},
 			"rotation": 0,
-			"size":
-			{
+			"size": {
 				"x": 1,
 				"y": 1
 			},
@@ -76,16 +56,14 @@
 			"detail": -1
 		},
 		{
-			"id": "Furniture/SM_kitchen_chair_003",
+			"id": "Furniture/Chairs/SM_kitchen_chair_003",
 			"layer": "Cell",
-			"cell":
-			{
+			"cell": {
 				"x": 10,
 				"y": 4
 			},
 			"rotation": 1,
-			"size":
-			{
+			"size": {
 				"x": 1,
 				"y": 1
 			},
@@ -94,16 +72,14 @@
 			"detail": -1
 		},
 		{
-			"id": "Furniture/SM_kitchen_chair_003",
+			"id": "Furniture/Chairs/SM_kitchen_chair_003",
 			"layer": "Cell",
-			"cell":
-			{
+			"cell": {
 				"x": 10,
 				"y": 3
 			},
 			"rotation": 1,
-			"size":
-			{
+			"size": {
 				"x": 1,
 				"y": 1
 			},
@@ -112,16 +88,14 @@
 			"detail": -1
 		},
 		{
-			"id": "Furniture/SM_kitchen_chair_003",
+			"id": "Furniture/Chairs/SM_kitchen_chair_003",
 			"layer": "Cell",
-			"cell":
-			{
+			"cell": {
 				"x": 11,
 				"y": 3
 			},
 			"rotation": 1,
-			"size":
-			{
+			"size": {
 				"x": 1,
 				"y": 1
 			},
@@ -130,16 +104,14 @@
 			"detail": -1
 		},
 		{
-			"id": "Furniture/SM_kitchen_chair_003",
+			"id": "Furniture/Chairs/SM_kitchen_chair_003",
 			"layer": "Cell",
-			"cell":
-			{
+			"cell": {
 				"x": 9,
 				"y": 3
 			},
 			"rotation": 0,
-			"size":
-			{
+			"size": {
 				"x": 1,
 				"y": 1
 			},
@@ -148,16 +120,14 @@
 			"detail": -1
 		},
 		{
-			"id": "Furniture/SM_kitchen_chair_003",
+			"id": "Furniture/Chairs/SM_kitchen_chair_003",
 			"layer": "Cell",
-			"cell":
-			{
+			"cell": {
 				"x": 8,
 				"y": 3
 			},
 			"rotation": 0,
-			"size":
-			{
+			"size": {
 				"x": 1,
 				"y": 1
 			},
@@ -166,16 +136,14 @@
 			"detail": -1
 		},
 		{
-			"id": "Furniture/SM_office_table_020",
+			"id": "Furniture/Tables/SM_office_table_020",
 			"layer": "Cell",
-			"cell":
-			{
+			"cell": {
 				"x": 9,
 				"y": 4
 			},
 			"rotation": 0,
-			"size":
-			{
+			"size": {
 				"x": 1,
 				"y": 1
 			},
@@ -184,16 +152,14 @@
 			"detail": -1
 		},
 		{
-			"id": "Furniture/SM_office_table_020",
+			"id": "Furniture/Tables/SM_office_table_020",
 			"layer": "Cell",
-			"cell":
-			{
+			"cell": {
 				"x": 8,
 				"y": 4
 			},
 			"rotation": 0,
-			"size":
-			{
+			"size": {
 				"x": 1,
 				"y": 1
 			},
@@ -202,16 +168,14 @@
 			"detail": -1
 		},
 		{
-			"id": "Furniture/SM_office_table_023",
+			"id": "Furniture/Tables/SM_office_table_023",
 			"layer": "Cell",
-			"cell":
-			{
+			"cell": {
 				"x": 10,
 				"y": 7
 			},
 			"rotation": 0,
-			"size":
-			{
+			"size": {
 				"x": 1,
 				"y": 1
 			},
@@ -220,16 +184,14 @@
 			"detail": -1
 		},
 		{
-			"id": "Furniture/SM_office_table_023",
+			"id": "Furniture/Tables/SM_office_table_023",
 			"layer": "Cell",
-			"cell":
-			{
+			"cell": {
 				"x": 11,
 				"y": 6
 			},
 			"rotation": 0,
-			"size":
-			{
+			"size": {
 				"x": 1,
 				"y": 1
 			},
@@ -238,16 +200,14 @@
 			"detail": -1
 		},
 		{
-			"id": "Furniture/SM_office_table_023",
+			"id": "Furniture/Tables/SM_office_table_023",
 			"layer": "Cell",
-			"cell":
-			{
+			"cell": {
 				"x": 9,
 				"y": 6
 			},
 			"rotation": 0,
-			"size":
-			{
+			"size": {
 				"x": 1,
 				"y": 1
 			},
@@ -256,16 +216,14 @@
 			"detail": -1
 		},
 		{
-			"id": "Furniture/SM_office_table_023",
+			"id": "Furniture/Tables/SM_office_table_023",
 			"layer": "Cell",
-			"cell":
-			{
+			"cell": {
 				"x": 11,
 				"y": 7
 			},
 			"rotation": 0,
-			"size":
-			{
+			"size": {
 				"x": 1,
 				"y": 1
 			},
@@ -274,16 +232,14 @@
 			"detail": -1
 		},
 		{
-			"id": "Furniture/SM_office_table_023",
+			"id": "Furniture/Tables/SM_office_table_023",
 			"layer": "Cell",
-			"cell":
-			{
+			"cell": {
 				"x": 10,
 				"y": 6
 			},
 			"rotation": 2,
-			"size":
-			{
+			"size": {
 				"x": 1,
 				"y": 1
 			},
@@ -292,17 +248,15 @@
 			"detail": -1
 		},
 		{
-			"id": "Doors/SM_door_010",
+			"id": "Building/Doors/SM_door_010",
 			"slot": "Opening",
 			"layer": "Edge",
-			"cell":
-			{
+			"cell": {
 				"x": 8,
 				"y": 8
 			},
 			"rotation": 2,
-			"size":
-			{
+			"size": {
 				"x": 1,
 				"y": 1
 			},
@@ -311,16 +265,14 @@
 			"detail": -1
 		},
 		{
-			"id": "Walls/SM_Walls_001",
+			"id": "Building/Walls/SM_Walls_001",
 			"layer": "Edge",
-			"cell":
-			{
+			"cell": {
 				"x": 7,
 				"y": 2
 			},
 			"rotation": 2,
-			"size":
-			{
+			"size": {
 				"x": 4,
 				"y": 1
 			},
@@ -329,16 +281,14 @@
 			"detail": -1
 		},
 		{
-			"id": "Walls/SM_Walls_001",
+			"id": "Building/Walls/SM_Walls_001",
 			"layer": "Edge",
-			"cell":
-			{
+			"cell": {
 				"x": 11,
 				"y": 2
 			},
 			"rotation": 2,
-			"size":
-			{
+			"size": {
 				"x": 4,
 				"y": 1
 			},
@@ -347,16 +297,14 @@
 			"detail": -1
 		},
 		{
-			"id": "Walls/SM_Walls_006",
+			"id": "Building/Walls/SM_Walls_006",
 			"layer": "Edge",
-			"cell":
-			{
+			"cell": {
 				"x": 7,
 				"y": 2
 			},
 			"rotation": 3,
-			"size":
-			{
+			"size": {
 				"x": 4,
 				"y": 1
 			},
@@ -365,16 +313,14 @@
 			"detail": -1
 		},
 		{
-			"id": "Walls/SM_Walls_008_1m",
+			"id": "Building/Walls/SM_Walls_008_1m",
 			"layer": "Edge",
-			"cell":
-			{
+			"cell": {
 				"x": 7,
 				"y": 6
 			},
 			"rotation": 3,
-			"size":
-			{
+			"size": {
 				"x": 1,
 				"y": 1
 			},
@@ -383,16 +329,14 @@
 			"detail": -1
 		},
 		{
-			"id": "Walls/SM_Walls_008_1m",
+			"id": "Building/Walls/SM_Walls_008_1m",
 			"layer": "Edge",
-			"cell":
-			{
+			"cell": {
 				"x": 7,
 				"y": 7
 			},
 			"rotation": 3,
-			"size":
-			{
+			"size": {
 				"x": 1,
 				"y": 1
 			},
@@ -401,16 +345,14 @@
 			"detail": -1
 		},
 		{
-			"id": "Walls/SM_Walls_008_1m",
+			"id": "Building/Walls/SM_Walls_008_1m",
 			"layer": "Edge",
-			"cell":
-			{
+			"cell": {
 				"x": 7,
 				"y": 8
 			},
 			"rotation": 3,
-			"size":
-			{
+			"size": {
 				"x": 1,
 				"y": 1
 			},
@@ -419,16 +361,14 @@
 			"detail": -1
 		},
 		{
-			"id": "Walls/SM_Walls_008_1m",
+			"id": "Building/Walls/SM_Walls_008_1m",
 			"layer": "Edge",
-			"cell":
-			{
+			"cell": {
 				"x": 7,
 				"y": 9
 			},
 			"rotation": 0,
-			"size":
-			{
+			"size": {
 				"x": 1,
 				"y": 1
 			},
@@ -437,16 +377,14 @@
 			"detail": -1
 		},
 		{
-			"id": "Walls/SM_Walls_008_1m",
+			"id": "Building/Walls/SM_Walls_008_1m",
 			"layer": "Edge",
-			"cell":
-			{
+			"cell": {
 				"x": 8,
 				"y": 9
 			},
 			"rotation": 0,
-			"size":
-			{
+			"size": {
 				"x": 1,
 				"y": 1
 			},
@@ -455,16 +393,14 @@
 			"detail": -1
 		},
 		{
-			"id": "Walls/SM_Walls_008_1m",
+			"id": "Building/Walls/SM_Walls_008_1m",
 			"layer": "Edge",
-			"cell":
-			{
+			"cell": {
 				"x": 9,
 				"y": 9
 			},
 			"rotation": 0,
-			"size":
-			{
+			"size": {
 				"x": 1,
 				"y": 1
 			},
@@ -473,16 +409,14 @@
 			"detail": -1
 		},
 		{
-			"id": "Walls/SM_Walls_008_1m",
+			"id": "Building/Walls/SM_Walls_008_1m",
 			"layer": "Edge",
-			"cell":
-			{
+			"cell": {
 				"x": 10,
 				"y": 9
 			},
 			"rotation": 0,
-			"size":
-			{
+			"size": {
 				"x": 1,
 				"y": 1
 			},
@@ -491,16 +425,14 @@
 			"detail": -1
 		},
 		{
-			"id": "Walls/SM_Walls_008_1m",
+			"id": "Building/Walls/SM_Walls_008_1m",
 			"layer": "Edge",
-			"cell":
-			{
+			"cell": {
 				"x": 11,
 				"y": 9
 			},
 			"rotation": 0,
-			"size":
-			{
+			"size": {
 				"x": 1,
 				"y": 1
 			},
@@ -509,16 +441,14 @@
 			"detail": -1
 		},
 		{
-			"id": "Walls/SM_Walls_008_1m",
+			"id": "Building/Walls/SM_Walls_008_1m",
 			"layer": "Edge",
-			"cell":
-			{
+			"cell": {
 				"x": 6,
 				"y": 9
 			},
 			"rotation": 0,
-			"size":
-			{
+			"size": {
 				"x": 1,
 				"y": 1
 			},
@@ -527,16 +457,14 @@
 			"detail": -1
 		},
 		{
-			"id": "Walls/SM_Walls_008_1m",
+			"id": "Building/Walls/SM_Walls_008_1m",
 			"layer": "Edge",
-			"cell":
-			{
+			"cell": {
 				"x": 6,
 				"y": 8
 			},
 			"rotation": 1,
-			"size":
-			{
+			"size": {
 				"x": 1,
 				"y": 1
 			},
@@ -545,16 +473,14 @@
 			"detail": -1
 		},
 		{
-			"id": "Walls/SM_Walls_002",
+			"id": "Building/Walls/SM_Walls_002",
 			"layer": "Edge",
-			"cell":
-			{
+			"cell": {
 				"x": 16,
 				"y": 4
 			},
 			"rotation": 3,
-			"size":
-			{
+			"size": {
 				"x": 4,
 				"y": 1
 			},
@@ -563,16 +489,14 @@
 			"detail": -1
 		},
 		{
-			"id": "Walls/SM_Walls_002",
+			"id": "Building/Walls/SM_Walls_002",
 			"layer": "Edge",
-			"cell":
-			{
+			"cell": {
 				"x": 16,
 				"y": 0
 			},
 			"rotation": 1,
-			"size":
-			{
+			"size": {
 				"x": 4,
 				"y": 1
 			},
@@ -581,16 +505,14 @@
 			"detail": -1
 		},
 		{
-			"id": "Walls/SM_Walls_006",
+			"id": "Building/Walls/SM_Walls_006",
 			"layer": "Edge",
-			"cell":
-			{
+			"cell": {
 				"x": 3,
 				"y": 2
 			},
 			"rotation": 2,
-			"size":
-			{
+			"size": {
 				"x": 4,
 				"y": 1
 			},
@@ -599,16 +521,14 @@
 			"detail": -1
 		},
 		{
-			"id": "Walls/SM_Walls_008_3m",
+			"id": "Building/Walls/SM_Walls_008_3m",
 			"layer": "Edge",
-			"cell":
-			{
+			"cell": {
 				"x": 3,
 				"y": 2
 			},
 			"rotation": 3,
-			"size":
-			{
+			"size": {
 				"x": 3,
 				"y": 1
 			},
@@ -617,16 +537,14 @@
 			"detail": -1
 		},
 		{
-			"id": "Floors/SM_floor_004",
+			"id": "Building/Floors/SM_floor_004",
 			"layer": "Floor",
-			"cell":
-			{
+			"cell": {
 				"x": 3,
 				"y": 2
 			},
 			"rotation": 0,
-			"size":
-			{
+			"size": {
 				"x": 4,
 				"y": 4
 			},
@@ -635,16 +553,14 @@
 			"detail": -1
 		},
 		{
-			"id": "Floors/SM_floor_004",
+			"id": "Building/Floors/SM_floor_004",
 			"layer": "Floor",
-			"cell":
-			{
+			"cell": {
 				"x": 3,
 				"y": 6
 			},
 			"rotation": 0,
-			"size":
-			{
+			"size": {
 				"x": 4,
 				"y": 4
 			},
@@ -653,16 +569,14 @@
 			"detail": -1
 		},
 		{
-			"id": "Floors/SM_floor_004",
+			"id": "Building/Floors/SM_floor_004",
 			"layer": "Floor",
-			"cell":
-			{
+			"cell": {
 				"x": 7,
 				"y": 6
 			},
 			"rotation": 0,
-			"size":
-			{
+			"size": {
 				"x": 4,
 				"y": 4
 			},
@@ -671,16 +585,14 @@
 			"detail": -1
 		},
 		{
-			"id": "Floors/SM_floor_004",
+			"id": "Building/Floors/SM_floor_004",
 			"layer": "Floor",
-			"cell":
-			{
+			"cell": {
 				"x": 11,
 				"y": 6
 			},
 			"rotation": 0,
-			"size":
-			{
+			"size": {
 				"x": 4,
 				"y": 4
 			},
@@ -689,16 +601,14 @@
 			"detail": -1
 		},
 		{
-			"id": "Floors/SM_floor_004",
+			"id": "Building/Floors/SM_floor_004",
 			"layer": "Floor",
-			"cell":
-			{
+			"cell": {
 				"x": 15,
 				"y": 2
 			},
 			"rotation": 0,
-			"size":
-			{
+			"size": {
 				"x": 4,
 				"y": 4
 			},
@@ -707,16 +617,14 @@
 			"detail": -1
 		},
 		{
-			"id": "Floors/SM_floor_004",
+			"id": "Building/Floors/SM_floor_004",
 			"layer": "Floor",
-			"cell":
-			{
+			"cell": {
 				"x": 15,
 				"y": 6
 			},
 			"rotation": 0,
-			"size":
-			{
+			"size": {
 				"x": 4,
 				"y": 4
 			},

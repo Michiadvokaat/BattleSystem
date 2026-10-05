@@ -18,7 +18,7 @@ LOG_TAG = "[WallVariants]"
 CATALOG_PATH = "/Game/Environment/Catalogus"
 # Source mesh (relative to CATALOG_PATH) -> heights in cm of the variants to make.
 VARIANTS = {
-    "Walls/SM_Walls_007": [300],
+    "Building/Walls/SM_Walls_007": [300],
 }
 
 

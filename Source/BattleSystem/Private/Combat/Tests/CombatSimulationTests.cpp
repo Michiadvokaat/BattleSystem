@@ -1377,16 +1377,28 @@ namespace CombatTests
 		return Unit;
 	}
 
-	/** A level with every cell kind and three units, for the level tests. */
+	/** A 1x1 Cell piece that blocks walking and/or sight. */
+	static FCombatLevelPiece MakeBlockPiece(FIntPoint Cell, bool bBlocksWalking, bool bBlocksSight)
+	{
+		FCombatLevelPiece Piece;
+		Piece.Id = TEXT("Test/Block");
+		Piece.Layer = ECombatPieceLayer::Cell;
+		Piece.Cell = Cell;
+		Piece.bBlocksWalking = bBlocksWalking;
+		Piece.bBlocksSight = bBlocksSight;
+		return Piece;
+	}
+
+	/** A level with every kind of blocking piece and three units, for the level tests. */
 	static FCombatLevel MakeTestLevel()
 	{
 		FCombatLevel Level = FCombatLevel::MakeEmpty(TEXT("Test"), 12, 8);
-		Level.SetCell(FIntPoint(5, 1), FCombatLevel::Wall);
-		Level.SetCell(FIntPoint(5, 2), FCombatLevel::Hedge);
-		Level.SetCell(FIntPoint(5, 3), FCombatLevel::Water);
+		Level.PlacePiece(MakeBlockPiece(FIntPoint(5, 1), true, true));		// a wall
+		Level.PlacePiece(MakeBlockPiece(FIntPoint(5, 2), false, true));		// a screen: blocks sight only
+		Level.PlacePiece(MakeBlockPiece(FIntPoint(5, 3), true, false));		// a fence: blocks walking only
 		Level.Units.Add(MakeLevelUnit(TEXT("Fighter"), 0, FIntPoint(1, 1)));
 		Level.Units.Add(MakeLevelUnit(TEXT("Fighter"), 1, FIntPoint(10, 6)));
-		Level.Units.Add(MakeLevelUnit(TEXT("Fighter"), 1, FIntPoint(5, 2)));	// on the hedge: allowed
+		Level.Units.Add(MakeLevelUnit(TEXT("Fighter"), 1, FIntPoint(5, 2)));	// on the screen: allowed
 		return Level;
 	}
 
@@ -1410,22 +1422,31 @@ bool FCombatLevelFormatTest::RunTest(const FString& Parameters)
 	FCombatGridData Grid;
 	Level.ToGridData(Grid);
 	TestEqual(TEXT("Grid size"), Grid.Width * 100 + Grid.Height, 12 * 100 + 8);
-	TestTrue(TEXT("Wall blocks walking and sight"), !Grid.IsWalkable(FIntPoint(5, 1)) && Grid.BlocksSight(FIntPoint(5, 1)));
-	TestTrue(TEXT("Hedge blocks sight only"), Grid.IsWalkable(FIntPoint(5, 2)) && Grid.BlocksSight(FIntPoint(5, 2)));
-	TestTrue(TEXT("Water blocks walking only"), !Grid.IsWalkable(FIntPoint(5, 3)) && !Grid.BlocksSight(FIntPoint(5, 3)));
+	TestTrue(TEXT("A wall piece blocks walking and sight"), !Grid.IsWalkable(FIntPoint(5, 1)) && Grid.BlocksSight(FIntPoint(5, 1)));
+	TestTrue(TEXT("A screen piece blocks sight only"), Grid.IsWalkable(FIntPoint(5, 2)) && Grid.BlocksSight(FIntPoint(5, 2)));
+	TestTrue(TEXT("A fence piece blocks walking only"), !Grid.IsWalkable(FIntPoint(5, 3)) && !Grid.BlocksSight(FIntPoint(5, 3)));
 	TestTrue(TEXT("Open cells are open"), Grid.IsWalkable(FIntPoint(0, 0)) && !Grid.BlocksSight(FIntPoint(0, 0)));
 
 	FString Json;
 	TestTrue(TEXT("Writes JSON"), CombatLevels::ToJson(Level, Json));
 	FCombatLevel Loaded;
 	TestTrue(TEXT("Reads JSON"), CombatLevels::FromJson(Json, Loaded));
-	TestTrue(TEXT("Rows survive"), Loaded.Rows == Level.Rows);
+	TestEqual(TEXT("Pieces survive"), Loaded.Pieces.Num(), 3);
+	TestFalse(TEXT("No cell rows in the file"), Json.Contains(TEXT("\"rows\"")));
 	TestEqual(TEXT("Units survive"), Loaded.Units.Num(), 3);
 	TestTrue(TEXT("Unit cell survives"), Loaded.Units.Num() == 3 && Loaded.Units[1].Cell == FIntPoint(10, 6) && Loaded.Units[1].Team == 1);
 
 	Level.Resize(8, 8);
 	TestEqual(TEXT("Shrinking removes units outside"), Level.Units.Num(), 2);
-	TestEqual(TEXT("Rows are cut to the new width"), Level.Rows[0].Len(), 8);
+	Level.Resize(5, 8);
+	TestEqual(TEXT("Shrinking removes pieces outside"), Level.Pieces.Num(), 0);
+
+	// A version 3 file with cell rows loads with its rows ignored: every cell is open.
+	FCombatLevel Old;
+	TestTrue(TEXT("Reads a version 3 level"), CombatLevels::FromJson(TEXT("{\"formatVersion\":3,\"name\":\"Old\",\"width\":6,\"height\":5,\"rows\":[\"######\"],\"units\":[]}"), Old));
+	FCombatGridData OldGrid;
+	Old.ToGridData(OldGrid);
+	TestTrue(TEXT("Its wall row is ignored"), OldGrid.IsWalkable(FIntPoint(0, 0)) && !OldGrid.BlocksSight(FIntPoint(0, 0)));
 	Level.Resize(2, 100);
 	TestTrue(TEXT("Size is clamped"), Level.Width == FCombatLevel::MinSize && Level.Height == FCombatLevel::MaxSize);
 	return true;
@@ -1438,7 +1459,7 @@ bool FCombatLevelConfigTest::RunTest(const FString& Parameters)
 {
 	const UCombatUnitDefinition* Fighter = CombatTests::MakeTestDefinition();
 	FCombatLevel Level = CombatTests::MakeTestLevel();
-	Level.Units.Add(CombatTests::MakeLevelUnit(TEXT("Fighter"), 1, FIntPoint(5, 1)));		// on the wall: skipped
+	Level.Units.Add(CombatTests::MakeLevelUnit(TEXT("Fighter"), 1, FIntPoint(5, 1)));		// on the wall piece: skipped
 	Level.Units.Add(CombatTests::MakeLevelUnit(TEXT("Unknown"), 1, FIntPoint(9, 1)));		// unknown type: skipped
 	auto Resolve = [Fighter](const FString& Type) { return Type == TEXT("Fighter") ? Fighter : nullptr; };
 
@@ -1475,7 +1496,7 @@ bool FCombatLevelReplayTest::RunTest(const FString& Parameters)
 	FCombatReplay Loaded;
 	TestTrue(TEXT("Reads JSON"), CombatReplay::FromJson(Json, Loaded));
 	TestTrue(TEXT("Has the level"), Loaded.bHasLevel);
-	TestTrue(TEXT("Same rows"), Loaded.Level.Rows == Replay.Level.Rows);
+	TestEqual(TEXT("Same pieces"), Loaded.Level.Pieces.Num(), Replay.Level.Pieces.Num());
 	TestEqual(TEXT("Same units"), Loaded.Level.Units.Num(), Replay.Level.Units.Num());
 
 	const UCombatUnitDefinition* Fighter = CombatTests::MakeTestDefinition();
@@ -1721,7 +1742,7 @@ bool FCombatWaveLevelTest::RunTest(const FString& Parameters)
 	FCombatLevel Level = CombatTests::MakeTestLevel();
 	Level.Waves.AddDefaulted(3);
 	Level.Waves[0].Spawns.Add(CombatTests::MakeLevelSpawn(TEXT("Fighter"), FIntPoint(9, 1), 1.5f));
-	Level.Waves[0].Spawns.Add(CombatTests::MakeLevelSpawn(TEXT("Fighter"), FIntPoint(5, 1), 0.f));	// on the wall: skipped
+	Level.Waves[0].Spawns.Add(CombatTests::MakeLevelSpawn(TEXT("Fighter"), FIntPoint(5, 1), 0.f));	// on the wall piece: skipped
 	Level.Waves[0].Spawns.Add(CombatTests::MakeLevelSpawn(TEXT("Unknown"), FIntPoint(9, 2), 0.f));	// unknown type: skipped
 	Level.Waves[2].Spawns.Add(CombatTests::MakeLevelSpawn(TEXT("Fighter"), FIntPoint(11, 7), 0.f));	// wave 2 stays empty
 
@@ -1817,7 +1838,7 @@ bool FCombatLevelFileTest::RunTest(const FString& Parameters)
 	TestFalse(TEXT("The old file is gone"), CombatLevels::Exists(First));
 	FCombatLevel Loaded;
 	TestTrue(TEXT("The new file loads"), CombatLevels::Load(Second, Loaded));
-	TestTrue(TEXT("Same content"), Loaded.Rows == Level.Rows && Loaded.Units.Num() == Level.Units.Num());
+	TestTrue(TEXT("Same content"), Loaded.Pieces.Num() == Level.Pieces.Num() && Loaded.Units.Num() == Level.Units.Num());
 	FString Json;
 	FFileHelper::LoadFileToString(Json, *(CombatLevels::GetDirectory() / (Second + TEXT(".json"))));
 	TestTrue(TEXT("The name inside the file changed"), Json.Contains(FString::Printf(TEXT("\"%s\""), *Second)));

@@ -23,17 +23,15 @@ class UCombatUnitDefinition;
 
 BATTLESYSTEM_API DECLARE_LOG_CATEGORY_EXTERN(LogCombat, Log, All);
 
-/** LevelDesigner tools: paint a cell kind, or place units. */
+/** LevelDesigner modes: what a click in the arena places. */
 enum class ECombatDesignTool : uint8
 {
-	Wall,
-	Hedge,
-	Water,
+	/** Build Mode: a piece of the catalog (walls, floors, furniture, props). */
+	Build,
+	/** Unit Mode: units on the field from the start. */
 	Unit,
-	/** Enemies that appear during the selected wave. */
+	/** Spawn Mode: enemies that appear during the selected wave. */
 	Spawn,
-	/** A piece of the catalog (wall, floor, furniture). */
-	Piece,
 };
 
 /** What a fight is built from: a setup asset on the arena's own grid, or a level from the LevelDesigner. */
@@ -248,7 +246,7 @@ public:
 
 	/**
 	 * Spawn list edits (wave index, index in that wave's Spawns). Each selects the spawn's wave. A cell that is outside
-	 * the grid, on a wall or water, or already holds a spawn of that wave is refused (the level stays as it was).
+	 * the grid, on a blocking piece, or already holds a spawn of that wave is refused (the level stays as it was).
 	 */
 	bool SetDesignSpawn(int32 WaveIndex, int32 SpawnIndex, const FCombatLevelSpawn& Spawn);
 	/** Moves a spawn to the end of another wave's spawns. */
@@ -259,7 +257,7 @@ public:
 	bool IsMovingDesignSpawn() const { return DesignSpawnMove.IsSet(); }
 	bool IsMovingDesignSpawn(int32 WaveIndex, int32 SpawnIndex) const { return DesignSpawnMove.IsSet() && DesignSpawnMove.GetValue() == FIntPoint(WaveIndex, SpawnIndex); }
 	/**
-	 * Start unit edits from the spawn list (index in the level's Units). A cell outside the grid, on a wall or water,
+	 * Start unit edits from the spawn list (index in the level's Units). A cell outside the grid, on a blocking piece,
 	 * or holding another unit is refused. Moving works as for spawns.
 	 */
 	bool SetDesignUnit(int32 UnitIndex, const FCombatLevelUnit& Unit);
@@ -416,7 +414,9 @@ private:
 
 	bool bDesignMode = false;
 	FCombatLevel DesignLevel;
-	ECombatDesignTool DesignTool = ECombatDesignTool::Wall;
+	ECombatDesignTool DesignTool = ECombatDesignTool::Build;
+	/** Whether DesignLevel holds a level (edited before), so edit mode goes on with it. */
+	bool bHasDesignLevel = false;
 	FString DesignUnitType;
 	int32 DesignUnitTeam = 0;
 	int32 DesignWave = INDEX_NONE;

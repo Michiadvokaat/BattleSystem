@@ -1,38 +1,22 @@
 {
-	"formatVersion": 3,
+	"formatVersion": 4,
 	"name": "WallWindows",
 	"width": 40,
 	"height": 12,
 	"cellSize": 100,
-	"rows": [
-		"........................................",
-		"........................................",
-		"........................................",
-		"........................................",
-		"........................................",
-		"........................................",
-		"........................................",
-		"........................................",
-		"........................................",
-		"........................................",
-		"........................................",
-		"........................................"
-	],
 	"units": [],
 	"waves": [],
 	"pieces": [
 		{
-			"id": "Walls/SM_Walls_007_300cm",
+			"id": "Building/Walls/SM_Walls_007_300cm",
 			"layer": "Edge",
 			"slot": "",
-			"cell":
-			{
+			"cell": {
 				"x": 1,
 				"y": 2
 			},
 			"rotation": 0,
-			"size":
-			{
+			"size": {
 				"x": 4,
 				"y": 1
 			},
@@ -42,17 +26,15 @@
 			"detailGrid": 0
 		},
 		{
-			"id": "Walls/SM_Walls_007_300cm",
+			"id": "Building/Walls/SM_Walls_007_300cm",
 			"layer": "Edge",
 			"slot": "",
-			"cell":
-			{
+			"cell": {
 				"x": 5,
 				"y": 2
 			},
 			"rotation": 0,
-			"size":
-			{
+			"size": {
 				"x": 4,
 				"y": 1
 			},
@@ -62,17 +44,15 @@
 			"detailGrid": 0
 		},
 		{
-			"id": "Walls/SM_Walls_007_300cm",
+			"id": "Building/Walls/SM_Walls_007_300cm",
 			"layer": "Edge",
 			"slot": "",
-			"cell":
-			{
+			"cell": {
 				"x": 9,
 				"y": 2
 			},
 			"rotation": 0,
-			"size":
-			{
+			"size": {
 				"x": 4,
 				"y": 1
 			},
@@ -82,17 +62,15 @@
 			"detailGrid": 0
 		},
 		{
-			"id": "Walls/SM_Walls_007_300cm",
+			"id": "Building/Walls/SM_Walls_007_300cm",
 			"layer": "Edge",
 			"slot": "",
-			"cell":
-			{
+			"cell": {
 				"x": 13,
 				"y": 2
 			},
 			"rotation": 0,
-			"size":
-			{
+			"size": {
 				"x": 4,
 				"y": 1
 			},
@@ -102,17 +80,15 @@
 			"detailGrid": 0
 		},
 		{
-			"id": "Walls/SM_Walls_007_300cm",
+			"id": "Building/Walls/SM_Walls_007_300cm",
 			"layer": "Edge",
 			"slot": "",
-			"cell":
-			{
+			"cell": {
 				"x": 17,
 				"y": 2
 			},
 			"rotation": 0,
-			"size":
-			{
+			"size": {
 				"x": 4,
 				"y": 1
 			},
@@ -122,17 +98,15 @@
 			"detailGrid": 0
 		},
 		{
-			"id": "Walls/SM_Walls_007_300cm",
+			"id": "Building/Walls/SM_Walls_007_300cm",
 			"layer": "Edge",
 			"slot": "",
-			"cell":
-			{
+			"cell": {
 				"x": 21,
 				"y": 2
 			},
 			"rotation": 0,
-			"size":
-			{
+			"size": {
 				"x": 4,
 				"y": 1
 			},
@@ -142,17 +116,15 @@
 			"detailGrid": 0
 		},
 		{
-			"id": "Walls/SM_Walls_007_300cm",
+			"id": "Building/Walls/SM_Walls_007_300cm",
 			"layer": "Edge",
 			"slot": "",
-			"cell":
-			{
+			"cell": {
 				"x": 25,
 				"y": 2
 			},
 			"rotation": 0,
-			"size":
-			{
+			"size": {
 				"x": 4,
 				"y": 1
 			},
@@ -162,17 +134,15 @@
 			"detailGrid": 0
 		},
 		{
-			"id": "Walls/SM_Walls_007_300cm",
+			"id": "Building/Walls/SM_Walls_007_300cm",
 			"layer": "Edge",
 			"slot": "",
-			"cell":
-			{
+			"cell": {
 				"x": 29,
 				"y": 2
 			},
 			"rotation": 0,
-			"size":
-			{
+			"size": {
 				"x": 4,
 				"y": 1
 			},
@@ -182,17 +152,15 @@
 			"detailGrid": 0
 		},
 		{
-			"id": "Windows/SM_window_003",
+			"id": "Building/Windows/SM_window_003",
 			"layer": "Edge",
 			"slot": "Opening",
-			"cell":
-			{
+			"cell": {
 				"x": 2,
 				"y": 2
 			},
 			"rotation": 0,
-			"size":
-			{
+			"size": {
 				"x": 2,
 				"y": 1
 			},
@@ -202,17 +170,15 @@
 			"detailGrid": 0
 		},
 		{
-			"id": "Windows/SM_window_004",
+			"id": "Building/Windows/SM_window_004",
 			"layer": "Edge",
 			"slot": "Opening",
-			"cell":
-			{
+			"cell": {
 				"x": 5,
 				"y": 2
 			},
 			"rotation": 0,
-			"size":
-			{
+			"size": {
 				"x": 2,
 				"y": 1
 			},
@@ -222,17 +188,15 @@
 			"detailGrid": 0
 		},
 		{
-			"id": "Windows/SM_window_005",
+			"id": "Building/Windows/SM_window_005",
 			"layer": "Edge",
 			"slot": "Opening",
-			"cell":
-			{
+			"cell": {
 				"x": 7,
 				"y": 2
 			},
 			"rotation": 0,
-			"size":
-			{
+			"size": {
 				"x": 2,
 				"y": 1
 			},
@@ -242,17 +206,15 @@
 			"detailGrid": 0
 		},
 		{
-			"id": "Windows/SM_window_006",
+			"id": "Building/Windows/SM_window_006",
 			"layer": "Edge",
 			"slot": "Opening",
-			"cell":
-			{
+			"cell": {
 				"x": 10,
 				"y": 2
 			},
 			"rotation": 0,
-			"size":
-			{
+			"size": {
 				"x": 3,
 				"y": 1
 			},
@@ -262,17 +224,15 @@
 			"detailGrid": 0
 		},
 		{
-			"id": "Windows/SM_window_007",
+			"id": "Building/Windows/SM_window_007",
 			"layer": "Edge",
 			"slot": "Opening",
-			"cell":
-			{
+			"cell": {
 				"x": 14,
 				"y": 2
 			},
 			"rotation": 0,
-			"size":
-			{
+			"size": {
 				"x": 2,
 				"y": 1
 			},
@@ -282,17 +242,15 @@
 			"detailGrid": 0
 		},
 		{
-			"id": "Windows/SM_window_008",
+			"id": "Building/Windows/SM_window_008",
 			"layer": "Edge",
 			"slot": "Opening",
-			"cell":
-			{
+			"cell": {
 				"x": 17,
 				"y": 2
 			},
 			"rotation": 0,
-			"size":
-			{
+			"size": {
 				"x": 2,
 				"y": 1
 			},
@@ -302,17 +260,15 @@
 			"detailGrid": 0
 		},
 		{
-			"id": "Windows/SM_window_009",
+			"id": "Building/Windows/SM_window_009",
 			"layer": "Edge",
 			"slot": "Opening",
-			"cell":
-			{
+			"cell": {
 				"x": 20,
 				"y": 2
 			},
 			"rotation": 0,
-			"size":
-			{
+			"size": {
 				"x": 2,
 				"y": 1
 			},
@@ -322,17 +278,15 @@
 			"detailGrid": 0
 		},
 		{
-			"id": "Windows/SM_window_010",
+			"id": "Building/Windows/SM_window_010",
 			"layer": "Edge",
 			"slot": "Opening",
-			"cell":
-			{
+			"cell": {
 				"x": 23,
 				"y": 2
 			},
 			"rotation": 0,
-			"size":
-			{
+			"size": {
 				"x": 2,
 				"y": 1
 			},
@@ -342,17 +296,15 @@
 			"detailGrid": 0
 		},
 		{
-			"id": "Windows/SM_window_011",
+			"id": "Building/Windows/SM_window_011",
 			"layer": "Edge",
 			"slot": "Opening",
-			"cell":
-			{
+			"cell": {
 				"x": 26,
 				"y": 2
 			},
 			"rotation": 0,
-			"size":
-			{
+			"size": {
 				"x": 4,
 				"y": 1
 			},
