@@ -8,6 +8,7 @@ FCombatLevelPiece FCombatPieceDefinition::MakePiece(const FIntPoint& Cell, int32
 	FCombatLevelPiece Piece;
 	Piece.Id = Id;
 	Piece.Layer = Layer;
+	Piece.Slot = Slot;
 	Piece.Cell = Cell;
 	const int32 Steps = CombatPieces::GetRotationSteps(Layer);
 	Piece.Rotation = ((Rotation % Steps) + Steps) % Steps;

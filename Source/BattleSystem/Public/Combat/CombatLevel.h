@@ -67,6 +67,8 @@ struct BATTLESYSTEM_API FCombatLevelPiece
 	/** Catalog id, "Category/MeshName". */
 	UPROPERTY() FString Id;
 	UPROPERTY() ECombatPieceLayer Layer = ECombatPieceLayer::Cell;
+	/** Pieces only replace pieces of the same layer and slot, so a door leaf ("Leaf") and a door frame ("") share a border. */
+	UPROPERTY() FString Slot;
 	/**
 	 * Floor and Cell: the footprint's first cell (smallest X and Y). Edge: the cell after the first border, so a
 	 * horizontal piece (even rotation) runs along the border between rows Cell.Y - 1 and Cell.Y from column Cell.X on,
@@ -94,7 +96,7 @@ struct BATTLESYSTEM_API FCombatLevelPiece
 	void GetCells(TArray<FIntPoint>& OutCells) const;
 	/** Edge: the cell pairs on both sides of each border it covers; nothing for the other layers. */
 	void GetEdges(TArray<TPair<FIntPoint, FIntPoint>>& OutEdges) const;
-	/** Whether it shares a cell (Floor, Cell), a border (Edge) or a detail position (Detail) with another piece of the same layer. */
+	/** Whether it shares a cell (Floor, Cell), a border (Edge) or a detail position (Detail) with another piece of the same layer and slot. */
 	bool Overlaps(const FCombatLevelPiece& Other) const;
 };
 
@@ -163,9 +165,9 @@ struct BATTLESYSTEM_API FCombatLevel
 	int32 FindPieceAt(ECombatPieceLayer Layer, const FIntPoint& Cell) const;
 
 	/**
-	 * Index of the topmost piece under a grid-local point (eyedropper), or INDEX_NONE: the detail on the detail position
+	 * Index of the topmost piece under a grid-local point (move, erase), or INDEX_NONE: the detail on the detail position
 	 * under it, else the Cell piece of its cell, else the Edge piece on the nearest border within EdgeReach cells, else
-	 * the Floor piece.
+	 * the Floor piece. Within a layer a piece with a slot (on top, like a door leaf) comes before one without.
 	 */
 	int32 FindPieceUnder(const FVector2D& Local, float EdgeReach = 0.25f) const;
 

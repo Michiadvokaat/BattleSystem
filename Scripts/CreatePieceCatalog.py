@@ -7,9 +7,11 @@ Every static mesh in CATALOG_PATH/<Category>/ becomes a piece with id "<Category
 catalog are kept as they are (tuned in the editor); new meshes are added with defaults from their bounds:
 - Details*: detail layer (small objects on a DETAIL_GRID x DETAIL_GRID grid per cell), never block by default.
 - Floors: floor layer, footprint = size in cells, never blocks.
-- Walls, Windows, Doors thinner than THIN_LIMIT: border pieces along the long side, length in cells; Doors do not block.
+- Walls, Windows, Doors, DoorLeaves thinner than THIN_LIMIT: border pieces along the long side, length in cells;
+  Doors (frames) do not block; DoorLeaves get the slot "Leaf" (they share a border with a frame) and block.
 - Everything else: cell pieces, footprint = size in cells (at least 1); Walls block walking and sight, others walking.
-Pieces whose mesh is gone are reported, not removed. The meshes are local content, so the catalog is local too.
+Pieces whose mesh is no longer in its category folder (deleted, or moved to another category) are removed, so a moved
+mesh is not listed twice; levels that use such an id lose that piece's look until the id is changed. The meshes are local content, so the catalog is local too.
 VARIANTS adds shorter versions of border pieces ("<id>_<n>m", Size n, Scale To Fit) for openings next to doors.
 """
 
@@ -22,7 +24,9 @@ ASSET_NAME = "DA_PieceCatalog"
 CELL_SIZE = 100.0
 # Border pieces are thinner than this (cm); thicker ones fill cells (pillars, blocks).
 THIN_LIMIT = 50.0
-BORDER_CATEGORIES = ("Walls", "Windows", "Doors")
+BORDER_CATEGORIES = ("Walls", "Windows", "Doors", "DoorLeaves")
+# Category -> slot: pieces only replace pieces of the same layer and slot.
+SLOT_CATEGORIES = {"DoorLeaves": "Leaf"}
 VISUAL_ONLY_CATEGORIES = ("Doors",)
 DETAIL_PREFIX = "Details"
 DETAIL_GRID = 3
@@ -60,6 +64,7 @@ def make_definition(category, mesh):
     else:
         layer, footprint, walk, sight, yaw = unreal.CombatPieceLayer.CELL, (cells(size.x), cells(size.y)), True, category == "Walls", 0.0
 
+    definition.set_editor_property("slot", SLOT_CATEGORIES.get(category, ""))
     definition.set_editor_property("layer", layer)
     definition.set_editor_property("size", unreal.IntPoint(*footprint))
     definition.set_editor_property("blocks_walking", walk)
@@ -120,13 +125,15 @@ def main():
             if base and variant_id not in known:
                 pieces.append(make_variant(base, length))
 
-    for piece_id in sorted(known - found):
-        unreal.log_warning(f"{LOG_TAG} {piece_id} is in the catalog but its mesh is no longer in {CATALOG_PATH}; kept")
+    gone = known - found
+    for piece_id in sorted(gone):
+        unreal.log_warning(f"{LOG_TAG} {piece_id}: its mesh is no longer in {CATALOG_PATH}/<category>; removed")
+    pieces = [piece for piece in pieces if piece.get_editor_property("id") not in gone]
 
     catalog.set_editor_property("pieces", pieces)
     if not unreal.EditorAssetLibrary.save_loaded_asset(catalog, only_if_is_dirty=False):
         raise RuntimeError(f"{LOG_TAG} Could not save {catalog.get_path_name()}")
-    log(f"Saved {catalog.get_path_name()}: {len(pieces)} pieces ({len(found - known)} new)")
+    log(f"Saved {catalog.get_path_name()}: {len(pieces)} pieces ({len(found - known)} new, {len(gone)} removed)")
 
 
 main()

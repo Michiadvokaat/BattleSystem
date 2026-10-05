@@ -583,7 +583,7 @@
 			"detail": -1
 		},
 		{
-			"id": "Doors/SM_door_009",
+			"id": "Doors/SM_door_006",
 			"layer": "Edge",
 			"cell": {
 				"x": 14,
@@ -596,7 +596,8 @@
 			},
 			"bBlocksWalking": false,
 			"bBlocksSight": false,
-			"detail": -1
+			"detail": -1,
+			"slot": ""
 		},
 		{
 			"id": "Walls/SM_Walls_008_2m",

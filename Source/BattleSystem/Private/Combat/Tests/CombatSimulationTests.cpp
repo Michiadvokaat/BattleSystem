@@ -2387,4 +2387,38 @@ bool FCombatClearanceDoorTest::RunTest(const FString& Parameters)
 	return true;
 }
 
+IMPLEMENT_SIMPLE_AUTOMATION_TEST(FCombatPieceSlotsTest, "BattleSystem.Combat.PieceSlots",
+	EAutomationTestFlags::EditorContext | EAutomationTestFlags::ProductFilter)
+
+bool FCombatPieceSlotsTest::RunTest(const FString& Parameters)
+{
+	FCombatPieceDefinition Frame;
+	Frame.Id = TEXT("Doors/Frame");
+	Frame.Layer = ECombatPieceLayer::Edge;
+	Frame.bBlocksWalking = false;
+	FCombatPieceDefinition Leaf = Frame;
+	Leaf.Id = TEXT("DoorLeaves/Leaf");
+	Leaf.Slot = TEXT("Leaf");
+	Leaf.bBlocksWalking = true;
+	Leaf.bBlocksSight = true;
+	FCombatPieceDefinition OtherLeaf = Leaf;
+	OtherLeaf.Id = TEXT("DoorLeaves/OtherLeaf");
+
+	FCombatLevel Level = FCombatLevel::MakeEmpty(TEXT("Slots"), 6, 6);
+	Level.PlacePiece(Frame.MakePiece(FIntPoint(2, 3), 1));
+	TestTrue(TEXT("A leaf goes on the frame's border"), Level.PlacePiece(Leaf.MakePiece(FIntPoint(2, 3), 1)) && Level.Pieces.Num() == 2);
+	TestTrue(TEXT("Another leaf replaces the leaf, not the frame"), Level.PlacePiece(OtherLeaf.MakePiece(FIntPoint(2, 3), 1)) && Level.Pieces.Num() == 2
+		&& Level.Pieces[0].Id == Frame.Id && Level.Pieces[1].Id == OtherLeaf.Id);
+
+	FCombatGridData Grid;
+	Level.ToGridData(Grid);
+	TestTrue(TEXT("The closed door blocks the border"), Grid.HasEdgeWall(FIntPoint(1, 3), FIntPoint(2, 3)));
+	TestEqual(TEXT("Picking the border takes the leaf first"), Level.FindPieceUnder(FVector2D(205.0, 350.0)), 1);
+	Level.Pieces.RemoveAt(1);
+	Level.ToGridData(Grid);
+	TestFalse(TEXT("Without the leaf the frame is an opening"), Grid.HasEdgeWall(FIntPoint(1, 3), FIntPoint(2, 3)));
+	TestEqual(TEXT("... and picking takes the frame"), Level.FindPieceUnder(FVector2D(205.0, 350.0)), 0);
+	return true;
+}
+
 #endif // WITH_DEV_AUTOMATION_TESTS

@@ -30,6 +30,13 @@ struct BATTLESYSTEM_API FCombatPieceDefinition
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Piece")
 	ECombatPieceLayer Layer = ECombatPieceLayer::Cell;
 
+	/**
+	 * Pieces only replace pieces of the same layer and slot. Empty for most; "Leaf" for door leaves, so a leaf and a
+	 * frame share a border (the script sets it per category).
+	 */
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Piece")
+	FString Slot;
+
 	/** Footprint in cells before rotation; Edge: X = the number of borders it covers. */
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Piece", meta = (ClampMin = 1))
 	FIntPoint Size = FIntPoint(1, 1);

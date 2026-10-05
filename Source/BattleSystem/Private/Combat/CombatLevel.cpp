@@ -155,7 +155,7 @@ void FCombatLevelPiece::GetEdges(TArray<TPair<FIntPoint, FIntPoint>>& OutEdges) 
 
 bool FCombatLevelPiece::Overlaps(const FCombatLevelPiece& Other) const
 {
-	if (Layer != Other.Layer)
+	if (Layer != Other.Layer || Slot != Other.Slot)
 	{
 		return false;
 	}
@@ -246,7 +246,30 @@ int32 FCombatLevel::FindPieceUnder(const FVector2D& Local, float EdgeReach) cons
 		}
 	}
 
-	const int32 CellPiece = FindPieceAt(ECombatPieceLayer::Cell, Cell);
+	// Of the pieces that match, one with a slot (on top) wins, else the first one.
+	auto Topmost = [this](TFunctionRef<bool(const FCombatLevelPiece&)> Matches)
+	{
+		int32 Found = INDEX_NONE;
+		for (int32 Index = 0; Index < Pieces.Num(); ++Index)
+		{
+			if (Matches(Pieces[Index]))
+			{
+				if (!Pieces[Index].Slot.IsEmpty())
+				{
+					return Index;
+				}
+				Found = Found == INDEX_NONE ? Index : Found;
+			}
+		}
+		return Found;
+	};
+
+	TArray<FIntPoint> Covered;
+	const int32 CellPiece = Topmost([&Cell, &Covered](const FCombatLevelPiece& Piece)
+	{
+		Piece.GetCells(Covered);
+		return Piece.Layer == ECombatPieceLayer::Cell && Covered.Contains(Cell);
+	});
 	if (CellPiece != INDEX_NONE)
 	{
 		return CellPiece;
@@ -269,13 +292,14 @@ int32 FCombatLevel::FindPieceUnder(const FVector2D& Local, float EdgeReach) cons
 	if (!Borders.IsEmpty())
 	{
 		TArray<TPair<FIntPoint, FIntPoint>> Edges;
-		for (int32 Index = 0; Index < Pieces.Num(); ++Index)
+		const int32 EdgePiece = Topmost([&Borders, &Edges](const FCombatLevelPiece& Piece)
 		{
-			Pieces[Index].GetEdges(Edges);
-			if (Edges.Contains(Borders[0]))
-			{
-				return Index;
-			}
+			Piece.GetEdges(Edges);
+			return Edges.Contains(Borders[0]);
+		});
+		if (EdgePiece != INDEX_NONE)
+		{
+			return EdgePiece;
 		}
 	}
 
