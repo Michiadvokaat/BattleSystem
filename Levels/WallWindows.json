@@ -1,5 +1,5 @@
 {
-	"formatVersion": 7,
+	"formatVersion": 8,
 	"name": "WallWindows",
 	"width": 40,
 	"height": 12,
@@ -13,7 +13,8 @@
 				"x": 9,
 				"y": 3
 			},
-			"rotation": 2
+			"position": 4,
+			"rotation": 8
 		},
 		{
 			"type": "DA_Boogschutter",
@@ -23,7 +24,8 @@
 				"x": 10,
 				"y": 4
 			},
-			"rotation": 4
+			"position": 4,
+			"rotation": 16
 		},
 		{
 			"type": "DA_Krijger",
@@ -33,7 +35,96 @@
 				"x": 9,
 				"y": 5
 			},
-			"rotation": 5
+			"position": 4,
+			"rotation": 20
+		},
+		{
+			"type": "DA_Boogschutter",
+			"team": 0,
+			"cell":
+			{
+				"x": 10,
+				"y": 4
+			},
+			"position": 2,
+			"rotation": 18
+		},
+		{
+			"type": "DA_Boogschutter",
+			"team": 0,
+			"cell":
+			{
+				"x": 9,
+				"y": 3
+			},
+			"position": 8,
+			"rotation": 18
+		},
+		{
+			"type": "DA_Krijger",
+			"team": 0,
+			"cell":
+			{
+				"x": 10,
+				"y": 4
+			},
+			"position": 1,
+			"rotation": 18
+		},
+		{
+			"type": "DA_Krijger",
+			"team": 0,
+			"cell":
+			{
+				"x": 10,
+				"y": 5
+			},
+			"position": 2,
+			"rotation": 18
+		},
+		{
+			"type": "DA_Krijger",
+			"team": 0,
+			"cell":
+			{
+				"x": 11,
+				"y": 5
+			},
+			"position": 3,
+			"rotation": 18
+		},
+		{
+			"type": "DA_Tank",
+			"team": 0,
+			"cell":
+			{
+				"x": 10,
+				"y": 4
+			},
+			"position": 5,
+			"rotation": 18
+		},
+		{
+			"type": "DA_Tank",
+			"team": 0,
+			"cell":
+			{
+				"x": 10,
+				"y": 4
+			},
+			"position": 7,
+			"rotation": 18
+		},
+		{
+			"type": "DA_Tank",
+			"team": 0,
+			"cell":
+			{
+				"x": 10,
+				"y": 4
+			},
+			"position": 8,
+			"rotation": 18
 		}
 	],
 	"waves": [],
