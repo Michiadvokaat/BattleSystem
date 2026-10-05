@@ -1,6 +1,8 @@
 // Copyright Epic Games, Inc. All Rights Reserved.
 
 #include "Misc/AutomationTest.h"
+#include "Animation/AnimMontage.h"
+#include "Combat/CombatAnimation.h"
 #include "Combat/CombatAppearance.h"
 #include "Combat/CombatBatch.h"
 #include "Combat/CombatCamera.h"
@@ -10,6 +12,7 @@
 #include "Combat/CombatSimulation.h"
 #include "Combat/CombatTags.h"
 #include "Combat/CombatUnitDefinition.h"
+#include "Components/SkeletalMeshComponent.h"
 #include "Engine/SkeletalMesh.h"
 #include "Misc/FileHelper.h"
 #include "UObject/Package.h"
@@ -1903,6 +1906,45 @@ bool FCombatCameraMathTest::RunTest(const FString& Parameters)
 	TestTrue(TEXT("At the right point"), Hit.Equals(FVector(400.0, 0.0, 100.0), 0.01));
 	TestFalse(TEXT("A ray up misses"), CombatCamera::RayToPlane(FVector(0.0, 0.0, 500.0), FVector(0.0, 0.0, 1.0), 100.0, Hit));
 	TestFalse(TEXT("A level ray misses"), CombatCamera::RayToPlane(FVector(0.0, 0.0, 500.0), FVector(1.0, 0.0, 0.0), 100.0, Hit));
+	return true;
+}
+
+IMPLEMENT_SIMPLE_AUTOMATION_TEST(FCombatAnimSetTest, "BattleSystem.Combat.AnimSet",
+	EAutomationTestFlags::EditorContext | EAutomationTestFlags::ProductFilter)
+
+bool FCombatAnimSetTest::RunTest(const FString& Parameters)
+{
+	// Empty transient montages: only their identity is compared.
+	UAnimMontage* Generic = NewObject<UAnimMontage>(GetTransientPackage());
+	UAnimMontage* Throw = NewObject<UAnimMontage>(GetTransientPackage());
+	UCombatAnimSet* Set = NewObject<UCombatAnimSet>(GetTransientPackage());
+	Set->Actions.Add({ CombatTags::Anim, Generic });
+	Set->Actions.Add({ CombatTags::Anim_Throw, Throw });
+	Set->Actions.Add({ CombatTags::Attack_Melee, nullptr });
+
+	TestTrue(TEXT("An exact entry wins over its parent"), Set->FindMontage(CombatTags::Anim_Throw) == Throw);
+	TestTrue(TEXT("A tag without an entry uses its nearest parent"), Set->FindMontage(CombatTags::Anim_Push) == Generic);
+	TestTrue(TEXT("An entry without a montage counts as none"), Set->FindMontage(CombatTags::Attack_Melee) == nullptr);
+	TestTrue(TEXT("No entry, no montage"), Set->FindMontage(CombatTags::Attack_Ranged) == nullptr);
+	TestTrue(TEXT("An empty tag has no montage"), Set->FindMontage(FGameplayTag()) == nullptr);
+
+	Set->MinPlayRate = 0.25f;
+	Set->MaxPlayRate = 4.f;
+	TestEqual(TEXT("Impact at 0.6 s, hit after 0.3 s: twice as fast"), Set->GetPlayRateForImpact(0.6f, 0.3f), 2.f);
+	TestEqual(TEXT("Impact at 0.2 s, hit after 0.4 s: half as fast"), Set->GetPlayRateForImpact(0.2f, 0.4f), 0.5f);
+	TestEqual(TEXT("Clamped to MaxPlayRate"), Set->GetPlayRateForImpact(2.f, 0.1f), 4.f);
+	TestEqual(TEXT("Clamped to MinPlayRate"), Set->GetPlayRateForImpact(0.1f, 2.f), 0.25f);
+	TestEqual(TEXT("Without an Impact notify: normal speed"), Set->GetPlayRateForImpact(-1.f, 0.3f), 1.f);
+	TestEqual(TEXT("Without a windup: normal speed"), Set->GetPlayRateForImpact(0.5f, 0.f), 1.f);
+	TestTrue(TEXT("A montage without notifies has no impact time"), UCombatAnimSet::FindImpactTime(Throw) < 0.f);
+
+	// Without a blend space (or without an axis named Speed) the speed goes on X.
+	// Anim instances must live in a skeletal mesh component.
+	UCombatAnimInstance* Instance = NewObject<UCombatAnimInstance>(NewObject<USkeletalMeshComponent>(GetTransientPackage()));
+	TestEqual(TEXT("No blend space: speed axis X"), UCombatAnimInstance::FindSpeedAxis(nullptr), 0);
+	Instance->SetLocomotion(nullptr);
+	Instance->SetSpeed(220.f);
+	TestTrue(TEXT("Speed on X, Y stays 0"), Instance->Speed == 220.f && Instance->LocomotionX == 220.f && Instance->LocomotionY == 0.f);
 	return true;
 }
 

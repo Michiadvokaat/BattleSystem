@@ -375,7 +375,9 @@ void UCombatSubsystem::DispatchEvents()
 			if (ACombatUnitActor* Actor = UnitActors[Event.SourceId])
 			{
 				// Area attacks have no target: no lunge direction.
-				Actor->OnAttack(Event.TargetId != INDEX_NONE ? SimToWorld(Units[Event.TargetId].Position) : Actor->GetActorLocation());
+				const FCombatAttackStats& Attack = Units[Event.SourceId].Stats.GetAttack(Event.AttackIndex);
+				Actor->OnAttack(Event.TargetId != INDEX_NONE ? SimToWorld(Units[Event.TargetId].Position) : Actor->GetActorLocation(),
+					GetAttackAnimationTag(Event.SourceId, Event.AttackIndex), static_cast<float>(Attack.WindupTicks) / FMath::Max(CurrentSettings.TickRate, 1));
 			}
 			break;
 		case ECombatEventType::Hit:
@@ -496,6 +498,7 @@ void UCombatSubsystem::UpdateActors(float Alpha)
 		Actor->SetHealth(Unit.Stats.MaxHP > 0.f ? Unit.HP / Unit.Stats.MaxHP : 0.f);
 
 		Actor->SetStatusEffects(GetStatusDisplays(Unit));
+		Actor->SetAnimationState(Unit.Velocity.Size(), bPaused ? 0.f : TimeScale);
 		if (Actor->HasAppearanceOverrides())
 		{
 			FGameplayTagContainer Tags = Unit.Stats.Tags;
@@ -851,6 +854,22 @@ void UCombatSubsystem::HandleArenaCancel()
 const UCombatUnitDefinition* UCombatSubsystem::GetUnitDefinition(int32 UnitId) const
 {
 	return UnitDefinitions.IsValidIndex(UnitId) ? UnitDefinitions[UnitId].Get() : nullptr;
+}
+
+FGameplayTag UCombatSubsystem::GetAttackAnimationTag(int32 UnitId, int32 AttackIndex) const
+{
+	const FCombatUnitStats& Stats = Simulation->GetUnits()[UnitId].Stats;
+	const FCombatAttackStats& Attack = Stats.GetAttack(AttackIndex);
+	if (const UCombatUnitDefinition* Definition = GetUnitDefinition(UnitId))
+	{
+		// Player abilities come after the attacks; SourceIndex counts within their own list.
+		const TArray<FCombatAttackDefinition>& Definitions = AttackIndex < Stats.Attacks.Num() ? Definition->Attacks : Definition->PlayerAbilities;
+		if (Definitions.IsValidIndex(Attack.SourceIndex) && Definitions[Attack.SourceIndex].AnimationTag.IsValid())
+		{
+			return Definitions[Attack.SourceIndex].AnimationTag;
+		}
+	}
+	return Attack.Type;
 }
 
 ACombatUnitActor* UCombatSubsystem::GetUnitActor(int32 UnitId) const

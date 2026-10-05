@@ -106,6 +106,10 @@ struct FCombatAttackDefinition
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Attack", meta = (Categories = "Cue"))
 	FGameplayTag ImpactCue;
 
+	/** Presentation: the montage tag in the look's UCombatAnimSet (Anim.Throw). Empty = the attack type (Attack.Melee). */
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Attack", meta = (Categories = "Anim"))
+	FGameplayTag AnimationTag;
+
 	/** Attack.AoE: the shape. Range is how far the target may be to start the attack (not used by CircleAroundSelf). */
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Attack|Area")
 	ECombatAreaShape AreaShape = ECombatAreaShape::CircleAtTarget;

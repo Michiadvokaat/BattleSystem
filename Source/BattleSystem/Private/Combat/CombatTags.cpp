@@ -24,6 +24,13 @@ namespace CombatTags
 	UE_DEFINE_GAMEPLAY_TAG_COMMENT(Cue_Rally, "Cue.Rally", "Rally aura.");
 	UE_DEFINE_GAMEPLAY_TAG_COMMENT(Cue_Taunt, "Cue.Taunt", "Taunt.");
 
+	UE_DEFINE_GAMEPLAY_TAG_COMMENT(Anim, "Anim", "Animation actions: UCombatAnimSet maps them to montages (presentation only).");
+	UE_DEFINE_GAMEPLAY_TAG_COMMENT(Anim_Hit, "Anim.Hit", "Hit reaction.");
+	UE_DEFINE_GAMEPLAY_TAG_COMMENT(Anim_Death, "Anim.Death", "Death; the last pose is held.");
+	UE_DEFINE_GAMEPLAY_TAG_COMMENT(Anim_Throw, "Anim.Throw", "Throwing.");
+	UE_DEFINE_GAMEPLAY_TAG_COMMENT(Anim_Push, "Anim.Push", "Pushing or shoving.");
+	UE_DEFINE_GAMEPLAY_TAG_COMMENT(Anim_Punch, "Anim.Punch", "Punching or striking.");
+
 	UE_DEFINE_GAMEPLAY_TAG_COMMENT(Slot, "Slot", "Body part slots of a UCombatAppearance (presentation only).");
 	UE_DEFINE_GAMEPLAY_TAG_COMMENT(Slot_Body, "Slot.Body", "The body (skin, head).");
 	UE_DEFINE_GAMEPLAY_TAG_COMMENT(Slot_Face, "Slot.Face", "Face (expression).");

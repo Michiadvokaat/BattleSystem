@@ -9,6 +9,9 @@
 
 class SCombatHealthBar;
 class SCombatStatusIcons;
+class UAnimMontage;
+class UCombatAnimInstance;
+class UCombatAnimSet;
 class UCombatAppearance;
 class USkeletalMesh;
 class USkeletalMeshComponent;
@@ -64,10 +67,20 @@ public:
 	UFUNCTION(BlueprintCallable, Category = "Combat|Appearance")
 	bool SetSlotMesh(FGameplayTag SlotTag, USkeletalMesh* Mesh);
 
+	/**
+	 * Called every frame: the simulation speed (cm/s) for locomotion, and the animation rate (the fight's time scale,
+	 * 0 while paused). Only does something for a look with an AnimSet.
+	 */
+	virtual void SetAnimationState(float MoveSpeed, float RateScale);
+
 	/** Called every frame with the interpolated location and the direction to face (may be zero). */
 	virtual void UpdatePresentation(const FVector& InLocation, const FVector& FacingDirection);
 
-	virtual void OnAttack(const FVector& TargetLocation);
+	/**
+	 * An attack starts. AnimationTag picks the montage of the look's UCombatAnimSet; WindupSeconds (simulation time)
+	 * is when it hits, where the montage's Impact notify is put. Without a montage the body lunges.
+	 */
+	virtual void OnAttack(const FVector& TargetLocation, FGameplayTag AnimationTag, float WindupSeconds);
 	virtual void OnHit(float Damage);
 	virtual void OnDeath();
 	/** Health as a fraction of max HP (0..1), shown by the health bar. */
@@ -184,6 +197,25 @@ private:
 
 	UPROPERTY(Transient)
 	TObjectPtr<const UCombatAppearance> Appearance;
+
+	/** The look's AnimSet and the body's anim instance; null without animations. */
+	UPROPERTY(Transient)
+	TObjectPtr<const UCombatAnimSet> AnimSet;
+
+	UPROPERTY(Transient)
+	TObjectPtr<UCombatAnimInstance> AnimInstance;
+
+	/** The attack montage in progress: a hit reaction does not interrupt it. */
+	UPROPERTY(Transient)
+	TObjectPtr<UAnimMontage> AttackMontage;
+
+	/** Animation rate from SetAnimationState; scales turning and idle breaks too. */
+	float AnimRateScale = 1.f;
+	/** Seconds (animation time) standing still without a montage, and when the next idle break plays. */
+	float IdleTime = 0.f;
+	float NextIdleBreak = 0.f;
+	/** Picks idle breaks and their intervals; seeded per unit like the look. */
+	FRandomStream IdleStream;
 
 	/** Swappable slots, parallel arrays: tag, component and the mesh shown when no override is active. */
 	TArray<FGameplayTag> SwappableSlotTags;

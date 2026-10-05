@@ -1,8 +1,11 @@
 // Copyright Epic Games, Inc. All Rights Reserved.
 
 #include "Combat/CombatUnitActor.h"
+#include "Combat/CombatAnimation.h"
 #include "Combat/CombatAppearance.h"
 #include "Combat/CombatSubsystem.h"
+#include "Combat/CombatTags.h"
+#include "Animation/AnimMontage.h"
 #include "Components/WidgetComponent.h"
 #include "SCombatUnitWidgets.h"
 #include "Components/SkeletalMeshComponent.h"
@@ -12,6 +15,7 @@
 #include "Engine/StaticMesh.h"
 #include "Materials/MaterialInstanceDynamic.h"
 #include "Materials/MaterialInterface.h"
+#include "TimerManager.h"
 #include "UObject/ConstructorHelpers.h"
 
 ACombatUnitActor::ACombatUnitActor()
@@ -189,9 +193,17 @@ void ACombatUnitActor::InitAppearance(const UCombatAppearance* InAppearance, int
 	}
 	CharacterMesh->SetRelativeRotation(InAppearance->MeshRotation);
 	CharacterMesh->SetRelativeScale3D(InAppearance->GetMeshScale());
-	if (InAppearance->AnimClass)
+	AnimSet = InAppearance->AnimSet;
+	if (AnimSet && AnimSet->AnimClass)
 	{
-		CharacterMesh->SetAnimInstanceClass(InAppearance->AnimClass);
+		CharacterMesh->SetAnimInstanceClass(AnimSet->AnimClass);
+		AnimInstance = Cast<UCombatAnimInstance>(CharacterMesh->GetAnimInstance());
+		if (AnimInstance)
+		{
+			AnimInstance->SetLocomotion(AnimSet->Locomotion);
+		}
+		IdleStream.Initialize(Seed);
+		NextIdleBreak = IdleStream.FRandRange(AnimSet->MinIdleBreakInterval, AnimSet->MaxIdleBreakInterval);
 	}
 	CharacterMesh->SetVisibility(true);
 	BodyMesh->SetVisibility(false);
@@ -370,6 +382,38 @@ void ACombatUnitActor::SetStatusEffects(const TArray<FCombatStatusDisplay>& Icon
 	}
 }
 
+void ACombatUnitActor::SetAnimationState(float MoveSpeed, float RateScale)
+{
+	AnimRateScale = RateScale;
+	if (!AnimInstance)
+	{
+		return;
+	}
+	AnimInstance->SetSpeed(MoveSpeed);
+	// The parts follow the body's pose, so the body's rate is enough.
+	CharacterMesh->GlobalAnimRateScale = RateScale;
+
+	if (AnimSet->IdleBreaks.IsEmpty())
+	{
+		return;
+	}
+	if (MoveSpeed > 1.f || AnimInstance->IsAnyMontagePlaying())
+	{
+		IdleTime = 0.f;
+		return;
+	}
+	IdleTime += GetWorld()->GetDeltaSeconds() * RateScale;
+	if (IdleTime >= NextIdleBreak)
+	{
+		if (UAnimMontage* IdleBreak = AnimSet->IdleBreaks[IdleStream.RandHelper(AnimSet->IdleBreaks.Num())])
+		{
+			AnimInstance->Montage_Play(IdleBreak);
+		}
+		IdleTime = 0.f;
+		NextIdleBreak = IdleStream.FRandRange(AnimSet->MinIdleBreakInterval, AnimSet->MaxIdleBreakInterval);
+	}
+}
+
 void ACombatUnitActor::UpdatePresentation(const FVector& InLocation, const FVector& FacingDirection)
 {
 	const double Now = GetWorld()->GetTimeSeconds();
@@ -391,7 +435,12 @@ void ACombatUnitActor::UpdatePresentation(const FVector& InLocation, const FVect
 	SetActorLocation(InLocation + LungeOffset);
 	if (!FacingDirection.IsNearlyZero())
 	{
-		SetActorRotation(FacingDirection.Rotation());
+		// An animated figure turns at TurnRate (in animation time); the placeholder turns at once.
+		const FRotator Target = FacingDirection.Rotation();
+		const float TurnRate = AnimSet ? AnimSet->TurnRate : 0.f;
+		SetActorRotation(TurnRate > 0.f
+			? FMath::RInterpConstantTo(GetActorRotation(), Target, GetWorld()->GetDeltaSeconds() * AnimRateScale, TurnRate)
+			: Target);
 	}
 
 	const bool bShouldFlash = HitFlashStartTime >= 0.0 && Now - HitFlashStartTime < HitFlashDuration;
@@ -402,16 +451,35 @@ void ACombatUnitActor::UpdatePresentation(const FVector& InLocation, const FVect
 	}
 }
 
-void ACombatUnitActor::OnAttack(const FVector& TargetLocation)
+void ACombatUnitActor::OnAttack(const FVector& TargetLocation, FGameplayTag AnimationTag, float WindupSeconds)
 {
-	LungeDirection = (TargetLocation - GetActorLocation()).GetSafeNormal2D();
-	LungeStartTime = GetWorld()->GetTimeSeconds();
+	UAnimMontage* Montage = AnimInstance ? AnimSet->FindMontage(AnimationTag) : nullptr;
+	if (Montage)
+	{
+		// Faster or slower, so the montage's Impact notify comes when the simulation hits.
+		AnimInstance->Montage_Play(Montage, AnimSet->GetPlayRateForImpact(UCombatAnimSet::FindImpactTime(Montage), WindupSeconds));
+		AttackMontage = Montage;
+		IdleTime = 0.f;
+	}
+	else
+	{
+		LungeDirection = (TargetLocation - GetActorLocation()).GetSafeNormal2D();
+		LungeStartTime = GetWorld()->GetTimeSeconds();
+	}
 	ReceiveUnitAttack(TargetLocation);
 }
 
 void ACombatUnitActor::OnHit(float Damage)
 {
 	HitFlashStartTime = GetWorld()->GetTimeSeconds();
+	// A hit reaction never cuts off an attack or the death.
+	if (AnimInstance && !AnimInstance->bDead && !(AttackMontage && AnimInstance->Montage_IsPlaying(AttackMontage)))
+	{
+		if (UAnimMontage* HitMontage = AnimSet->FindMontage(CombatTags::Anim_Hit))
+		{
+			AnimInstance->Montage_Play(HitMontage);
+		}
+	}
 	DrawDebugString(GetWorld(), GetActorLocation() + FVector(0.0, 0.0, VisualHeight + 30.0),
 		FString::Printf(TEXT("-%.0f"), Damage), nullptr, FColor::Yellow, DamageTextDuration, true);
 	ReceiveUnitHit(Damage);
@@ -419,6 +487,22 @@ void ACombatUnitActor::OnHit(float Damage)
 
 void ACombatUnitActor::OnDeath()
 {
+	UAnimMontage* DeathMontage = AnimInstance ? AnimSet->FindMontage(CombatTags::Anim_Death) : nullptr;
+	if (DeathMontage)
+	{
+		// The figure falls and stays lying for CorpseDuration; its widgets and markers go at once.
+		HealthBarWidget->SetVisibility(false);
+		StatusWidget->SetVisibility(false);
+		SetSelected(false);
+		SetMoveTarget(false, FVector::ZeroVector);
+		AnimInstance->PlayDeath(DeathMontage);
+		const float HideDelay = DeathMontage->GetPlayLength() + AnimSet->CorpseDuration;
+		FTimerHandle HideTimer;
+		GetWorldTimerManager().SetTimer(HideTimer, FTimerDelegate::CreateWeakLambda(this, [this]() { SetActorHiddenInGame(true); }), HideDelay, false);
+		ReceiveUnitDeath();
+		return;
+	}
+
 	DrawDebugString(GetWorld(), GetActorLocation() + FVector(0.0, 0.0, VisualHeight * 0.5),
 		TEXT("X"), nullptr, FColor::Red, DamageTextDuration * 2.f, true);
 	SetActorHiddenInGame(true);

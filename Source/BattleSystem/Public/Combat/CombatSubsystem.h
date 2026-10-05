@@ -284,6 +284,8 @@ private:
 	/** Shows the source's grid in the arena: a level (blocks, resized floor, fitted camera) or the arena's own. */
 	void ShowSourceInArena(const FCombatFightSource& Source);
 	/** Moves the view camera straight above the shown grid, high enough to see all of it. */
+	/** The montage tag of a unit's attack: the definition's AnimationTag, else the attack type. */
+	FGameplayTag GetAttackAnimationTag(int32 UnitId, int32 AttackIndex) const;
 	void FitCameraToShownGrid();
 	void RestoreCamera();
 	/** The overview: fitted top view for a level (bLevel), else the map's own camera. Remembers which one it showed. */

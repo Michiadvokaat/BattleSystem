@@ -8,7 +8,7 @@
 #include "Subsystems/WorldSubsystem.h"
 #include "CombatAppearance.generated.h"
 
-class UAnimInstance;
+class UCombatAnimSet;
 class USkeletalMesh;
 class UStaticMesh;
 
@@ -95,9 +95,9 @@ public:
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Parts")
 	TArray<FCombatAppearanceOverride> Overrides;
 
-	/** Animation Blueprint for the body. Empty = the reference pose. */
+	/** Animations for this look's skeleton (AnimBP, locomotion, montages). Empty = the reference pose. */
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Animation")
-	TSubclassOf<UAnimInstance> AnimClass;
+	TObjectPtr<UCombatAnimSet> AnimSet;
 
 	/** Size of the whole figure. */
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Shape", meta = (ClampMin = 0.05))

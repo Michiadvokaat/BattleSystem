@@ -1,0 +1,140 @@
+// Copyright Epic Games, Inc. All Rights Reserved.
+
+#pragma once
+
+#include "CoreMinimal.h"
+#include "Animation/AnimInstance.h"
+#include "Engine/DataAsset.h"
+#include "GameplayTagContainer.h"
+#include "CombatAnimation.generated.h"
+
+class UAnimMontage;
+class UBlendSpace;
+class UCombatAnimInstance;
+
+/** A montage for an action: an attack, a hit reaction, the death. */
+USTRUCT(BlueprintType)
+struct FCombatAnimAction
+{
+	GENERATED_BODY()
+
+	/**
+	 * Anim.Hit, Anim.Death, an attack's AnimationTag (Anim.Throw), or an attack type (Attack.Melee) for attacks
+	 * without an AnimationTag. A tag without an entry uses the entry of its nearest parent tag.
+	 */
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Action")
+	FGameplayTag Tag;
+
+	/** Played in the AnimBP's DefaultSlot. In an attack, the notify "Impact" is lined up with the simulation's hit. */
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Action")
+	TObjectPtr<UAnimMontage> Montage;
+};
+
+/**
+ * The animations of one skeleton: the AnimBP, locomotion and the montages per action. A UCombatAppearance points to
+ * it, so all looks on the same skeleton share one set. Presentation only.
+ */
+UCLASS(BlueprintType)
+class BATTLESYSTEM_API UCombatAnimSet : public UPrimaryDataAsset
+{
+	GENERATED_BODY()
+
+public:
+	/** Animation Blueprint with UCombatAnimInstance as parent (Locomotion by Speed, then the DefaultSlot). */
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Animation")
+	TSubclassOf<UCombatAnimInstance> AnimClass;
+
+	/** Idle to walk to run, by speed in cm/s. Passed to the AnimBP as Locomotion. */
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Animation")
+	TObjectPtr<UBlendSpace> Locomotion;
+
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Animation")
+	TArray<FCombatAnimAction> Actions;
+
+	/** Played now and then while the unit stands still and plays nothing else. */
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Idle")
+	TArray<TObjectPtr<UAnimMontage>> IdleBreaks;
+
+	/** Time standing still before an idle break: random between these. */
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Idle", meta = (ClampMin = 0, Units = "s"))
+	float MinIdleBreakInterval = 6.f;
+
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Idle", meta = (ClampMin = 0, Units = "s"))
+	float MaxIdleBreakInterval = 15.f;
+
+	/** How fast the figure turns to a new facing; 0 = at once. */
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Movement", meta = (ClampMin = 0, Units = "deg"))
+	float TurnRate = 720.f;
+
+	/** How long a dead figure stays lying after its death montage before it disappears. */
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Death", meta = (ClampMin = 0, Units = "s"))
+	float CorpseDuration = 4.f;
+
+	/** Limits on the speed-up or slow-down that lines an attack's Impact up with the hit. */
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Timing", meta = (ClampMin = 0.01))
+	float MinPlayRate = 0.25f;
+
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Timing", meta = (ClampMin = 0.01))
+	float MaxPlayRate = 4.f;
+
+	/** The montage for a tag: an exact entry, else the entry of the nearest parent tag; nullptr if none. */
+	UAnimMontage* FindMontage(FGameplayTag Tag) const;
+
+	/** Play rate that puts a notify at ImpactTime (montage seconds) at WindupSeconds; 1 without either. Clamped. */
+	float GetPlayRateForImpact(float ImpactTime, float WindupSeconds) const;
+
+	/** Time in the montage of its first notify named "Impact"; negative if it has none. */
+	static float FindImpactTime(const UAnimMontage* Montage);
+};
+
+/**
+ * Parent class for the units' Animation Blueprints. ACombatUnitActor fills the variables every frame; the AnimBP
+ * only plays Locomotion at (LocomotionX, LocomotionY) and montages in its DefaultSlot. A death montage is held at its end.
+ */
+UCLASS()
+class BATTLESYSTEM_API UCombatAnimInstance : public UAnimInstance
+{
+	GENERATED_BODY()
+
+public:
+	/** Simulation speed in cm/s (the speed buttons and pause act on the play rate, not on this). */
+	UPROPERTY(BlueprintReadOnly, Category = "Combat")
+	float Speed = 0.f;
+
+	UPROPERTY(BlueprintReadOnly, Category = "Combat")
+	TObjectPtr<UBlendSpace> Locomotion;
+
+	/**
+	 * Coordinates for the Locomotion blend space: Speed on its axis named "Speed" (X if no axis has that name), the
+	 * other axis 0. Wire them to the Blend Space Player's X and Y, so one AnimBP works for every blend space.
+	 */
+	UPROPERTY(BlueprintReadOnly, Category = "Combat")
+	float LocomotionX = 0.f;
+
+	UPROPERTY(BlueprintReadOnly, Category = "Combat")
+	float LocomotionY = 0.f;
+
+	UPROPERTY(BlueprintReadOnly, Category = "Combat")
+	bool bDead = false;
+
+	/** Sets the blend space and finds its speed axis. */
+	void SetLocomotion(UBlendSpace* InLocomotion);
+
+	/** Sets Speed and puts it on the speed axis (LocomotionX or LocomotionY). */
+	void SetSpeed(float InSpeed);
+
+	/** Axis of a blend space named "Speed" (any case): 0 = X, 1 = Y; 0 if none or no blend space. */
+	static int32 FindSpeedAxis(const UBlendSpace* BlendSpace);
+
+	/** Plays the death montage (if any) and keeps its last pose. */
+	void PlayDeath(UAnimMontage* Montage);
+
+protected:
+	virtual void NativeUpdateAnimation(float DeltaSeconds) override;
+
+private:
+	UPROPERTY(Transient)
+	TObjectPtr<UAnimMontage> DeathMontage;
+
+	int32 SpeedAxis = 0;
+};
