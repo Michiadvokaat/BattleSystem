@@ -49,6 +49,10 @@ private:
 
 	TSharedRef<SWidget> MakeButton(const FText& Label, TFunction<void()> OnClick, TFunction<bool()> IsActive = nullptr);
 	TSharedRef<SWidget> MakeLabel(const FText& Label);
+	/** One button per color of the settings' FloorColors; a click makes it the color of the next tintable piece. */
+	TSharedRef<SWidget> MakeColorSwatches();
+	/** Opens the color picker on the current tint color. */
+	FReply OnPickColorClicked();
 	TSharedRef<SWidget> MakeSizeBox(bool bWidth);
 
 	void RefreshLevelOptions();

@@ -59,9 +59,20 @@ ACombatGrid::ACombatGrid()
 	PreviewMesh->SetVisibility(false);
 }
 
-void ACombatGrid::ShowPiecePreview(const FCombatLevelPiece& Piece, float InCellSize, UStaticMesh* Mesh, const FTransform& MeshTransform, bool bFits, bool bErase)
+void ACombatGrid::ShowPiecePreview(const FCombatLevelPiece& Piece, float InCellSize, UStaticMesh* Mesh, const FTransform& MeshTransform, bool bFits, bool bErase,
+	bool bTinted)
 {
+	// A tintable piece shows its color; otherwise the mesh's own materials.
+	const bool bMeshChanged = PreviewMesh->GetStaticMesh() != Mesh;
 	PreviewMesh->SetStaticMesh(Mesh);
+	if (bTinted)
+	{
+		CombatPieces::ApplyTint(*PreviewMesh, Piece.Color);
+	}
+	else if (bMeshChanged || PreviewMesh->OverrideMaterials.Num() > 0)
+	{
+		PreviewMesh->EmptyOverrideMaterials();
+	}
 	PreviewMesh->SetRelativeTransform(MeshTransform);
 	PreviewMesh->SetVisibility(!bErase && Mesh != nullptr);
 
@@ -241,6 +252,10 @@ void ACombatGrid::ShowPieces(const FCombatLevel& Level)
 		{
 			UStaticMeshComponent* MeshComponent = NewObject<UStaticMeshComponent>(this);
 			MeshComponent->SetStaticMesh(Entry.Mesh);
+			if (Entry.Definition->bTintable)
+			{
+				CombatPieces::ApplyTint(*MeshComponent, Piece.Color);
+			}
 			Component = MeshComponent;
 		}
 		Component->SetupAttachment(RootComponent);

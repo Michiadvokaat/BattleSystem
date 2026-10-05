@@ -8,6 +8,7 @@
 #include "CombatPieces.generated.h"
 
 class UCombatPieceCatalog;
+class UMeshComponent;
 class UStaticMesh;
 
 /** One placeable piece of the catalog: its mesh, layer, footprint and blocking. */
@@ -80,11 +81,18 @@ struct BATTLESYSTEM_API FCombatPieceDefinition
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Fit", meta = (ClampMin = -1, Units = "cm"))
 	float SurfaceHeight = -1.f;
 
+	/**
+	 * The placed piece's Color tints it: every material of its mesh becomes a dynamic instance with vector parameter
+	 * "Color" (the engine's BasicShapeMaterial has it). For solid floors; the LevelDesigner shows a color row for it.
+	 */
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Piece")
+	bool bTintable = false;
+
 	/** Detail layer: positions per cell side, so DetailGrid x DetailGrid positions per cell. */
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Piece", meta = (ClampMin = 1, ClampMax = 8))
 	int32 DetailGrid = 3;
 
-	/** The level piece this definition places at Cell with Rotation (footprint and blocking copied). */
+	/** The level piece this definition places at Cell with Rotation (footprint and blocking copied; Color white). */
 	FCombatLevelPiece MakePiece(const FIntPoint& Cell, int32 Rotation) const;
 };
 
@@ -115,6 +123,9 @@ namespace CombatPieces
 	 */
 	BATTLESYSTEM_API FTransform ComputeMeshTransform(const FCombatLevelPiece& Piece, float CellSize, const FBox& MeshBounds,
 		float MeshYaw, const FVector& Offset, bool bScaleToFit = false, double BaseHeight = 0.0);
+
+	/** Gives every material slot of Mesh a dynamic instance of the settings' TintMaterial with "Color" = the piece color. */
+	BATTLESYSTEM_API void ApplyTint(UMeshComponent& Mesh, const FColor& Color);
 
 	/** Rotation steps per full turn of a layer: 8 for details (45 degrees), 4 for the others. */
 	BATTLESYSTEM_API int32 GetRotationSteps(ECombatPieceLayer Layer);

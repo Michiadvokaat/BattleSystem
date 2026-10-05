@@ -1419,6 +1419,7 @@ bool FCombatLevelFormatTest::RunTest(const FString& Parameters)
 {
 	FCombatLevel Level = CombatTests::MakeTestLevel();
 	Level.Units[0].Rotation = 3;
+	Level.Pieces[0].Color = FColor(10, 120, 230);
 
 	FCombatGridData Grid;
 	Level.ToGridData(Grid);
@@ -1433,6 +1434,7 @@ bool FCombatLevelFormatTest::RunTest(const FString& Parameters)
 	FCombatLevel Loaded;
 	TestTrue(TEXT("Reads JSON"), CombatLevels::FromJson(Json, Loaded));
 	TestEqual(TEXT("Pieces survive"), Loaded.Pieces.Num(), 3);
+	TestTrue(TEXT("Piece color survives"), Loaded.Pieces.Num() == 3 && Loaded.Pieces[0].Color == FColor(10, 120, 230) && Loaded.Pieces[1].Color == FColor::White);
 	TestFalse(TEXT("No cell rows in the file"), Json.Contains(TEXT("\"rows\"")));
 	TestEqual(TEXT("Units survive"), Loaded.Units.Num(), 3);
 	TestTrue(TEXT("Unit cell survives"), Loaded.Units.Num() == 3 && Loaded.Units[1].Cell == FIntPoint(10, 6) && Loaded.Units[1].Team == 1);
@@ -1450,6 +1452,8 @@ bool FCombatLevelFormatTest::RunTest(const FString& Parameters)
 	FCombatGridData OldGrid;
 	Old.ToGridData(OldGrid);
 	TestTrue(TEXT("Its wall row is ignored"), OldGrid.IsWalkable(FIntPoint(0, 0)) && !OldGrid.BlocksSight(FIntPoint(0, 0)));
+	TestTrue(TEXT("A version 5 piece without a color is white"), CombatLevels::FromJson(TEXT("{\"formatVersion\":5,\"name\":\"Old\",\"width\":6,\"height\":5,")
+		TEXT("\"pieces\":[{\"id\":\"A/B\",\"layer\":\"Floor\",\"cell\":{\"x\":0,\"y\":0}}]}"), Old) && Old.Pieces.Num() == 1 && Old.Pieces[0].Color == FColor::White);
 
 	// Before version 5 units faced the other side: team 0 +X, the rest and spawns -X.
 	FCombatLevel Unturned;

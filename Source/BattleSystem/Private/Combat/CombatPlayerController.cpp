@@ -44,6 +44,7 @@ void ACombatPlayerController::SetupInputComponent()
 	InputComponent->BindKey(EKeys::F, IE_Pressed, this, &ACombatPlayerController::OnResetCamera);
 	InputComponent->BindKey(EKeys::V, IE_Pressed, this, &ACombatPlayerController::OnCycleWalls);
 	InputComponent->BindKey(EKeys::R, IE_Pressed, this, &ACombatPlayerController::OnRotatePiece);
+	InputComponent->BindKey(EKeys::I, IE_Pressed, this, &ACombatPlayerController::OnEyedropper);
 	InputComponent->BindKey(EKeys::Z, IE_Pressed, this, &ACombatPlayerController::OnUndoKey);
 	InputComponent->BindKey(EKeys::Y, IE_Pressed, this, &ACombatPlayerController::OnRedoKey);
 }
@@ -187,6 +188,15 @@ void ACombatPlayerController::OnRotatePiece()
 		{
 			Subsystem->RotateDesignUnit(Steps);
 		}
+	}
+}
+
+void ACombatPlayerController::OnEyedropper()
+{
+	UCombatSubsystem* Subsystem = GetWorld()->GetSubsystem<UCombatSubsystem>();
+	if (Subsystem && Subsystem->IsDesignMode() && Subsystem->GetDesignTool() == ECombatDesignTool::Build)
+	{
+		Subsystem->SetDesignEyedropper(!Subsystem->IsDesignEyedropper());
 	}
 }
 

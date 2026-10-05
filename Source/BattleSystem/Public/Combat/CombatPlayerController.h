@@ -62,6 +62,8 @@ private:
 	void OnCycleWalls();
 	/** LevelDesigner Piece tool: R turns the piece a quarter clockwise, Shift+R back. */
 	void OnRotatePiece();
+	/** Key I: the LevelDesigner eyedropper (Build Mode). */
+	void OnEyedropper();
 	/** LevelDesigner: Ctrl+Z undo, Ctrl+Shift+Z or Ctrl+Y redo. */
 	void OnUndoKey();
 	void OnRedoKey();

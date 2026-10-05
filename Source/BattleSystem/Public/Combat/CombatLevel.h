@@ -97,6 +97,8 @@ struct BATTLESYSTEM_API FCombatLevelPiece
 	UPROPERTY() int32 Detail = INDEX_NONE;
 	/** Detail layer: positions per cell side (copied from the catalog, so Detail keeps its meaning); 0 for the other layers. */
 	UPROPERTY() int32 DetailGrid = 0;
+	/** Tint of a tintable piece (solid floors; FCombatPieceDefinition::bTintable), sRGB; presentation only. */
+	UPROPERTY() FColor Color = FColor::White;
 
 	/** Size after rotation (X and Y swap on odd rotations). */
 	FIntPoint GetRotatedSize() const;
@@ -124,11 +126,11 @@ struct BATTLESYSTEM_API FCombatLevel
 	static constexpr int32 MaxSize = 40;
 
 	/**
-	 * 1 = no waves; 2 = with waves; 3 = with pieces; 4 = without cell rows; 5 = with unit and spawn rotations (older
-	 * files load without the missing parts; their rows of walls, hedges and water are ignored, and their units face
-	 * the other side: team 0 +X, the rest and spawns -X).
+	 * 1 = no waves; 2 = with waves; 3 = with pieces; 4 = without cell rows; 5 = with unit and spawn rotations; 6 = with
+	 * piece colors (older files load without the missing parts; their rows of walls, hedges and water are ignored,
+	 * their units face the other side: team 0 +X, the rest and spawns -X, and their pieces are white).
 	 */
-	UPROPERTY() int32 FormatVersion = 5;
+	UPROPERTY() int32 FormatVersion = 6;
 	UPROPERTY() FString Name;
 	UPROPERTY() int32 Width = 20;
 	UPROPERTY() int32 Height = 12;

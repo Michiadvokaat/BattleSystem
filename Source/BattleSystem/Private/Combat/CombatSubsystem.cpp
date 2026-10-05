@@ -1469,6 +1469,24 @@ void UCombatSubsystem::DesignPaint(const FVector& WorldPoint, bool bErase, bool 
 		return;
 	}
 
+	// Eyedropper: this click only takes the color and piece of the tintable floor under it.
+	if (bDesignEyedropper)
+	{
+		if (!bStroke)
+		{
+			bDesignEyedropper = false;
+			const int32 FloorIndex = DesignLevel.FindPieceAt(ECombatPieceLayer::Floor, Cell);
+			const UCombatPieceCatalog* Catalog = GetPieceCatalog();
+			const FCombatPieceDefinition* Definition = FloorIndex != INDEX_NONE && Catalog ? Catalog->Find(DesignLevel.Pieces[FloorIndex].Id) : nullptr;
+			if (Definition && Definition->bTintable)
+			{
+				DesignPieceColor = DesignLevel.Pieces[FloorIndex].Color;
+				SetDesignPiece(Definition->Id);
+			}
+		}
+		return;
+	}
+
 	// Moving a spawn from the spawn list: this click only places it (or cancels).
 	if (DesignSpawnMove.IsSet())
 	{
@@ -1796,6 +1814,11 @@ void UCombatSubsystem::CancelDesignPieceMove()
 
 void UCombatSubsystem::DesignRightClick(const FVector& WorldPoint, bool bHasPoint)
 {
+	if (bDesignEyedropper)
+	{
+		bDesignEyedropper = false;
+		return;
+	}
 	if (DesignMovingPiece.IsSet())
 	{
 		CancelDesignPieceMove();
@@ -1848,7 +1871,19 @@ bool UCombatSubsystem::GetDesignPiecePlacement(const FVector& WorldPoint, FComba
 	const ACombatGrid* Grid = ACombatGrid::Find(GetWorld());
 	const FVector Origin = Grid ? Grid->GetActorLocation() : FVector::ZeroVector;
 	OutPiece = CombatPieces::PlaceAt(*OutDefinition, FVector2D(WorldPoint - Origin), GetDesignPieceSteps(), DesignLevel.CellSize);
+	// A moved piece keeps its own color.
+	if (OutDefinition->bTintable)
+	{
+		OutPiece.Color = DesignMovingPiece.IsSet() ? DesignMovingPiece->Color : DesignPieceColor;
+	}
 	return true;
+}
+
+bool UCombatSubsystem::IsDesignPieceTintable()
+{
+	const UCombatPieceCatalog* Catalog = GetPieceCatalog();
+	const FCombatPieceDefinition* Definition = Catalog ? Catalog->Find(DesignPieceId) : nullptr;
+	return Definition && Definition->bTintable;
 }
 
 void UCombatSubsystem::UpdateDesignPiecePreview(const FVector& WorldPoint, bool bErase)
@@ -1868,7 +1903,7 @@ void UCombatSubsystem::UpdateDesignPiecePreview(const FVector& WorldPoint, bool 
 	const double BaseHeight = Piece.Layer == ECombatPieceLayer::Detail ? CombatPieces::FindDetailBaseHeight(DesignLevel, *GetPieceCatalog(), Piece) : 0.0;
 	const FTransform MeshTransform = CombatPieces::ComputeMeshTransform(Piece, DesignLevel.CellSize, Definition->Mesh->GetBoundingBox(),
 		Definition->MeshYaw, Definition->Offset, Definition->bScaleToFit, BaseHeight);
-	Grid->ShowPiecePreview(Piece, DesignLevel.CellSize, Definition->Mesh, MeshTransform, DesignLevel.IsPieceInBounds(Piece), bErase);
+	Grid->ShowPiecePreview(Piece, DesignLevel.CellSize, Definition->Mesh, MeshTransform, DesignLevel.IsPieceInBounds(Piece), bErase, Definition->bTintable);
 	// An opening being placed shows its cut in the walls it would stand in.
 	const bool bOpening = !bErase && Piece.Layer == ECombatPieceLayer::Edge && Piece.Slot == FCombatLevelPiece::OpeningSlot;
 	Grid->UpdatePreviewCuts(bOpening ? &Piece : nullptr, MeshTransform, Definition->GetCutBox(Definition->Mesh->GetBoundingBox()), DesignLevel.CellSize);
