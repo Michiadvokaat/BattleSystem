@@ -1,6 +1,7 @@
 // Copyright Epic Games, Inc. All Rights Reserved.
 
 #include "Combat/CombatSimulation.h"
+#include "Combat/CombatNavigation.h"
 #include "Combat/CombatPathfinding.h"
 #include "Combat/CombatTags.h"
 #include "Misc/Crc.h"
@@ -41,6 +42,29 @@ FCombatSimulation::FCombatSimulation(const FCombatSimConfig& InConfig)
 {
 	Config.MaxTicks = FMath::Max(Config.MaxTicks, 1);
 
+	// The clearance classes of every unit that can appear, ascending, and a nav grid for each.
+	for (const FCombatUnitSpawn& Spawn : Config.Units)
+	{
+		NavClasses.AddUnique(CombatNavigation::GetClearanceClass(Spawn.Stats.Radius, Config.Grid.CellSize));
+	}
+	for (const FCombatWave& Wave : Config.Waves)
+	{
+		for (const FCombatWaveSpawn& Spawn : Wave.Spawns)
+		{
+			NavClasses.AddUnique(CombatNavigation::GetClearanceClass(Spawn.Stats.Radius, Config.Grid.CellSize));
+		}
+	}
+	if (NavClasses.IsEmpty())
+	{
+		NavClasses.Add(0);
+	}
+	NavClasses.Sort();
+	NavGrids.SetNum(NavClasses.Num());
+	for (int32 Index = 0; Index < NavClasses.Num(); ++Index)
+	{
+		CombatNavigation::BuildNavGrid(Config.Grid, NavClasses[Index], NavGrids[Index]);
+	}
+
 	Units.Reserve(Config.Units.Num());
 	for (int32 Index = 0; Index < Config.Units.Num(); ++Index)
 	{
@@ -60,7 +84,7 @@ FCombatSimulation::FCombatSimulation(const FCombatSimConfig& InConfig)
 		TeamIds.AddUnique(Config.WaveTeam);
 		NextWaveTick = FMath::Max(Config.WavePauseTicks, 1);
 	}
-	DistanceMaps.SetNum(TeamIds.Num());
+	DistanceMaps.SetNum(TeamIds.Num() * NavClasses.Num());
 
 	// Commands known in advance (script, replay): by tick, keeping the given order within a tick.
 	TArray<FCombatCommand> Known = Config.Commands;
@@ -93,6 +117,7 @@ FCombatUnit& FCombatSimulation::AddUnit(const FCombatUnitStats& Stats, int32 Tea
 	Unit.bAlive = Unit.HP > 0.f;
 	Unit.FirstAttackDelayTicks = Random.RandRange(0, FMath::Max(Config.MaxFirstAttackDelayTicks, 0));
 	Unit.SteerPoint = Unit.Position;
+	Unit.NavClass = FMath::Max(NavClasses.IndexOfByKey(CombatNavigation::GetClearanceClass(Stats.Radius, Config.Grid.CellSize)), 0);
 
 	TeamIds.AddUnique(Unit.Team);
 	return Unit;
@@ -138,7 +163,7 @@ void FCombatSimulation::UpdateWaves()
 	{
 		PendingSpawns.RemoveAll([this](const FPendingSpawn& Pending) { return Pending.Tick <= Tick; });
 		// New units are targets (and targeters) in this very step.
-		DistanceMaps.SetNum(TeamIds.Num());
+		DistanceMaps.SetNum(TeamIds.Num() * NavClasses.Num());
 		RebuildDistanceMaps();
 	}
 }
@@ -253,26 +278,37 @@ int32 FCombatSimulation::FindNearestEnemy(const FCombatUnit& Unit) const
 	return BestId;
 }
 
-const FCombatDistanceMap* FCombatSimulation::GetDistanceMap(int32 Team) const
+const FCombatDistanceMap* FCombatSimulation::GetDistanceMap(int32 Team, int32 NavClass) const
 {
 	const int32 Index = TeamIds.IndexOfByKey(Team);
-	return Index != INDEX_NONE ? &DistanceMaps[Index] : nullptr;
+	return Index != INDEX_NONE && NavGrids.IsValidIndex(NavClass) ? &DistanceMaps[Index * NavGrids.Num() + NavClass] : nullptr;
+}
+
+FIntPoint FCombatSimulation::GetNavCell(int32 NavClass, const FVector2D& Position) const
+{
+	const FCombatGridData& Nav = NavGrids[NavClass];
+	FIntPoint Cell;
+	return CombatNavigation::FindOpenCell(Nav, Position, Cell) ? Cell : Nav.LocalToCell(Position);
 }
 
 void FCombatSimulation::RebuildDistanceMaps()
 {
+	// Per team and class: the enemies' open sub-cells on that class's nav grid are the sources.
 	TArray<FCombatDistanceMap::FSource> Sources;
 	for (int32 TeamIndex = 0; TeamIndex < TeamIds.Num(); ++TeamIndex)
 	{
-		Sources.Reset();
-		for (const FCombatUnit& Other : Units)
+		for (int32 NavClass = 0; NavClass < NavGrids.Num(); ++NavClass)
 		{
-			if (Other.bAlive && Other.Team != TeamIds[TeamIndex])
+			Sources.Reset();
+			for (const FCombatUnit& Other : Units)
 			{
-				Sources.Add({ Config.Grid.LocalToCell(Other.PreviousPosition), Other.Id });
+				if (Other.bAlive && Other.Team != TeamIds[TeamIndex])
+				{
+					Sources.Add({ GetNavCell(NavClass, Other.PreviousPosition), Other.Id });
+				}
 			}
+			DistanceMaps[TeamIndex * NavGrids.Num() + NavClass].Build(NavGrids[NavClass], Sources);
 		}
-		DistanceMaps[TeamIndex].Build(Config.Grid, Sources);
 	}
 	bDistanceMapsDirty = false;
 }
@@ -347,9 +383,9 @@ void FCombatSimulation::ChooseTarget(FCombatUnit& Unit) const
 int32 FCombatSimulation::FindNearestByWalking(const FCombatUnit& Unit) const
 {
 	// Nearest enemy by walking distance; as the crow flies if no enemy is reachable.
-	if (const FCombatDistanceMap* Map = GetDistanceMap(Unit.Team))
+	if (const FCombatDistanceMap* Map = GetDistanceMap(Unit.Team, Unit.NavClass))
 	{
-		const int32 Id = Map->GetNearestId(Config.Grid.LocalToCell(Unit.PreviousPosition));
+		const int32 Id = Map->GetNearestId(GetNavCell(Unit.NavClass, Unit.PreviousPosition));
 		if (Id != INDEX_NONE && Units[Id].bAlive)
 		{
 			return Id;
@@ -581,10 +617,10 @@ FVector2D FCombatSimulation::UpdateCombat(FCombatUnit& Unit)
 
 FVector2D FCombatSimulation::FindRouteSteerPoint(FCombatUnit& Unit) const
 {
-	const FCombatGridData& Grid = Config.Grid;
+	const FCombatGridData& Nav = NavGrids[Unit.NavClass];
 	const FCombatUnit& Target = Units[Unit.TargetId];
-	const FIntPoint StartCell = Grid.LocalToCell(Unit.PreviousPosition);
-	const FCombatDistanceMap* Map = GetDistanceMap(Unit.Team);
+	const FIntPoint StartCell = GetNavCell(Unit.NavClass, Unit.PreviousPosition);
+	const FCombatDistanceMap* Map = GetDistanceMap(Unit.Team, Unit.NavClass);
 
 	// Path smoothing: steer to the farthest route cell center that is in a clear line (the first step always counts).
 	FVector2D SteerPoint = Unit.PreviousPosition;
@@ -593,17 +629,18 @@ FVector2D FCombatSimulation::FindRouteSteerPoint(FCombatUnit& Unit) const
 	{
 		// The team's distance map leads to this target: follow it downhill.
 		Unit.Path.Reset();
+		// PathLookaheadCells counts whole cells.
 		FIntPoint Cell = StartCell;
-		for (int32 Step = 0; Step < Config.PathLookaheadCells; ++Step)
+		for (int32 Step = 0; Step < Config.PathLookaheadCells * CombatNavigation::Subdivision; ++Step)
 		{
 			FIntPoint Next;
-			if (!Map->GetNextCell(Grid, Cell, Next))
+			if (!Map->GetNextCell(Nav, Cell, Next))
 			{
 				break;
 			}
 			Cell = Next;
 
-			const FVector2D Point = Grid.CellToLocal(Cell);
+			const FVector2D Point = Nav.CellToLocal(Cell);
 			if (Step > 0 && !IsSteerLineClear(Unit, Unit.PreviousPosition, Point))
 			{
 				break;
@@ -614,28 +651,32 @@ FVector2D FCombatSimulation::FindRouteSteerPoint(FCombatUnit& Unit) const
 	}
 
 	// Another target (threat, taunt, hysteresis): an own A* route.
-	return SteerAlongPath(Unit, Grid.LocalToCell(Target.PreviousPosition), Target.PreviousPosition);
+	return SteerAlongPath(Unit, GetNavCell(Unit.NavClass, Target.PreviousPosition), Target.PreviousPosition);
 }
 
 FVector2D FCombatSimulation::SteerAlongPath(FCombatUnit& Unit, const FIntPoint& GoalCell, const FVector2D& Fallback) const
 {
-	const FCombatGridData& Grid = Config.Grid;
-	const FIntPoint StartCell = Grid.LocalToCell(Unit.PreviousPosition);
+	const FCombatGridData& Nav = NavGrids[Unit.NavClass];
+	const FIntPoint StartCell = GetNavCell(Unit.NavClass, Unit.PreviousPosition);
 
-	// Recomputed only when either end changes cell.
+	// Recomputed only when either end changes sub-cell; a search that found nothing is not repeated for the same ends.
 	const bool bPathValid = Unit.Path.Num() >= 2 && Unit.Path[0] == StartCell && Unit.Path.Last() == GoalCell;
-	if (!bPathValid && !CombatPathfinding::FindPath(Grid, StartCell, GoalCell, Unit.Path))
+	const bool bKnownNoPath = Unit.NoPathStart == StartCell && Unit.NoPathGoal == GoalCell;
+	if (!bPathValid && (bKnownNoPath || !CombatPathfinding::FindPath(Nav, StartCell, GoalCell, Unit.Path)))
 	{
+		Unit.Path.Reset();
+		Unit.NoPathStart = StartCell;
+		Unit.NoPathGoal = GoalCell;
 		// No route: head straight for it; ResolveMove keeps the unit out of blocked cells.
 		return Fallback;
 	}
 
 	// Path smoothing: the farthest path cell center in a clear line (the first step always counts).
 	FVector2D SteerPoint = Unit.PreviousPosition;
-	const int32 LastIndex = FMath::Min(Config.PathLookaheadCells, Unit.Path.Num() - 1);
+	const int32 LastIndex = FMath::Min(Config.PathLookaheadCells * CombatNavigation::Subdivision, Unit.Path.Num() - 1);
 	for (int32 Index = 1; Index <= LastIndex; ++Index)
 	{
-		const FVector2D Point = Grid.CellToLocal(Unit.Path[Index]);
+		const FVector2D Point = Nav.CellToLocal(Unit.Path[Index]);
 		if (Index > 1 && !IsSteerLineClear(Unit, Unit.PreviousPosition, Point))
 		{
 			break;
@@ -671,16 +712,19 @@ FVector2D FCombatSimulation::UpdateMoveOrder(FCombatUnit& Unit)
 	}
 	else
 	{
-		const FIntPoint StartCell = Grid.LocalToCell(Unit.PreviousPosition);
-		const bool bPathValid = Unit.Path.Num() >= 2 && Unit.Path[0] == StartCell && Unit.Path.Last() == Unit.MoveTargetCell;
-		if (!bPathValid && !CombatPathfinding::FindPath(Grid, StartCell, Unit.MoveTargetCell, Unit.Path))
+		// On the nav grid: to the open sub-cell at the middle of the order's cell.
+		const FCombatGridData& Nav = NavGrids[Unit.NavClass];
+		const FIntPoint StartCell = GetNavCell(Unit.NavClass, Unit.PreviousPosition);
+		const FIntPoint GoalCell = GetNavCell(Unit.NavClass, Goal);
+		const bool bPathValid = Unit.Path.Num() >= 2 && Unit.Path[0] == StartCell && Unit.Path.Last() == GoalCell;
+		if (!bPathValid && !CombatPathfinding::FindPath(Nav, StartCell, GoalCell, Unit.Path))
 		{
 			// Unreachable: give up the order.
 			Unit.bHasMoveOrder = false;
 			Unit.Path.Reset();
 			return FVector2D::ZeroVector;
 		}
-		Unit.SteerPoint = SteerAlongPath(Unit, Unit.MoveTargetCell, Goal);
+		Unit.SteerPoint = SteerAlongPath(Unit, GoalCell, Goal);
 	}
 
 	const FVector2D ToSteer = Unit.SteerPoint - Unit.PreviousPosition;

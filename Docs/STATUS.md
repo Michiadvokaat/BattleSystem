@@ -6,8 +6,8 @@ _Last updated: 2026-10-05_
 
 - Combat phases 1–5 are done. The tests pass (44/44, `BattleSystem.Combat.*`). Phase 5 has two parts:
   - part A: AoE circle/cone with telegraphs, effect modifiers, cue tags and the cue table (checked by the user);
-  - part B: JSON replays with a checksum verdict, and `Combat.Batch` with statistics and CSV (1000 fights ≈ 3.4 s), checked by the user.
-- Deterministic in `Arena-01`, seed 42: `DA_Setup_AoE` `0xBED8CC97`, `DA_Setup_Taunt` `0x7CE33AAB`, `DA_Setup_Mixed` `0xC4B63228` (since wall clearance; before `0x32F7C942`).
+  - part B: JSON replays with a checksum verdict, and `Combat.Batch` with statistics and CSV (1000 fights ≈ 3.4 s before phase 6, ≈ 22 s with the navigation layer), checked by the user.
+- Deterministic in `Arena-01`, seed 42 (since phase 6): `DA_Setup_Test` `0x6682B9DD`, `DA_Setup_AoE` `0xA3C795EA`, `DA_Setup_Taunt` `0x7CE33AAB`, `DA_Setup_Mixed` `0xE1494EB8`; `PiecesDemo` `0xF8FAFC01`. Replays saved before phase 6 no longer reproduce.
 - Player commands are done: the command log in the simulation (Move, player abilities without cooldown), scripts, replay v2 with checkpoints, a unit list at the top right with action buttons, arena clicks, a selection ring, and a move disc and line. Checked by the user.
 - LevelDesigner is done: levels as JSON in `Levels/` (`Level-01`, `PiecesDemo`, `WallWindows`, `BuildTest01`), built in the bottom-left menu (edit mode, size, save/load, play), shown in the arena with a fitted camera, and copied into replays. Checked by the user.
 - LevelDesigner modes (checked by the user in PIE; merged to `main` from `leveldesigner-modes`, tag `before-leveldesigner-modes`): the cell kinds wall/hedge/water are gone (level format 4 without rows; `Demo` and `Klaslokaal01` deleted); Build Mode / Unit Mode / Spawn Mode each show only their own controls; the catalog is `Building`/`Furniture`/`Props` with subcategories (two button rows, pieces small to large with a size label). 60/60 tests.
@@ -25,10 +25,11 @@ _Last updated: 2026-10-05_
 
 - Wall items (checked by the user in PIE; merged to `main` from `wall-items`, tag `before-wall-items`): catalog group `WallProps` (166 meshes from the user) hung on walls, on positions along them, with a height and a tilt; level format 7.
 
+- Phase 6, navigation layer (checked by the user in PIE; merged to `main` from `nav-subgrid`, tag `before-nav-subgrid`): routes on 3x3 sub-cells per clearance class (from the unit radius, capped so every unit fits through a one-cell door); movement unchanged; about 8x per tick. 62/62 tests.
+
 ## Open work
 
 - Balance (from the batch): team 0 wins `DA_Setup_AoE` 86.5% and `DA_Setup_Mixed` 99.7%; the Brutes win `DA_Setup_Test` and `DA_Setup_Taunt`.
 - Character looks, later: per-bone scaling (own AnimGraph node + editor module), parts from other skeletons (retarget first), and "Allow CPU Access" on the source meshes for cooked builds. Mutable remains the alternative if this falls short.
-- Phase 6 (only if needed): finer navigation grid and clearance for unit sizes.
 - Optional: link VFX/sound in `DA_CueTable`.
 - List the Fab packs used in `Content/ZZ_FAB/` in `Docs/Licenses/README.md`.

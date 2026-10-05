@@ -7,6 +7,7 @@
 #include "Combat/CombatBatch.h"
 #include "Combat/CombatCamera.h"
 #include "Combat/CombatLevel.h"
+#include "Combat/CombatNavigation.h"
 #include "Combat/CombatPathfinding.h"
 #include "Combat/CombatPieces.h"
 #include "Combat/CombatReplay.h"
@@ -463,7 +464,9 @@ bool FCombatVisibleTargetTest::RunTest(const FString& Parameters)
 
 	FCombatSimulation Simulation(Config);
 	Simulation.Step();
-	TestEqual(TEXT("A is nearest by walking"), Simulation.GetDistanceMap(0)->GetNearestId(FIntPoint(3, 2)), 1);
+	// The distance map is on sub-cells: the middle sub-cell of cell (3, 2).
+	const FIntPoint SubCell = FIntPoint(3, 2) * CombatNavigation::Subdivision + FIntPoint(1, 1);
+	TestEqual(TEXT("A is nearest by walking"), Simulation.GetDistanceMap(0)->GetNearestId(SubCell), 1);
 	TestEqual(TEXT("The archer targets B, which it can shoot"), Simulation.GetUnits()[0].TargetId, 2);
 	return true;
 }
@@ -2620,6 +2623,86 @@ bool FCombatWallItemsTest::RunTest(const FString& Parameters)
 	TestTrue(TEXT("Writes and reads"), CombatLevels::ToJson(WithItem, Json) && CombatLevels::FromJson(Json, Loaded));
 	TestTrue(TEXT("Facing and height survive"), Loaded.Pieces.Num() == 2 && Loaded.Pieces[1].Layer == ECombatPieceLayer::Wall
 		&& Loaded.Pieces[1].Facing == 3 && Loaded.Pieces[1].Height == 165.f && Loaded.Pieces[1].Detail == 1);
+	return true;
+}
+
+IMPLEMENT_SIMPLE_AUTOMATION_TEST(FCombatNavClearanceTest, "BattleSystem.Combat.NavClearance",
+	EAutomationTestFlags::EditorContext | EAutomationTestFlags::ProductFilter)
+
+bool FCombatNavClearanceTest::RunTest(const FString& Parameters)
+{
+	// Classes: the radius rounded up to (class + 0.5) sub-cells of 33.3 cm.
+	TestEqual(TEXT("10 cm: class 0"), CombatNavigation::GetClearanceClass(10.f, 100.f), 0);
+	TestEqual(TEXT("40 cm: class 1"), CombatNavigation::GetClearanceClass(40.f, 100.f), 1);
+	TestEqual(TEXT("50 cm: still class 1"), CombatNavigation::GetClearanceClass(50.f, 100.f), 1);
+	TestEqual(TEXT("60 cm: capped at class 1, so it still fits through a one-cell door"), CombatNavigation::GetClearanceClass(60.f, 100.f), 1);
+	TestEqual(TEXT("The cap is class 1"), CombatNavigation::MaxClass, 1);
+	TestTrue(TEXT("Class 1 keeps 50 cm"), FMath::IsNearlyEqual(CombatNavigation::GetClassClearance(1, 100.f), 50.f, 0.01f));
+
+	// An edge wall between columns 4 and 5 with a one-cell door in row 5, and a blocked cell (7, 1).
+	FCombatGridData Grid;
+	Grid.Init(10, 11, 100.f);
+	for (int32 Y = 0; Y < 11; ++Y)
+	{
+		if (Y != 5)
+		{
+			Grid.AddEdgeWall(FIntPoint(4, Y), FIntPoint(5, Y));
+		}
+	}
+	Grid.AddFlags(FIntPoint(7, 1), ECombatCellFlags::Blocked);
+	FCombatGridData Small;
+	FCombatGridData Large;
+	CombatNavigation::BuildNavGrid(Grid, 1, Small);
+	CombatNavigation::BuildNavGrid(Grid, 2, Large);
+	TestTrue(TEXT("Three sub-cells per cell side"), Small.Width == 30 && Small.Height == 33 && FMath::IsNearlyEqual(Small.CellSize, 100.f / 3.f));
+	TestTrue(TEXT("Class 1: the door's middle sub-cells are open, its sides are not"), Small.IsWalkable(FIntPoint(14, 16)) && Small.IsWalkable(FIntPoint(15, 16))
+		&& !Small.IsWalkable(FIntPoint(14, 15)) && !Small.IsWalkable(FIntPoint(15, 17)));
+	TestTrue(TEXT("... and the wall's border is copied onto the sub-cells"), Small.HasEdgeWall(FIntPoint(14, 3), FIntPoint(15, 3)));
+	TestTrue(TEXT("Class 1: sub-cells beside a blocked cell close, the middle of the next cell stays open"),
+		!Small.IsWalkable(FIntPoint(20, 4)) && Small.IsWalkable(FIntPoint(19, 4)) && !Small.IsWalkable(FIntPoint(21, 4)));
+	TestFalse(TEXT("Class 2: the door is closed"), Large.IsWalkable(FIntPoint(14, 16)) || Large.IsWalkable(FIntPoint(15, 16)));
+
+	TArray<FIntPoint> Path;
+	const FIntPoint Right(25, 16);
+	const FIntPoint Left(4, 16);
+	TestTrue(TEXT("Class 1 finds a route through the door"), CombatPathfinding::FindPath(Small, Right, Left, Path));
+	TestFalse(TEXT("Class 2 finds none"), CombatPathfinding::FindPath(Large, Right, Left, Path));
+
+	FIntPoint Open;
+	TestTrue(TEXT("A position in a closed sub-cell snaps to the nearest open one"),
+		CombatNavigation::FindOpenCell(Small, FVector2D(510.0, 530.0), Open) && Open == FIntPoint(15, 16));
+
+	// In a fight: a small unit (class 0) and a 60 cm one (capped at class 1) each use their own nav grid; both reach the
+	// target behind the wall through the door.
+	FCombatSimConfig Config;
+	Config.Grid = Grid;
+	Config.MaxFirstAttackDelayTicks = 0;
+	FCombatUnitStats Small15 = CombatTests::MakeStats(100.f, 1.f, 20, 6);
+	Small15.Radius = 15.f;
+	FCombatUnitStats Wide = Small15;
+	Wide.Radius = 60.f;
+	CombatTests::AddUnit(Config, CombatTests::MakeDummyStats(), 0, FIntPoint(1, 5));
+	CombatTests::AddUnit(Config, Small15, 1, FIntPoint(8, 5));
+	CombatTests::AddUnit(Config, Wide, 1, FIntPoint(8, 8));
+	FCombatSimulation Simulation(Config);
+	Simulation.Step();
+	TestEqual(TEXT("Two classes in this fight (the dummy's 40 cm is class 1 too)"), Simulation.GetNavClassCount(), 2);
+	const FCombatUnit& SmallUnit = Simulation.GetUnits()[1];
+	const FCombatUnit& WideUnit = Simulation.GetUnits()[2];
+	TestTrue(TEXT("Each unit has its own class"), Simulation.GetClearanceClass(SmallUnit.NavClass) == 0 && Simulation.GetClearanceClass(WideUnit.NavClass) == 1);
+	const FIntPoint WideCell = Simulation.GetNavGrid(WideUnit.NavClass).LocalToCell(WideUnit.Position);
+	TestEqual(TEXT("The wide unit's map reaches the target through the door"), Simulation.GetDistanceMap(1, WideUnit.NavClass)->GetNearestId(WideCell), 0);
+
+	bool bCrossed[2] = { false, false };
+	for (int32 Step = 0; Step < 400 && !(bCrossed[0] && bCrossed[1]); ++Step)
+	{
+		Simulation.Step();
+		for (int32 Index = 0; Index < 2; ++Index)
+		{
+			bCrossed[Index] |= Simulation.GetUnits()[Index + 1].Position.X < 500.0;
+		}
+	}
+	TestTrue(TEXT("Both walk through the door"), bCrossed[0] && bCrossed[1]);
 	return true;
 }
 
