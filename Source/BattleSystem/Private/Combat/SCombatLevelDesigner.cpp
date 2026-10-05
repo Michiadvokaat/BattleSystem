@@ -354,7 +354,7 @@ void SCombatLevelDesigner::Construct(const FArguments& InArgs)
 			[
 				SNew(STextBlock)
 				.Visibility(this, &SCombatLevelDesigner::GetEditVisibility)
-				.Text(INVTEXT("Left mouse: place (hold to paint)   Right mouse: erase"))
+				.Text(INVTEXT("Left: place (hold to paint)   Shift+Left: erase   Right click: erase cell   Right drag: look"))
 				.ColorAndOpacity(FLinearColor(0.75f, 0.75f, 0.75f))
 				.Font(FCoreStyle::GetDefaultFontStyle("Italic", 9))
 			]

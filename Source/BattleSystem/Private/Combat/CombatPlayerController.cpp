@@ -50,7 +50,7 @@ void ACombatPlayerController::PlayerTick(float DeltaTime)
 
 	// A release over the HUD never reaches the game, so check the buttons themselves.
 	bPainting &= IsInputKeyDown(EKeys::LeftMouseButton);
-	bErasing &= IsInputKeyDown(EKeys::RightMouseButton);
+	bErasing &= IsInputKeyDown(EKeys::LeftMouseButton);
 
 	UCombatSubsystem* Subsystem = GetWorld()->GetSubsystem<UCombatSubsystem>();
 	FVector Point;
@@ -83,14 +83,18 @@ void ACombatPlayerController::OnLeftClick()
 	}
 	if (Subsystem->IsDesignMode())
 	{
-		// Moving a spawn takes only this click: no painting stroke follows.
-		bPainting = !Subsystem->IsMovingDesignSpawn();
-		Subsystem->DesignPaint(Point, false, false);
+		// Shift erases. Holding paints or erases a stroke, except when moving a spawn: that takes only this click.
+		const bool bErase = IsInputKeyDown(EKeys::LeftShift) || IsInputKeyDown(EKeys::RightShift);
+		const bool bStroke = !Subsystem->IsMovingDesignSpawn();
+		bPainting = bStroke && !bErase;
+		bErasing = bStroke && bErase;
+		Subsystem->DesignPaint(Point, bErase, false);
 		return;
 	}
 	// Acts on release (UpdateCameraDrag), unless the right button joins in for a pan.
 	BeginCameraDrag(ECombatCameraDrag::PendingClick, EKeys::LeftMouseButton);
 	ClickPoint = Point;
+	bHasClickPoint = true;
 }
 
 void ACombatPlayerController::OnRightClick()
@@ -111,18 +115,9 @@ void ACombatPlayerController::OnRightClick()
 	{
 		return;
 	}
-	FVector Point;
-	if (Subsystem->IsDesignMode())
-	{
-		bErasing = !Subsystem->IsMovingDesignSpawn();
-		if (GetArenaPointUnderMouse(Subsystem->GetGridHeight(), Point))
-		{
-			Subsystem->DesignPaint(Point, true, false);
-		}
-		return;
-	}
-	// Cancel on release, unless the mouse moves first: then it is a look drag.
+	// On release a click: cancel, or in edit mode erase the cell where it went down. Moving first makes it a look drag.
 	BeginCameraDrag(ECombatCameraDrag::PendingLook, EKeys::RightMouseButton);
+	bHasClickPoint = GetArenaPointUnderMouse(Subsystem->GetGridHeight(), ClickPoint);
 }
 
 void ACombatPlayerController::BeginScreenPan()
@@ -221,7 +216,10 @@ void ACombatPlayerController::UpdateCameraDrag(float DeltaTime)
 		if (!bHeld)
 		{
 			CameraDrag = ECombatCameraDrag::None;
-			Subsystem->HandleArenaClick(ClickPoint);
+			if (bHasClickPoint)
+			{
+				Subsystem->HandleArenaClick(ClickPoint);
+			}
 		}
 		return;
 	}
@@ -230,7 +228,14 @@ void ACombatPlayerController::UpdateCameraDrag(float DeltaTime)
 		if (!bHeld)
 		{
 			CameraDrag = ECombatCameraDrag::None;
-			Subsystem->HandleArenaCancel();
+			if (!Subsystem->IsDesignMode())
+			{
+				Subsystem->HandleArenaCancel();
+			}
+			else if (bHasClickPoint)
+			{
+				Subsystem->DesignPaint(ClickPoint, true, false);
+			}
 			return;
 		}
 		if (FVector2D::Distance(Mouse, DragStartMouse) < Settings->CameraDragThreshold)

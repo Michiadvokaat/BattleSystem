@@ -118,12 +118,12 @@ Code: `Source/BattleSystem/{Public,Private}/Combat/`. Layers: grid ← simulatio
   - Wave row: `<` / `>` select a wave ("2 / 3", or "none"), `+` adds an empty wave after the selected one, `-` removes the selected one. The Spawn tool places in the selected wave (and makes wave 1 if there is none). The arena shows the selected wave's spawns as previews in the wave team's color with their time as a yellow label.
   - Spawn list (`SCombatSpawnList`, bottom right, edit mode only): first "Start enemies (n)", the level's `Units` not on `PlayerTeam` (placed with the Unit tool; they stand on the field from the start), with type, X, Y, Move and remove (`SetDesignUnit`, `RemoveDesignUnit`, `BeginDesignUnitMove`; a cell holding another unit is refused). Then a header per wave ("Wave 2 (3)", click selects the wave, the selected one is green; an empty wave shows "(empty: use the Spawn tool)") and its spawns sorted by time (equal times in placement order; the file keeps the placement order). Each spawn row has a type dropdown, Wave, X, Y and Time spin boxes, **Move** and **x** (remove).
     - Spin boxes apply on commit (Enter, focus loss, end of a drag) through `SetDesignSpawn` / `MoveDesignSpawnToWave`. A cell outside the grid, on a wall or water, or already holding a spawn of that wave is refused; the list then rebuilds with the old values. Every edit selects the spawn's wave.
-    - **Move** (orange while active) makes the next left click in the arena the spawn's new cell; a right click on the grid or Move again cancels. That click paints nothing.
+    - **Move** (orange while active) makes the next left click in the arena the spawn's new cell; a right click on the grid (on release) or Move again cancels. That click paints nothing.
     - The list rebuilds when `GetDesignRevision()` changes (every `RefreshDesignView` and every refused edit). A spawn is addressed by (wave, index), so a pending Move is cancelled by any other change.
   - **Play** (or Start in the control panel while editing) starts a fight from the edited level as it is, saved or not, with the default seed (Play) or the seed field (Start).
   - Mouse (`ACombatPlayerController` in edit mode):
     - Left click places with the tool; holding paints a stroke while the cursor moves (`PlayerTick`). Units are only placed on a press, not while dragging.
-    - Right click (and drag) erases the unit, the selected wave's spawn and the cell kind.
+    - Shift + left click erases the unit, the selected wave's spawn and the cell kind; holding erases a stroke. A right click (released before moving `CameraDragThreshold` pixels) erases the cell where it went down; a right drag is the camera's look, as in the game.
     - Walls and water remove a unit and the spawns of every wave on their cell, and units and spawns cannot be placed on walls or water. Placing on a unit replaces it; placing on a spawn of the selected wave replaces that spawn.
     - The view (blocks, previews) rebuilds only when something changed. Button state is re-checked every tick, because a release over the HUD never reaches the game.
 - `Levels/Demo.json` is Arena-01's wall plus `DA_Setup_Taunt`'s units, with a hedge and water added. It gives the same fight as that setup (`0x7CE33AAB`).
@@ -251,7 +251,7 @@ Code: `Source/BattleSystem/{Public,Private}/Combat/`. Layers: grid ← simulatio
   - Alt + left drag: orbit around the grid point where the drag began (`CombatCamera::Orbit`). Alt + right drag: dolly, one zoom step per 10 pixels.
   - F (and **Reset camera** on the control panel): `ResetCameraToOverview`.
   - Look, orbit and dolly put the cursor back at the drag start every frame, so a drag never reaches the screen edge. Releases are checked with `IsInputKeyDown`, because a release over the HUD never reaches the game.
-  - In LevelDesigner edit mode the right button erases, so the camera uses the middle button, both buttons, the wheel and Alt there.
+  - LevelDesigner edit mode has the same camera controls; there a right click erases a cell instead of cancelling, and erase strokes are Shift + left drag.
   - After every move `CombatCamera::Clamp` keeps the camera inside `GetCameraBounds()` (the shown grid plus `CameraBoundsMargin`, `CameraMinHeight`–`CameraMaxHeight` above it) and the pitch within `CameraMinPitch`–`CameraMaxPitch` (default -90 to 0). The speeds use the frame time, so pause and the speed buttons do not affect them.
 - Selection is presentation state in the subsystem (`SelectedUnitId`, `bAwaitingMoveTarget`). A selected unit that dies is deselected. Everything reaches the fight only through `IssueCommand`.
 - `ACombatUnitActor`:

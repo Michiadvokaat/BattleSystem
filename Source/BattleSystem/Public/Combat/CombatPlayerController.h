@@ -12,7 +12,7 @@ enum class ECombatCameraDrag : uint8
 	None,
 	/** Left button down outside edit mode: a release is a click (select, Move target), the right button makes it PanScreen. */
 	PendingClick,
-	/** Right button down, not moved past CameraDragThreshold yet: a release now is a click (cancel). */
+	/** Right button down, not moved past CameraDragThreshold yet: a release now is a click (cancel, or erase in edit mode). */
 	PendingLook,
 	/** Right drag: look around; WASD/QE fly. */
 	Look,
@@ -28,13 +28,14 @@ enum class ECombatCameraDrag : uint8
 
 /**
  * Mouse input on the arena: left click selects an own unit or picks a Move target, right click cancels.
- * In LevelDesigner edit mode instead: left places with the current tool, right erases; holding paints a stroke.
+ * In LevelDesigner edit mode instead: left places with the current tool and Shift + left erases (holding paints or
+ * erases a stroke); a right click erases one cell.
  * Clicks are turned into points on the grid plane, so they do not depend on collision. Clicks on the HUD
  * panels go to the UI instead.
  * The camera moves like the editor viewport: right drag looks (+ WASD/QE), middle drag pans, left + right drag moves
  * sideways and up/down, the wheel zooms to the cursor, Alt + left drag orbits, Alt + right drag dollies, F returns to
- * the overview. In edit mode the right button erases, so there the camera uses the middle button, both buttons, the
- * wheel and Alt. Outside edit mode a left click acts on release, so pressing the right button too never selects.
+ * the overview; the same in edit mode. Outside edit mode a left click acts on release, so pressing the right button
+ * too never selects.
  */
 UCLASS()
 class BATTLESYSTEM_API ACombatPlayerController : public APlayerController
@@ -79,8 +80,9 @@ private:
 	FVector2D DragStartMouse = FVector2D::ZeroVector;
 	FVector2D LastMouse = FVector2D::ZeroVector;
 	FVector OrbitPivot = FVector::ZeroVector;
-	/** PendingClick: the arena point under the cursor when the left button went down. */
+	/** PendingClick and PendingLook: the arena point under the cursor when the button went down, if there was one. */
 	FVector ClickPoint = FVector::ZeroVector;
+	bool bHasClickPoint = false;
 	/** Left + right: this drag needs both buttons. */
 	FKey CameraDragSecondKey;
 	/** Changed with the wheel while flying, like the editor's camera speed. */
