@@ -107,10 +107,17 @@ void ACombatPlayerController::OnLeftClick()
 	{
 		return;
 	}
-	// Ctrl: pick up the piece under the cursor to move it, instead of placing.
+	// Ctrl: pick up the piece (Build Mode) or the unit or spawn (Unit and Spawn Mode) under the cursor to move it.
 	if (Subsystem->IsDesignMode() && (IsInputKeyDown(EKeys::LeftControl) || IsInputKeyDown(EKeys::RightControl)))
 	{
-		Subsystem->PickDesignPiece(Point);
+		if (Subsystem->GetDesignTool() == ECombatDesignTool::Build)
+		{
+			Subsystem->PickDesignPiece(Point);
+		}
+		else
+		{
+			Subsystem->PickDesignUnit(Point);
+		}
 		return;
 	}
 	if (Subsystem->IsDesignMode())

@@ -192,3 +192,10 @@ Dated history: decisions, bugs, rejected approaches. Newest entries at the botto
 - A failed A* search was repeated every tick (the whole reachable area each time); it is now remembered per unit until either end changes sub-cell, which halved PiecesDemo's time without changing any checksum.
 - `ClearanceDoor` keeps its 60 cm units (capped to class 1). New test `NavClearance` (classes and the cap, the nav grid around a door and a blocked cell, edge walls on sub-cells, snapping, two classes in one fight). 62/62 tests. Seed 42: `DA_Setup_Test` `0x6682B9DD` twice, `DA_Setup_AoE` `0xA3C795EA`, `DA_Setup_Taunt` `0x7CE33AAB` (unchanged), `DA_Setup_Mixed` `0xE1494EB8`, `PiecesDemo` `0xF8FAFC01` twice. Batches: PiecesDemo 100 fights 3.8 s without time limits, `DA_Setup_Test` 1000 fights 21.7 s (was 3.4 s).
 - Checked by the user in PIE; merged to `main`.
+
+## Branch `unit-positions` (tag `before-unit-positions`)
+
+- 2026-10-05. Units and spawns on one of 9 positions per cell (the nav sub-cells of phase 6) and rotation in 11.25 degree steps, decisions with the user: one unit per position (up to 9 per cell), for units and spawns alike, only on positions free for the type's clearance class (the nav grids of the edited level), Pos and Rot columns in the spawn list. Level format 8 (`Position`, `Rotation` in 1/32 turns; older rotations converted, older units in the middle). The simulation starts a unit at its cell center plus `StartOffset`/`Offset`; units in the middle have none, so all existing checksums stayed (`0x6682B9DD`, Mixed `0xE1494EB8`, PiecesDemo `0xF8FAFC01`). 62/62 tests (format conversion, start offset in the simulation, lookup by cell and position).
+- Checked by the user in PIE.
+- Mouse in Unit and Spawn Mode like Build Mode (the user's choice): Ctrl + click picks up a unit (or a spawn of the selected wave) and the next click puts it down, one undo step; a right click puts a moved one back, else deselects the unit type, else erases. No simulation change; 62/62 tests (the designer has no automated tests).
+- Checked by the user in PIE; merged to `main`.

@@ -114,6 +114,8 @@ struct FCombatUnitSpawn
 	FCombatUnitStats Stats;
 	int32 Team = 0;
 	FIntPoint StartCell = FIntPoint::ZeroValue;
+	/** From the start cell's center, in cm (a LevelDesigner position in the cell); zero for setups. */
+	FVector2D StartOffset = FVector2D::ZeroVector;
 };
 
 /** An enemy that appears during a wave. */
@@ -121,6 +123,8 @@ struct FCombatWaveSpawn
 {
 	FCombatUnitStats Stats;
 	FIntPoint Cell = FIntPoint::ZeroValue;
+	/** From the cell's center, in cm. */
+	FVector2D Offset = FVector2D::ZeroVector;
 	/** Ticks after the start of its wave. */
 	int32 DelayTicks = 0;
 };
@@ -411,7 +415,7 @@ private:
 		int32 SpawnIndex;
 	};
 
-	FCombatUnit& AddUnit(const FCombatUnitStats& Stats, int32 Team, const FIntPoint& Cell, int32 SourceIndex);
+	FCombatUnit& AddUnit(const FCombatUnitStats& Stats, int32 Team, const FIntPoint& Cell, const FVector2D& Offset, int32 SourceIndex);
 	void StartWave();
 	/** Starts a wave whose time has come and spawns the units that are due. */
 	void UpdateWaves();

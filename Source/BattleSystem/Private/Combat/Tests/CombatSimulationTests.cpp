@@ -1442,7 +1442,8 @@ bool FCombatLevelFormatTest::RunTest(const FString& Parameters)
 	TestEqual(TEXT("Units survive"), Loaded.Units.Num(), 3);
 	TestTrue(TEXT("Unit cell survives"), Loaded.Units.Num() == 3 && Loaded.Units[1].Cell == FIntPoint(10, 6) && Loaded.Units[1].Team == 1);
 	TestEqual(TEXT("Unit rotation survives"), Loaded.Units.Num() == 3 ? Loaded.Units[0].Rotation : -1, 3);
-	TestEqual(TEXT("Rotation 3 is 135 degrees"), CombatLevels::GetUnitYaw(3), 135.f);
+	TestEqual(TEXT("Rotation 12 is 135 degrees"), CombatLevels::GetUnitYaw(12), 135.f);
+	TestEqual(TEXT("A step is 11.25 degrees"), CombatLevels::GetUnitYaw(1), 11.25f);
 
 	Level.Resize(8, 8);
 	TestEqual(TEXT("Shrinking removes units outside"), Level.Units.Num(), 2);
@@ -1464,7 +1465,17 @@ bool FCombatLevelFormatTest::RunTest(const FString& Parameters)
 		TEXT("\"units\":[{\"type\":\"A\",\"team\":0,\"cell\":{\"x\":0,\"y\":0}},{\"type\":\"A\",\"team\":1,\"cell\":{\"x\":5,\"y\":0}}],")
 		TEXT("\"waves\":[{\"spawns\":[{\"type\":\"A\",\"cell\":{\"x\":5,\"y\":4},\"time\":0}]}]}"), Unturned));
 	TestTrue(TEXT("Old team 0 faces +X, team 1 and spawns -X"), Unturned.Units.Num() == 2 && Unturned.Units[0].Rotation == 0
-		&& Unturned.Units[1].Rotation == 4 && Unturned.Waves.Num() == 1 && Unturned.Waves[0].Spawns.Num() == 1 && Unturned.Waves[0].Spawns[0].Rotation == 4);
+		&& Unturned.Units[1].Rotation == 16 && Unturned.Waves.Num() == 1 && Unturned.Waves[0].Spawns.Num() == 1 && Unturned.Waves[0].Spawns[0].Rotation == 16);
+
+	// Versions 5..7 kept rotations in eighth turns, and had no positions in the cell (the middle).
+	FCombatLevel Eighths;
+	TestTrue(TEXT("Reads a version 7 level"), CombatLevels::FromJson(TEXT("{\"formatVersion\":7,\"name\":\"Old\",\"width\":6,\"height\":5,")
+		TEXT("\"units\":[{\"type\":\"A\",\"team\":0,\"cell\":{\"x\":0,\"y\":0},\"rotation\":2}],")
+		TEXT("\"waves\":[{\"spawns\":[{\"type\":\"A\",\"cell\":{\"x\":5,\"y\":4},\"time\":0,\"rotation\":5}]}]}"), Eighths));
+	TestTrue(TEXT("Eighth turns become 1/32 turns (90 and 225 degrees stay)"), Eighths.Units.Num() == 1 && Eighths.Units[0].Rotation == 8
+		&& Eighths.Waves.Num() == 1 && Eighths.Waves[0].Spawns.Num() == 1 && Eighths.Waves[0].Spawns[0].Rotation == 20);
+	TestTrue(TEXT("Older units stand in the middle of their cell"), Eighths.Units.Num() == 1 && Eighths.Units[0].Position == CombatLevels::MiddlePosition
+		&& Eighths.Waves[0].Spawns[0].Position == CombatLevels::MiddlePosition);
 	Level.Resize(2, 100);
 	TestTrue(TEXT("Size is clamped"), Level.Width == FCombatLevel::MinSize && Level.Height == FCombatLevel::MaxSize);
 	return true;
@@ -1489,6 +1500,19 @@ bool FCombatLevelConfigTest::RunTest(const FString& Parameters)
 	TestEqual(TEXT("Three valid units"), Config.Units.Num(), 3);
 	TestEqual(TEXT("A definition per unit"), Definitions.Num(), 3);
 	TestTrue(TEXT("A rotation per unit, skipped ones left out"), Rotations.Num() == 3 && Rotations[2] == 6);
+	TestTrue(TEXT("Units in the middle of their cell have no offset"), Config.Units[0].StartOffset.IsZero());
+
+	// A position in the cell: the unit starts on that sub-cell's center (0 = top left, a third of a cell from the middle).
+	{
+		FCombatLevel Placed = Level;
+		Placed.Units[0].Position = 0;
+		FCombatSimConfig PlacedConfig;
+		CombatLevels::BuildConfig(Placed, 20, Resolve, PlacedConfig);
+		const FVector2D Expected = PlacedConfig.Grid.CellToLocal(Placed.Units[0].Cell) + FVector2D(-100.0 / 3.0, -100.0 / 3.0);
+		TestTrue(TEXT("Position 0 is a third of a cell up and left"), PlacedConfig.Units[0].StartOffset.Equals(FVector2D(-100.0 / 3.0, -100.0 / 3.0), 0.01));
+		FCombatSimulation PlacedSimulation(PlacedConfig);
+		TestTrue(TEXT("The simulation starts it there"), PlacedSimulation.GetUnits()[0].Position.Equals(Expected, 0.01));
+	}
 	TestTrue(TEXT("The grid comes from the level"), Config.Grid.Width == 12 && !Config.Grid.IsWalkable(FIntPoint(5, 1)));
 
 	// A fight from a level is deterministic like any other.
@@ -1793,7 +1817,14 @@ bool FCombatWaveLevelTest::RunTest(const FString& Parameters)
 
 	Level.Resize(10, 8);
 	TestTrue(TEXT("Shrinking removes spawns outside"), Level.Waves[0].Spawns.Num() == 3 && Level.Waves[2].Spawns.IsEmpty());
-	TestTrue(TEXT("RemoveSpawnsAt removes from every wave"), Level.RemoveSpawnsAt(FIntPoint(9, 1)) && Level.FindSpawnAt(0, FIntPoint(9, 1)) == INDEX_NONE);
+	TestTrue(TEXT("RemoveSpawnsAt removes from every wave"), Level.RemoveSpawnsAt(FIntPoint(9, 1)) && Level.FindSpawnAt(0, FIntPoint(9, 1), CombatLevels::MiddlePosition) == INDEX_NONE);
+
+	// One spawn per position: two in the same cell on different positions.
+	Level.Waves[0].Spawns.Add(CombatTests::MakeLevelSpawn(TEXT("Fighter"), FIntPoint(2, 2), 0.f));
+	Level.Waves[0].Spawns.Last().Position = 0;
+	Level.Waves[0].Spawns.Add(CombatTests::MakeLevelSpawn(TEXT("Fighter"), FIntPoint(2, 2), 0.f));
+	TestTrue(TEXT("Spawns are found by cell and position"), Level.FindSpawnAt(0, FIntPoint(2, 2), 0) == Level.Waves[0].Spawns.Num() - 2
+		&& Level.FindSpawnAt(0, FIntPoint(2, 2), CombatLevels::MiddlePosition) == Level.Waves[0].Spawns.Num() - 1 && Level.FindSpawnAt(0, FIntPoint(2, 2), 8) == INDEX_NONE);
 	return true;
 }
 

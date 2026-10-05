@@ -186,9 +186,19 @@ public:
 	bool PlayDesignLevel(int32 Seed);
 	void SetDesignSize(int32 Width, int32 Height);
 
-	void SetDesignTool(ECombatDesignTool Tool) { DesignTool = Tool; bDesignEyedropper = false; }
+	/** Also selects the unit type again (Unit and Spawn Mode). */
+	void SetDesignTool(ECombatDesignTool Tool) { DesignTool = Tool; bDesignEyedropper = false; bDesignUnitSelected = true; }
 	ECombatDesignTool GetDesignTool() const { return DesignTool; }
-	void SetDesignUnitType(const FString& Type) { DesignUnitType = Type; }
+	void SetDesignUnitType(const FString& Type) { DesignUnitType = Type; bDesignUnitSelected = true; }
+	/** Unit and Spawn Mode: whether a unit type is selected to place (a right click deselects it). */
+	bool HasDesignUnitSelected() const { return bDesignUnitSelected; }
+	/**
+	 * Ctrl+click in Unit Mode (a unit) or Spawn Mode (a spawn of the selected wave): picks up the one on the position
+	 * under WorldPoint (else the nearest in that cell) to move it; its type, team and rotation become the selection.
+	 * The next placement puts it down (one undo step with the pick-up); a right click puts it back.
+	 */
+	bool PickDesignUnit(const FVector& WorldPoint);
+	bool IsMovingDesignUnit() const { return DesignMovingUnit.IsSet() || DesignMovingSpawn.IsSet(); }
 	const FString& GetDesignUnitType() const { return DesignUnitType; }
 	/**
 	 * LevelDesigner undo / redo (Ctrl+Z, Ctrl+Y or Ctrl+Shift+Z, buttons): one step per change of the edited level,
@@ -212,8 +222,9 @@ public:
 	bool IsMovingDesignPiece() const { return DesignMovingPiece.IsSet(); }
 	bool HasDesignPieceSelected() const { return !DesignPieceId.IsEmpty(); }
 	/**
-	 * Right click in edit mode: puts a moved piece back, else deselects the selected piece, else erases what is under
-	 * WorldPoint (the cell; with the Piece tool the topmost piece). bHasPoint is false when the click missed the grid plane.
+	 * Right click in edit mode: puts a moved piece, unit or spawn back, else deselects the selected piece (Build Mode) or
+	 * unit type (Unit and Spawn Mode), else erases what is under WorldPoint (Build Mode: the topmost piece; Unit and
+	 * Spawn Mode: the unit or spawn there). bHasPoint is false when the click missed the grid plane.
 	 */
 	void DesignRightClick(const FVector& WorldPoint, bool bHasPoint);
 	/** Color of the next tintable piece (solid floor) placed; sRGB. */
@@ -243,12 +254,17 @@ public:
 	void HideDesignPiecePreview();
 	void SetDesignUnitTeam(int32 Team) { DesignUnitTeam = Team; }
 	int32 GetDesignUnitTeam() const { return DesignUnitTeam; }
-	/** Unit and Spawn Mode: turns the start pose of the next unit or spawn by Steps of 45 degrees (kept for the next one). */
+	/** Unit and Spawn Mode: turns the start pose of the next unit or spawn by Steps of 11.25 degrees (kept for the next one). */
 	void RotateDesignUnit(int32 Steps);
-	int32 GetDesignUnitDegrees() const { return FMath::RoundToInt32(CombatLevels::GetUnitYaw(DesignUnitRotation)); }
+	float GetDesignUnitDegrees() const { return CombatLevels::GetUnitYaw(DesignUnitRotation); }
+	/**
+	 * Whether a unit of Type may stand on Position of Cell: the cell is in the grid and walkable, and the position's
+	 * nav sub-cell is open for the type's clearance class (not against a wall or a blocking piece).
+	 */
+	bool IsDesignSpotFree(const FIntPoint& Cell, int32 Position, const FString& Type);
 	/**
 	 * Unit and Spawn Mode: a see-through ghost of the selected unit type (in the team color, in its rotation) on the
-	 * cell under WorldPoint, with a green cell plate, red where it cannot stand.
+	 * position (one of 9 per cell) under WorldPoint, with a green plate there, red where it cannot stand.
 	 */
 	void UpdateDesignUnitGhost(const FVector& WorldPoint);
 	void HideDesignUnitGhost();
@@ -368,12 +384,16 @@ private:
 	void ResetDesignHistory();
 	/** Puts a piece that is being moved back where it was (undoing the pick-up). */
 	void CancelDesignPieceMove();
+	/** Puts a picked-up unit or spawn back (undo of the pick-up, or adding it again after other edits). */
+	void CancelDesignUnitMove();
 	/** Undo / redo: shows Level as the edited level (keeping the current name). */
 	void RestoreDesignLevel(FCombatLevel Level);
 	/** The selected piece under WorldPoint and its definition; false without a catalog or a valid selection. */
 	bool GetDesignPiecePlacement(const FVector& WorldPoint, FCombatLevelPiece& OutPiece, const FCombatPieceDefinition*& OutDefinition);
 	/** Whether a unit may stand on Cell of the edited level: no blocking cell kind and no piece that blocks walking. */
 	bool IsDesignCellWalkable(const FIntPoint& Cell) const;
+	/** The cell and the unit position in it (0..8) under a world point. */
+	void GetDesignSpot(const FVector& WorldPoint, FIntPoint& OutCell, int32& OutPosition) const;
 	void DestroyDesignPreviews();
 	/** Lowers the walls for the wall mode, with the units (or LevelDesigner previews) as cutaway targets. */
 	void UpdateWalls();
@@ -457,9 +477,14 @@ private:
 	int32 ActiveDesignStroke = INDEX_NONE;
 	int32 LastRecordedStroke = INDEX_NONE;
 
-	/** The piece being moved, as it was before the pick-up, and the stroke serial of the pick-up. */
+	/** The piece being moved, as it was before the pick-up, and the stroke serial of the pick-up (also for units and spawns). */
 	TOptional<FCombatLevelPiece> DesignMovingPiece;
 	int32 DesignMoveStroke = INDEX_NONE;
+	/** The unit or spawn being moved (Ctrl+click), as it was, and the spawn's wave. */
+	TOptional<FCombatLevelUnit> DesignMovingUnit;
+	TOptional<FCombatLevelSpawn> DesignMovingSpawn;
+	int32 DesignMovingSpawnWave = INDEX_NONE;
+	bool bDesignUnitSelected = true;
 
 	FString DesignPieceId;
 	/** In eighth turns (45 degrees); pieces that turn in quarters use half of it. */
@@ -482,8 +507,11 @@ private:
 	TObjectPtr<ACombatUnitActor> DesignGhost;
 	FString DesignGhostType;
 	int32 DesignGhostTeam = INDEX_NONE;
-	/** Start rotation (eighth turns) of the next unit or spawn placed. */
+	/** Start rotation (1/32 turns) of the next unit or spawn placed. */
 	int32 DesignUnitRotation = 0;
+	/** Nav grids of the edited level per clearance class (0..CombatNavigation::MaxClass), for IsDesignSpotFree; rebuilt per DesignRevision. */
+	TArray<FCombatGridData> DesignNavGrids;
+	int32 DesignNavRevision = INDEX_NONE;
 	FColor DesignPieceColor = FColor::White;
 	bool bDesignEyedropper = false;
 	ECombatWallMode WallMode = ECombatWallMode::Cutaway;

@@ -21,6 +21,7 @@ namespace CombatSpawnList
 	static constexpr float TypeWidth = 140.f;
 	static constexpr float NumberWidth = 48.f;
 	static constexpr float TimeWidth = 60.f;
+	static constexpr float RotationWidth = 64.f;
 }
 
 void SCombatSpawnList::Construct(const FArguments& InArgs)
@@ -57,6 +58,8 @@ void SCombatSpawnList::Construct(const FArguments& InArgs)
 				+ SHorizontalBox::Slot().AutoWidth()[ MakeColumnLabel(INVTEXT("Wave"), CombatSpawnList::NumberWidth) ]
 				+ SHorizontalBox::Slot().AutoWidth()[ MakeColumnLabel(INVTEXT("X"), CombatSpawnList::NumberWidth) ]
 				+ SHorizontalBox::Slot().AutoWidth()[ MakeColumnLabel(INVTEXT("Y"), CombatSpawnList::NumberWidth) ]
+				+ SHorizontalBox::Slot().AutoWidth()[ MakeColumnLabel(INVTEXT("Pos"), CombatSpawnList::NumberWidth) ]
+				+ SHorizontalBox::Slot().AutoWidth()[ MakeColumnLabel(INVTEXT("Rot"), CombatSpawnList::RotationWidth) ]
 				+ SHorizontalBox::Slot().AutoWidth()[ MakeColumnLabel(INVTEXT("Time (s)"), CombatSpawnList::TimeWidth) ]
 			]
 
@@ -230,6 +233,14 @@ TSharedRef<SWidget> SCombatSpawnList::MakeSpawnRow(int32 WaveIndex, int32 SpawnI
 		[
 			MakeIntBox(Spawn.Cell.Y, 0, Level.Height - 1, [Edit](int32 Y) { Edit([Y](FCombatLevelSpawn& Changed) { Changed.Cell.Y = Y; }); })
 		]
+		+ SHorizontalBox::Slot().AutoWidth()
+		[
+			MakeIntBox(Spawn.Position, 0, 8, [Edit](int32 Position) { Edit([Position](FCombatLevelSpawn& Changed) { Changed.Position = Position; }); })
+		]
+		+ SHorizontalBox::Slot().AutoWidth()
+		[
+			MakeRotationBox(Spawn.Rotation, [Edit](int32 Rotation) { Edit([Rotation](FCombatLevelSpawn& Changed) { Changed.Rotation = Rotation; }); })
+		]
 		+ SHorizontalBox::Slot().AutoWidth().Padding(0.f, 0.f, 4.f, 0.f)
 		[
 			SNew(SBox)
@@ -290,6 +301,14 @@ TSharedRef<SWidget> SCombatSpawnList::MakeStartUnitRow(int32 UnitIndex)
 		+ SHorizontalBox::Slot().AutoWidth()
 		[
 			MakeIntBox(Unit.Cell.Y, 0, Level.Height - 1, [Edit](int32 Y) { Edit([Y](FCombatLevelUnit& Changed) { Changed.Cell.Y = Y; }); })
+		]
+		+ SHorizontalBox::Slot().AutoWidth()
+		[
+			MakeIntBox(Unit.Position, 0, 8, [Edit](int32 Position) { Edit([Position](FCombatLevelUnit& Changed) { Changed.Position = Position; }); })
+		]
+		+ SHorizontalBox::Slot().AutoWidth()
+		[
+			MakeRotationBox(Unit.Rotation, [Edit](int32 Rotation) { Edit([Rotation](FCombatLevelUnit& Changed) { Changed.Rotation = Rotation; }); })
 		]
 		+ SHorizontalBox::Slot().AutoWidth()
 		[
@@ -374,6 +393,29 @@ TSharedRef<SWidget> SCombatSpawnList::MakeIntBox(int32 Value, int32 Min, int32 M
 				if (NewValue != Value)
 				{
 					OnCommitted(NewValue);
+				}
+			})
+		];
+}
+
+TSharedRef<SWidget> SCombatSpawnList::MakeRotationBox(int32 Rotation, TFunction<void(int32)> OnCommitted)
+{
+	const float StepDegrees = CombatLevels::GetUnitYaw(1);
+	return SNew(SBox)
+		.WidthOverride(CombatSpawnList::RotationWidth)
+		.Padding(0.f, 0.f, 4.f, 0.f)
+		[
+			SNew(SSpinBox<float>)
+			.MinValue(0.f)
+			.MaxValue(360.f - StepDegrees)
+			.Delta(StepDegrees)
+			.Value(CombatLevels::GetUnitYaw(Rotation))
+			.OnValueCommitted_Lambda([OnCommitted, Rotation, StepDegrees](float Degrees, ETextCommit::Type)
+			{
+				const int32 NewRotation = FMath::RoundToInt32(Degrees / StepDegrees) % CombatLevels::UnitRotationSteps;
+				if (NewRotation != Rotation)
+				{
+					OnCommitted(NewRotation);
 				}
 			})
 		];

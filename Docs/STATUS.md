@@ -27,7 +27,10 @@ _Last updated: 2026-10-05_
 
 - Phase 6, navigation layer (checked by the user in PIE; merged to `main` from `nav-subgrid`, tag `before-nav-subgrid`): routes on 3x3 sub-cells per clearance class (from the unit radius, capped so every unit fits through a one-cell door); movement unchanged; about 8x per tick. 62/62 tests.
 
+- Unit positions (checked by the user in PIE; merged to `main` from `unit-positions`, tag `before-unit-positions`): units and spawns on one of 9 positions per cell, rotation per 11.25 degrees, Pos/Rot in the spawn list; level format 8. Then: Ctrl+click moves a unit or spawn, right click puts back / deselects / erases (checked in PIE).
+
 ## Open work
+
 
 - Balance (from the batch): team 0 wins `DA_Setup_AoE` 86.5% and `DA_Setup_Mixed` 99.7%; the Brutes win `DA_Setup_Test` and `DA_Setup_Taunt`.
 - Character looks, later: per-bone scaling (own AnimGraph node + editor module), parts from other skeletons (retarget first), and "Allow CPU Access" on the source meshes for cooked builds. Mutable remains the alternative if this falls short.

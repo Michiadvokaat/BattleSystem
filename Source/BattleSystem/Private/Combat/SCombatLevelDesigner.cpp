@@ -343,6 +343,12 @@ void SCombatLevelDesigner::Construct(const FArguments& InArgs)
 					[
 						SNew(STextBlock).Text_Lambda([this]()
 						{
+							// The subsystem's type (a picked-up unit changes it).
+							const UCombatSubsystem* Current = Subsystem.Get();
+							if (Current && !Current->GetDesignUnitType().IsEmpty())
+							{
+								return FText::FromString(Current->GetDesignUnitType());
+							}
 							return SelectedUnitType ? FText::FromString(*SelectedUnitType) : INVTEXT("(no unit types)");
 						})
 					]
@@ -400,7 +406,7 @@ void SCombatLevelDesigner::Construct(const FArguments& InArgs)
 					SNew(STextBlock).Text_Lambda([this]()
 					{
 						const UCombatSubsystem* Current = Subsystem.Get();
-						return FText::FromString(FString::Printf(TEXT("%d°"), Current ? Current->GetDesignUnitDegrees() : 0));
+						return FText::FromString(FString::Printf(TEXT("%g°"), Current ? Current->GetDesignUnitDegrees() : 0.f));
 					})
 				]
 				+ SHorizontalBox::Slot().AutoWidth().Padding(0.f, 0.f, 4.f, 0.f)
@@ -532,7 +538,7 @@ void SCombatLevelDesigner::Construct(const FArguments& InArgs)
 				{
 					return IsTool(ECombatDesignTool::Build)
 						? INVTEXT("Left: place   Ctrl+Left: move a piece   Shift+Left: erase   R / Shift+R: rotate   PgUp / PgDn: wall item height   I: pick a floor color   Right click: deselect / put back / erase   Right drag: look")
-						: INVTEXT("Left: place   Shift+Left: erase   R / Shift+R: rotate   Right click: erase   Right drag: look");
+						: INVTEXT("Left: place   Ctrl+Left: move a unit   Shift+Left: erase   R / Shift+R: rotate   Right click: deselect / put back / erase   Right drag: look");
 				})
 				.ColorAndOpacity(FLinearColor(0.75f, 0.75f, 0.75f))
 				.Font(FCoreStyle::GetDefaultFontStyle("Italic", 9))

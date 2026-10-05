@@ -39,18 +39,18 @@ void FCombatLevel::Resize(int32 NewWidth, int32 NewHeight)
 	}
 }
 
-int32 FCombatLevel::FindUnitAt(const FIntPoint& Cell) const
+int32 FCombatLevel::FindUnitAt(const FIntPoint& Cell, int32 Position) const
 {
-	return Units.IndexOfByPredicate([&Cell](const FCombatLevelUnit& Unit) { return Unit.Cell == Cell; });
+	return Units.IndexOfByPredicate([&Cell, Position](const FCombatLevelUnit& Unit) { return Unit.Cell == Cell && Unit.Position == Position; });
 }
 
-int32 FCombatLevel::FindSpawnAt(int32 WaveIndex, const FIntPoint& Cell) const
+int32 FCombatLevel::FindSpawnAt(int32 WaveIndex, const FIntPoint& Cell, int32 Position) const
 {
 	if (!Waves.IsValidIndex(WaveIndex))
 	{
 		return INDEX_NONE;
 	}
-	return Waves[WaveIndex].Spawns.IndexOfByPredicate([&Cell](const FCombatLevelSpawn& Spawn) { return Spawn.Cell == Cell; });
+	return Waves[WaveIndex].Spawns.IndexOfByPredicate([&Cell, Position](const FCombatLevelSpawn& Spawn) { return Spawn.Cell == Cell && Spawn.Position == Position; });
 }
 
 bool FCombatLevel::RemoveSpawnsAt(const FIntPoint& Cell)
@@ -484,7 +484,8 @@ bool CombatLevels::FromJson(const FString& Json, FCombatLevel& OutLevel)
 		return false;
 	}
 	OutLevel.Normalize();
-	// Before version 5 units faced the other side: team 0 +X, the rest and spawns -X.
+	// Before version 5 units faced the other side: team 0 +X, the rest and spawns -X. Versions 5..7 kept rotations
+	// in eighth turns (now 1/32). Positions in the cell came with version 8; older units stand in the middle (the default).
 	if (OutLevel.FormatVersion < 5)
 	{
 		for (FCombatLevelUnit& Unit : OutLevel.Units)
@@ -496,6 +497,21 @@ bool CombatLevels::FromJson(const FString& Json, FCombatLevel& OutLevel)
 			for (FCombatLevelSpawn& Spawn : Wave.Spawns)
 			{
 				Spawn.Rotation = UnitRotationSteps / 2;
+			}
+		}
+	}
+	else if (OutLevel.FormatVersion < 8)
+	{
+		const int32 PerEighth = UnitRotationSteps / 8;
+		for (FCombatLevelUnit& Unit : OutLevel.Units)
+		{
+			Unit.Rotation *= PerEighth;
+		}
+		for (FCombatLevelWave& Wave : OutLevel.Waves)
+		{
+			for (FCombatLevelSpawn& Spawn : Wave.Spawns)
+			{
+				Spawn.Rotation *= PerEighth;
 			}
 		}
 	}
@@ -583,6 +599,7 @@ bool CombatLevels::BuildConfig(const FCombatLevel& Level, int32 TickRate, TFunct
 		Spawn.Stats = Definition->ToSimStats(TickRate);
 		Spawn.Team = Entry.Team;
 		Spawn.StartCell = Entry.Cell;
+		Spawn.StartOffset = GetUnitPositionOffset(Entry.Position, Level.CellSize);
 		if (OutDefinitions)
 		{
 			OutDefinitions->Add(Definition);
@@ -624,6 +641,7 @@ bool CombatLevels::BuildConfig(const FCombatLevel& Level, int32 TickRate, TFunct
 			FCombatWaveSpawn& Spawn = Wave.Spawns.AddDefaulted_GetRef();
 			Spawn.Stats = Definition->ToSimStats(TickRate);
 			Spawn.Cell = Entry.Cell;
+			Spawn.Offset = GetUnitPositionOffset(Entry.Position, Level.CellSize);
 			Spawn.DelayTicks = FMath::Max(FMath::RoundToInt32(Entry.Time * TickRate), 0);
 			if (OutDefinitions)
 			{
