@@ -98,6 +98,12 @@ public:
 	/** One of this unit's area attacks went off (the subsystem draws the area); Radius = its reach in cm. */
 	virtual void OnAreaAttack(float Radius);
 
+	/**
+	 * LevelDesigner ghost: every mesh gets Material (Color = the team color, Opacity), without shadows, and the
+	 * health bar and labels are hidden. Call after InitUnit and InitAppearance.
+	 */
+	void MakeGhost(UMaterialInterface* Material, float Opacity);
+
 	int32 GetUnitId() const { return UnitId; }
 	int32 GetTeam() const { return Team; }
 

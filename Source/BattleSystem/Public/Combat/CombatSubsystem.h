@@ -233,6 +233,15 @@ public:
 	void HideDesignPiecePreview();
 	void SetDesignUnitTeam(int32 Team) { DesignUnitTeam = Team; }
 	int32 GetDesignUnitTeam() const { return DesignUnitTeam; }
+	/** Unit and Spawn Mode: turns the start pose of the next unit or spawn by Steps of 45 degrees (kept for the next one). */
+	void RotateDesignUnit(int32 Steps);
+	int32 GetDesignUnitDegrees() const { return FMath::RoundToInt32(CombatLevels::GetUnitYaw(DesignUnitRotation)); }
+	/**
+	 * Unit and Spawn Mode: a see-through ghost of the selected unit type (in the team color, in its rotation) on the
+	 * cell under WorldPoint, with a green cell plate, red where it cannot stand.
+	 */
+	void UpdateDesignUnitGhost(const FVector& WorldPoint);
+	void HideDesignUnitGhost();
 
 	/** The wave the Spawn tool places in and whose spawns are shown; INDEX_NONE when the level has no waves. */
 	int32 GetDesignWave() const { return DesignWave; }
@@ -291,7 +300,8 @@ public:
 
 	/** BuildSimConfig for a setup or a level (a level brings its own grid; the arena only gives the origin). */
 	static bool BuildSimConfigFromSource(UWorld* World, int32 Seed, const FCombatFightSource& Source, const FCombatSimSettings& Settings,
-		FCombatSimConfig& OutConfig, FVector& OutGridOrigin, TArray<const UCombatUnitDefinition*>* OutDefinitions = nullptr);
+		FCombatSimConfig& OutConfig, FVector& OutGridOrigin, TArray<const UCombatUnitDefinition*>* OutDefinitions = nullptr,
+		TArray<int32>* OutRotations = nullptr);
 
 	/** Setup asset names, then "Level: <name>" for every saved level. */
 	static TArray<FString> GetAllSourceNames();
@@ -373,6 +383,9 @@ private:
 	UPROPERTY(Transient)
 	TArray<TObjectPtr<UCombatUnitDefinition>> SourceDefinitions;
 
+	/** Indexed like SourceDefinitions: the start rotation (eighth turns) of each unit of a level; empty for setups. */
+	TArray<int32> SourceRotations;
+
 	/** Projectiles in flight, by projectile ID. */
 	UPROPERTY(Transient)
 	TMap<int32, TObjectPtr<ACombatProjectileActor>> ProjectileActors;
@@ -450,6 +463,14 @@ private:
 
 	UPROPERTY(Transient)
 	TArray<TObjectPtr<ACombatUnitActor>> DesignPreviews;
+
+	/** The unit ghost under the cursor (Unit and Spawn Mode), and the type and team it was made for. */
+	UPROPERTY(Transient)
+	TObjectPtr<ACombatUnitActor> DesignGhost;
+	FString DesignGhostType;
+	int32 DesignGhostTeam = INDEX_NONE;
+	/** Start rotation (eighth turns) of the next unit or spawn placed. */
+	int32 DesignUnitRotation = 0;
 	ECombatWallMode WallMode = ECombatWallMode::Cutaway;
 
 	int32 SelectedUnitId = INDEX_NONE;

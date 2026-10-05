@@ -18,6 +18,8 @@ struct FCombatLevelUnit
 	UPROPERTY() FString Type;
 	UPROPERTY() int32 Team = 0;
 	UPROPERTY() FIntPoint Cell = FIntPoint::ZeroValue;
+	/** Start pose (presentation only): eighth turns, 0..7, 0 = facing +X; see CombatLevels::GetUnitYaw. */
+	UPROPERTY() int32 Rotation = 0;
 };
 
 /** An enemy (wave team) that appears during a wave. */
@@ -31,6 +33,8 @@ struct FCombatLevelSpawn
 	UPROPERTY() FIntPoint Cell = FIntPoint::ZeroValue;
 	/** Seconds after the start of its wave. */
 	UPROPERTY() float Time = 0.f;
+	/** Pose when it appears (presentation only): eighth turns, 0..7, 0 = facing +X. */
+	UPROPERTY() int32 Rotation = 0;
 };
 
 USTRUCT()
@@ -120,10 +124,11 @@ struct BATTLESYSTEM_API FCombatLevel
 	static constexpr int32 MaxSize = 40;
 
 	/**
-	 * 1 = no waves; 2 = with waves; 3 = with pieces; 4 = without cell rows (older files load without the missing parts;
-	 * their rows of walls, hedges and water are ignored).
+	 * 1 = no waves; 2 = with waves; 3 = with pieces; 4 = without cell rows; 5 = with unit and spawn rotations (older
+	 * files load without the missing parts; their rows of walls, hedges and water are ignored, and their units face
+	 * the other side: team 0 +X, the rest and spawns -X).
 	 */
-	UPROPERTY() int32 FormatVersion = 4;
+	UPROPERTY() int32 FormatVersion = 5;
 	UPROPERTY() FString Name;
 	UPROPERTY() int32 Width = 20;
 	UPROPERTY() int32 Height = 12;
@@ -175,6 +180,10 @@ namespace CombatLevels
 {
 	/** <Project>/Levels/ */
 	BATTLESYSTEM_API FString GetDirectory();
+	/** Rotation steps of a unit or spawn (eighth turns) and the yaw in degrees of one. */
+	static constexpr int32 UnitRotationSteps = 8;
+	inline float GetUnitYaw(int32 Rotation) { return Rotation * 360.f / UnitRotationSteps; }
+
 	/** Names (file names without .json) of all saved levels, sorted. */
 	BATTLESYSTEM_API TArray<FString> FindLevelNames();
 	BATTLESYSTEM_API bool Save(const FCombatLevel& Level);
@@ -192,9 +201,10 @@ namespace CombatLevels
 	/**
 	 * Builds a simulation config (grid, units and waves) from a level. Resolve turns a unit type name into its
 	 * definition; units and spawns of an unknown type or on an unwalkable cell are skipped with a warning.
-	 * OutDefinitions gets the definition per FCombatUnit::SourceIndex: the units, then every wave's spawns.
+	 * OutDefinitions gets the definition per FCombatUnit::SourceIndex: the units, then every wave's spawns;
+	 * OutRotations their start rotation in the same order (presentation only, not in the config).
 	 * Settings (tick rate and the rest) are applied by the caller.
 	 */
 	BATTLESYSTEM_API bool BuildConfig(const FCombatLevel& Level, int32 TickRate, TFunctionRef<const UCombatUnitDefinition*(const FString&)> Resolve,
-		FCombatSimConfig& OutConfig, TArray<const UCombatUnitDefinition*>* OutDefinitions = nullptr);
+		FCombatSimConfig& OutConfig, TArray<const UCombatUnitDefinition*>* OutDefinitions = nullptr, TArray<int32>* OutRotations = nullptr);
 }

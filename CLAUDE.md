@@ -47,11 +47,14 @@ $P  = "D:\Unreal\UnrealProjects\BattleSystem\BattleSystem.uproject"
 # Make taller/lower copies of catalog meshes (editor mode, not -run=pythonscript; editor must be closed), then rerun CreatePieceCatalog.py
 & "$UE\Engine\Binaries\Win64\UnrealEditor-Cmd.exe" "$P" -unattended -nullrhi -nosplash -nosound -ExecCmds="py D:/Unreal/UnrealProjects/BattleSystem/Scripts/MakeWallVariants.py, QUIT_EDITOR"
 
+# (Re)create the LevelDesigner unit ghost material /Game/Combat/M_DesignGhost (editor must be closed)
+& "$UE\Engine\Binaries\Win64\UnrealEditor-Cmd.exe" "$P" -run=pythonscript -script="D:/Unreal/UnrealProjects/BattleSystem/Scripts/CreateDesignGhostMaterial.py" -unattended -nullrhi -nosplash
+
 # Create the character looks in /Game/Characters/Looks (local content; editor must be closed)
 & "$UE\Engine\Binaries\Win64\UnrealEditor-Cmd.exe" "$P" -run=pythonscript -script="D:/Unreal/UnrealProjects/BattleSystem/Scripts/CreateCharacterAppearances.py" -unattended -nullrhi -nosplash
 ```
 
-Output goes to `Saved/Logs/BattleSystem.log`, which each run overwrites. Grep it for `LogCombat`, `Test Completed` or the script's log tag (`[CombatAssets]`, `[PieceCatalog]`, `[WallVariants]`, `[CombatLooks]`).
+Output goes to `Saved/Logs/BattleSystem.log`, which each run overwrites. Grep it for `LogCombat`, `Test Completed` or the script's log tag (`[CombatAssets]`, `[PieceCatalog]`, `[WallVariants]`, `[CombatLooks]`, `[DesignGhost]`).
 
 Console commands (in PIE or headless): `Combat.Start <seed> [setup]`, `Combat.Simulate <seed> [setup]`, `Combat.Stop`, `Combat.Batch <count> [setup] [startseed] [csv]` (headless statistics; CSV to `Saved/CombatBatch/`), `Combat.SaveReplay`, `Combat.Replay <file>` (`Saved/Replays/`), the player commands `Combat.Move <unit> <x> <y>`, `Combat.Ability <unit> [index]` and `Combat.CallWave` (start the next wave of a level now), and `Combat.SetSlot <unit> <slot> [mesh]` (presentation debug: change a swappable part of a unit's look). Simulate and Batch accept `script=<name>` (a `UCombatCommandScript`). Start, Simulate and Batch accept `level=<name>` (a LevelDesigner level from `Levels/<name>.json`, name without `.json`, e.g. `Combat.Simulate 42 level=PiecesDemo`) instead of a setup; Batch with a level then takes `<count> [startseed]`. The console variable `Combat.Debug 1|2` draws targets, steer points and the distance map, and `Combat.ShowRanges 1` draws the range of area attacks (taunt). In PIE the same controls (plus setup, seed, pause and speed) are on the in-game control panel (`ACombatHUD`), and the camera moves like the editor viewport (RMB look + WASD, MMB pan, LMB+RMB pan sideways/up-down, wheel zoom, Alt+LMB orbit, F overview; `ACombatPlayerController`). `setup` is an asset name (`DA_Setup_Test`) or an object path. Without it, the default setup from Project Settings > Game > Combat is used.
 

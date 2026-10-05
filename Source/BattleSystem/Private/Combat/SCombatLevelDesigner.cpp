@@ -384,6 +384,33 @@ void SCombatLevelDesigner::Construct(const FArguments& InArgs)
 				]
 			]
 
+			// Unit and Spawn Mode: the start rotation of the next unit or spawn (45 degree steps, kept between placements).
+			+ SVerticalBox::Slot().AutoHeight().Padding(0.f, 2.f)
+			[
+				SNew(SHorizontalBox)
+				.Visibility_Lambda([this]()
+				{
+					return IsEditing() && (IsTool(ECombatDesignTool::Unit) || IsTool(ECombatDesignTool::Spawn)) ? EVisibility::Visible : EVisibility::Collapsed;
+				})
+				+ SHorizontalBox::Slot().AutoWidth().VAlign(VAlign_Center)[ MakeLabel(INVTEXT("Rotation")) ]
+				+ SHorizontalBox::Slot().AutoWidth().VAlign(VAlign_Center).Padding(0.f, 0.f, 8.f, 0.f)
+				[
+					SNew(STextBlock).Text_Lambda([this]()
+					{
+						const UCombatSubsystem* Current = Subsystem.Get();
+						return FText::FromString(FString::Printf(TEXT("%d°"), Current ? Current->GetDesignUnitDegrees() : 0));
+					})
+				]
+				+ SHorizontalBox::Slot().AutoWidth().Padding(0.f, 0.f, 4.f, 0.f)
+				[
+					MakeButton(INVTEXT("Rotate (R)"), [this]() { if (UCombatSubsystem* Current = Subsystem.Get()) { Current->RotateDesignUnit(1); } })
+				]
+				+ SHorizontalBox::Slot().AutoWidth()
+				[
+					MakeButton(INVTEXT("Back (Shift+R)"), [this]() { if (UCombatSubsystem* Current = Subsystem.Get()) { Current->RotateDesignUnit(-1); } })
+				]
+			]
+
 			// Build Mode: main categories, their subcategories, the pieces of the selected one, and the rotation.
 			+ SVerticalBox::Slot().AutoHeight().Padding(0.f, 2.f)
 			[
@@ -440,7 +467,7 @@ void SCombatLevelDesigner::Construct(const FArguments& InArgs)
 				{
 					return IsTool(ECombatDesignTool::Build)
 						? INVTEXT("Left: place   Ctrl+Left: move a piece   Shift+Left: erase   R / Shift+R: rotate   Right click: deselect / put back / erase   Right drag: look")
-						: INVTEXT("Left: place   Shift+Left: erase   Right click: erase   Right drag: look");
+						: INVTEXT("Left: place   Shift+Left: erase   R / Shift+R: rotate   Right click: erase   Right drag: look");
 				})
 				.ColorAndOpacity(FLinearColor(0.75f, 0.75f, 0.75f))
 				.Font(FCoreStyle::GetDefaultFontStyle("Italic", 9))

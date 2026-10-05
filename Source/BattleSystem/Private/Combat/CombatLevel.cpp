@@ -344,7 +344,22 @@ bool CombatLevels::FromJson(const FString& Json, FCombatLevel& OutLevel)
 		return false;
 	}
 	OutLevel.Normalize();
-	// Older files have no waves or pieces (and rows, which are ignored); saved again they get the current version.
+	// Before version 5 units faced the other side: team 0 +X, the rest and spawns -X.
+	if (OutLevel.FormatVersion < 5)
+	{
+		for (FCombatLevelUnit& Unit : OutLevel.Units)
+		{
+			Unit.Rotation = Unit.Team == 0 ? 0 : UnitRotationSteps / 2;
+		}
+		for (FCombatLevelWave& Wave : OutLevel.Waves)
+		{
+			for (FCombatLevelSpawn& Spawn : Wave.Spawns)
+			{
+				Spawn.Rotation = UnitRotationSteps / 2;
+			}
+		}
+	}
+	// Older files have no waves, pieces or rotations (and rows, which are ignored); saved again they get the current version.
 	OutLevel.FormatVersion = FCombatLevel().FormatVersion;
 	return true;
 }
@@ -403,7 +418,7 @@ bool CombatLevels::Delete(const FString& Name)
 }
 
 bool CombatLevels::BuildConfig(const FCombatLevel& Level, int32 TickRate, TFunctionRef<const UCombatUnitDefinition*(const FString&)> Resolve,
-	FCombatSimConfig& OutConfig, TArray<const UCombatUnitDefinition*>* OutDefinitions)
+	FCombatSimConfig& OutConfig, TArray<const UCombatUnitDefinition*>* OutDefinitions, TArray<int32>* OutRotations)
 {
 	Level.ToGridData(OutConfig.Grid);
 
@@ -431,6 +446,10 @@ bool CombatLevels::BuildConfig(const FCombatLevel& Level, int32 TickRate, TFunct
 		if (OutDefinitions)
 		{
 			OutDefinitions->Add(Definition);
+		}
+		if (OutRotations)
+		{
+			OutRotations->Add(Entry.Rotation);
 		}
 	}
 
@@ -469,6 +488,10 @@ bool CombatLevels::BuildConfig(const FCombatLevel& Level, int32 TickRate, TFunct
 			if (OutDefinitions)
 			{
 				OutDefinitions->Add(Definition);
+			}
+			if (OutRotations)
+			{
+				OutRotations->Add(Entry.Rotation);
 			}
 		}
 	}

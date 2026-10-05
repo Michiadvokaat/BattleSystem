@@ -515,6 +515,30 @@ void ACombatUnitActor::OnAreaAttack(float Radius)
 	ReceiveUnitAreaAttack(Radius);
 }
 
+void ACombatUnitActor::MakeGhost(UMaterialInterface* Material, float Opacity)
+{
+	HealthBarWidget->SetVisibility(false);
+	StatusWidget->SetVisibility(false);
+	UMaterialInstanceDynamic* GhostMaterial = Material ? UMaterialInstanceDynamic::Create(Material, this) : nullptr;
+	if (GhostMaterial)
+	{
+		GhostMaterial->SetVectorParameterValue(TEXT("Color"), TeamColor);
+		GhostMaterial->SetScalarParameterValue(TEXT("Opacity"), Opacity);
+	}
+	TArray<UMeshComponent*> Meshes;
+	GetComponents<UMeshComponent>(Meshes);
+	for (UMeshComponent* Mesh : Meshes)
+	{
+		Mesh->SetCastShadow(false);
+		for (int32 Index = 0; GhostMaterial && Index < Mesh->GetNumMaterials(); ++Index)
+		{
+			Mesh->SetMaterial(Index, GhostMaterial);
+		}
+	}
+	// The body flash would set the old body material's color; a ghost is never hit.
+	BodyMaterial = nullptr;
+}
+
 void ACombatUnitActor::SetBodyColor(const FLinearColor& Color)
 {
 	if (BodyMaterial)

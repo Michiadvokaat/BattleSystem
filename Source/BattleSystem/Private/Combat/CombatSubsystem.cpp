@@ -153,7 +153,8 @@ bool UCombatSubsystem::StartFightFromSource(int32 Seed, const FCombatFightSource
 
 	FCombatSimConfig Config;
 	TArray<const UCombatUnitDefinition*> Definitions;
-	if (!BuildSimConfigFromSource(GetWorld(), Seed, Source, SimSettings, Config, GridOrigin, &Definitions))
+	TArray<int32> Rotations;
+	if (!BuildSimConfigFromSource(GetWorld(), Seed, Source, SimSettings, Config, GridOrigin, &Definitions, &Rotations))
 	{
 		return false;
 	}
@@ -175,6 +176,7 @@ bool UCombatSubsystem::StartFightFromSource(int32 Seed, const FCombatFightSource
 	{
 		SourceDefinitions.Add(const_cast<UCombatUnitDefinition*>(Definition));
 	}
+	SourceRotations = MoveTemp(Rotations);
 	for (const FCombatUnit& Unit : Simulation->GetUnits())
 	{
 		SpawnUnitActor(Unit);
@@ -355,6 +357,7 @@ void UCombatSubsystem::StopFight()
 	UnitActors.Reset();
 	UnitDefinitions.Reset();
 	SourceDefinitions.Reset();
+	SourceRotations.Reset();
 
 	for (const TPair<int32, TObjectPtr<ACombatProjectileActor>>& Pair : ProjectileActors)
 	{
@@ -451,7 +454,9 @@ void UCombatSubsystem::SpawnUnitActor(const FCombatUnit& Unit)
 
 	FActorSpawnParameters SpawnParams;
 	SpawnParams.SpawnCollisionHandlingOverride = ESpawnActorCollisionHandlingMethod::AlwaysSpawn;
-	ACombatUnitActor* Actor = GetWorld()->SpawnActor<ACombatUnitActor>(ActorClass, SimToWorld(Unit.Position), FRotator::ZeroRotator, SpawnParams);
+	// Units of a level start in their rotation (presentation only); they turn as soon as they move or have a target.
+	const FRotator StartRotation(0.0, SourceRotations.IsValidIndex(Unit.SourceIndex) ? CombatLevels::GetUnitYaw(SourceRotations[Unit.SourceIndex]) : 0.0, 0.0);
+	ACombatUnitActor* Actor = GetWorld()->SpawnActor<ACombatUnitActor>(ActorClass, SimToWorld(Unit.Position), StartRotation, SpawnParams);
 	if (Actor)
 	{
 		const bool bRanged = Unit.Stats.Attacks.ContainsByPredicate([](const FCombatAttackStats& Attack) { return Attack.IsRanged(); });
@@ -1065,7 +1070,7 @@ void UCombatSubsystem::UpdateCheckpoints()
 }
 
 bool UCombatSubsystem::BuildSimConfigFromSource(UWorld* World, int32 Seed, const FCombatFightSource& Source, const FCombatSimSettings& Settings,
-	FCombatSimConfig& OutConfig, FVector& OutGridOrigin, TArray<const UCombatUnitDefinition*>* OutDefinitions)
+	FCombatSimConfig& OutConfig, FVector& OutGridOrigin, TArray<const UCombatUnitDefinition*>* OutDefinitions, TArray<int32>* OutRotations)
 {
 	if (!Source.Level.IsSet())
 	{
@@ -1076,7 +1081,7 @@ bool UCombatSubsystem::BuildSimConfigFromSource(UWorld* World, int32 Seed, const
 	OutGridOrigin = Grid ? Grid->GetActorLocation() : FVector::ZeroVector;
 	OutConfig.Seed = Seed;
 	OutConfig.TickRate = Settings.TickRate;
-	if (!CombatLevels::BuildConfig(Source.Level.GetValue(), Settings.TickRate, &UCombatSubsystem::FindUnitDefinition, OutConfig, OutDefinitions))
+	if (!CombatLevels::BuildConfig(Source.Level.GetValue(), Settings.TickRate, &UCombatSubsystem::FindUnitDefinition, OutConfig, OutDefinitions, OutRotations))
 	{
 		return false;
 	}
@@ -1561,6 +1566,7 @@ void UCombatSubsystem::DesignPaint(const FVector& WorldPoint, bool bErase, bool 
 		Unit.Type = DesignUnitType;
 		Unit.Team = DesignUnitTeam;
 		Unit.Cell = Cell;
+		Unit.Rotation = DesignUnitRotation;
 		if (UnitIndex != INDEX_NONE)
 		{
 			DesignLevel.Units[UnitIndex] = Unit;
@@ -1587,6 +1593,7 @@ void UCombatSubsystem::DesignPaint(const FVector& WorldPoint, bool bErase, bool 
 		Spawn.Type = DesignUnitType;
 		Spawn.Cell = Cell;
 		Spawn.Time = DesignSpawnTime;
+		Spawn.Rotation = DesignUnitRotation;
 		TArray<FCombatLevelSpawn>& Spawns = DesignLevel.Waves[DesignWave].Spawns;
 		if (SpawnIndex != INDEX_NONE)
 		{
@@ -1720,6 +1727,10 @@ void UCombatSubsystem::UpdateWalls()
 					Targets.Add(Actor->GetActorLocation() + Lift);
 				}
 			}
+		}
+		if (DesignGhost && !DesignGhost->IsHidden())
+		{
+			Targets.Add(DesignGhost->GetActorLocation() + Lift);
 		}
 	}
 	Grid->UpdateWalls(WallMode, PlayerController->PlayerCameraManager->GetCameraLocation(), Targets);
@@ -1871,6 +1882,77 @@ void UCombatSubsystem::HideDesignPiecePreview()
 	}
 }
 
+void UCombatSubsystem::RotateDesignUnit(int32 Steps)
+{
+	DesignUnitRotation = ((DesignUnitRotation + Steps) % CombatLevels::UnitRotationSteps + CombatLevels::UnitRotationSteps) % CombatLevels::UnitRotationSteps;
+}
+
+void UCombatSubsystem::UpdateDesignUnitGhost(const FVector& WorldPoint)
+{
+	ACombatGrid* Grid = ACombatGrid::Find(GetWorld());
+	const UCombatUnitDefinition* Definition = FindUnitDefinition(DesignUnitType);
+	if (!bDesignMode || !Grid || !Definition)
+	{
+		HideDesignUnitGhost();
+		return;
+	}
+
+	// Rebuilt only when the type or team changes; otherwise it moves and turns.
+	const UCombatSettings* Settings = GetDefault<UCombatSettings>();
+	const int32 Team = DesignTool == ECombatDesignTool::Spawn ? FCombatSimConfig().WaveTeam : DesignUnitTeam;
+	if (!DesignGhost || DesignGhostType != DesignUnitType || DesignGhostTeam != Team)
+	{
+		HideDesignUnitGhost();
+		FActorSpawnParameters SpawnParams;
+		SpawnParams.SpawnCollisionHandlingOverride = ESpawnActorCollisionHandlingMethod::AlwaysSpawn;
+		UClass* ActorClass = Definition->ActorClass ? Definition->ActorClass.Get() : ACombatUnitActor::StaticClass();
+		DesignGhost = GetWorld()->SpawnActor<ACombatUnitActor>(ActorClass, WorldPoint, FRotator::ZeroRotator, SpawnParams);
+		if (!DesignGhost)
+		{
+			return;
+		}
+		const FCombatUnitStats Stats = Definition->ToSimStats(Settings->TickRate);
+		const bool bRanged = Stats.Attacks.ContainsByPredicate([](const FCombatAttackStats& Attack) { return Attack.IsRanged(); });
+		DesignGhost->InitUnit(INDEX_NONE, Team, Stats.Radius, Settings->GetTeamColor(Team), bRanged);
+		if (Definition->Appearance)
+		{
+			DesignGhost->InitAppearance(Definition->Appearance, CombatSubsystemPrivate::GetLookSeed(CurrentSeed, INDEX_NONE));
+		}
+		DesignGhost->MakeGhost(Settings->DesignGhostMaterial.LoadSynchronous(), Settings->DesignGhostOpacity);
+		DesignGhostType = DesignUnitType;
+		DesignGhostTeam = Team;
+	}
+
+	const FVector Origin = Grid->GetActorLocation();
+	const FIntPoint Cell(FMath::FloorToInt32((WorldPoint.X - Origin.X) / DesignLevel.CellSize), FMath::FloorToInt32((WorldPoint.Y - Origin.Y) / DesignLevel.CellSize));
+	const bool bFits = DesignLevel.IsInBounds(Cell) && IsDesignCellWalkable(Cell);
+	DesignGhost->SetActorHiddenInGame(false);
+	DesignGhost->SetActorRotation(FRotator(0.0, CombatLevels::GetUnitYaw(DesignUnitRotation), 0.0));
+	DesignGhost->UpdatePresentation(SimToWorld(DesignLevel.CellSize * FVector2D(Cell.X + 0.5, Cell.Y + 0.5)), FVector::ZeroVector);
+
+	// The cell plate: a 1x1 piece preview without a mesh (and no opening cutting walls).
+	Grid->UpdatePreviewCuts(nullptr, FTransform::Identity, FBox(ForceInit), DesignLevel.CellSize);
+	FCombatLevelPiece Plate;
+	Plate.Layer = ECombatPieceLayer::Cell;
+	Plate.Cell = Cell;
+	Grid->ShowPiecePreview(Plate, DesignLevel.CellSize, nullptr, FTransform::Identity, bFits, false);
+}
+
+void UCombatSubsystem::HideDesignUnitGhost()
+{
+	if (DesignGhost)
+	{
+		DesignGhost->Destroy();
+		DesignGhost = nullptr;
+		DesignGhostType.Reset();
+		DesignGhostTeam = INDEX_NONE;
+		if (ACombatGrid* Grid = ACombatGrid::Find(GetWorld()))
+		{
+			Grid->HidePiecePreview();
+		}
+	}
+}
+
 bool UCombatSubsystem::IsDesignCellWalkable(const FIntPoint& Cell) const
 {
 	const int32 PieceIndex = DesignLevel.FindPieceAt(ECombatPieceLayer::Cell, Cell);
@@ -1893,7 +1975,7 @@ void UCombatSubsystem::RefreshDesignView(bool bFitCamera)
 		ShowOverviewIfChanged(true);
 	}
 
-	// Preview units: the unit actors, standing on their cells, facing the other side. No simulation.
+	// Preview units: the unit actors, standing on their cells in their rotation. No simulation.
 	DestroyDesignPreviews();
 	const UCombatSettings* Settings = GetDefault<UCombatSettings>();
 	FActorSpawnParameters SpawnParams;
@@ -1910,7 +1992,7 @@ void UCombatSubsystem::RefreshDesignView(bool bFitCamera)
 		const FCombatUnitStats Stats = Definition->ToSimStats(Settings->TickRate);
 		const FVector Location = SimToWorld(DesignLevel.CellSize * FVector2D(Entry.Cell.X + 0.5, Entry.Cell.Y + 0.5));
 		UClass* ActorClass = Definition->ActorClass ? Definition->ActorClass.Get() : ACombatUnitActor::StaticClass();
-		ACombatUnitActor* Actor = GetWorld()->SpawnActor<ACombatUnitActor>(ActorClass, Location, FRotator::ZeroRotator, SpawnParams);
+		ACombatUnitActor* Actor = GetWorld()->SpawnActor<ACombatUnitActor>(ActorClass, Location, FRotator(0.0, CombatLevels::GetUnitYaw(Entry.Rotation), 0.0), SpawnParams);
 		if (Actor)
 		{
 			const bool bRanged = Stats.Attacks.ContainsByPredicate([](const FCombatAttackStats& Attack) { return Attack.IsRanged(); });
@@ -1920,7 +2002,7 @@ void UCombatSubsystem::RefreshDesignView(bool bFitCamera)
 				Actor->InitAppearance(Definition->Appearance, CombatSubsystemPrivate::GetLookSeed(CurrentSeed, Index));
 			}
 			Actor->SetHealth(1.f);
-			Actor->UpdatePresentation(Location, FVector(Entry.Team == 0 ? 1.0 : -1.0, 0.0, 0.0));
+			Actor->UpdatePresentation(Location, FVector::ZeroVector);
 			DesignPreviews.Add(Actor);
 		}
 	}
@@ -1944,7 +2026,7 @@ void UCombatSubsystem::RefreshDesignView(bool bFitCamera)
 		const FCombatUnitStats Stats = Definition->ToSimStats(Settings->TickRate);
 		const FVector Location = SimToWorld(DesignLevel.CellSize * FVector2D(Entry.Cell.X + 0.5, Entry.Cell.Y + 0.5));
 		UClass* ActorClass = Definition->ActorClass ? Definition->ActorClass.Get() : ACombatUnitActor::StaticClass();
-		ACombatUnitActor* Actor = GetWorld()->SpawnActor<ACombatUnitActor>(ActorClass, Location, FRotator::ZeroRotator, SpawnParams);
+		ACombatUnitActor* Actor = GetWorld()->SpawnActor<ACombatUnitActor>(ActorClass, Location, FRotator(0.0, CombatLevels::GetUnitYaw(Entry.Rotation), 0.0), SpawnParams);
 		if (Actor)
 		{
 			const bool bRanged = Stats.Attacks.ContainsByPredicate([](const FCombatAttackStats& Attack) { return Attack.IsRanged(); });
@@ -1955,7 +2037,7 @@ void UCombatSubsystem::RefreshDesignView(bool bFitCamera)
 			}
 			Actor->SetHealth(1.f);
 			Actor->SetStatusEffects({ { FString::Printf(TEXT("%gs"), Entry.Time), FLinearColor::Yellow } });
-			Actor->UpdatePresentation(Location, FVector(-1.0, 0.0, 0.0));
+			Actor->UpdatePresentation(Location, FVector::ZeroVector);
 			DesignPreviews.Add(Actor);
 		}
 	}
