@@ -167,6 +167,10 @@ public:
 	UPROPERTY(Config, EditAnywhere, Category = "Arena")
 	TSoftObjectPtr<UMaterialInterface> TintMaterial = TSoftObjectPtr<UMaterialInterface>(FSoftObjectPath(TEXT("/Engine/BasicShapes/BasicShapeMaterial.BasicShapeMaterial")));
 
+	/** LevelDesigner: how much one press (PageUp / PageDown, Up / Down) raises or lowers a wall item. */
+	UPROPERTY(Config, EditAnywhere, Category = "Arena", meta = (ClampMin = 1, Units = "cm"))
+	float WallItemHeightStep = 10.f;
+
 	/** LevelDesigner: the color swatches for tintable pieces (solid floors); any other color comes from the color picker. */
 	UPROPERTY(Config, EditAnywhere, Category = "Arena")
 	TArray<FColor> FloorColors = { FColor(235, 235, 230), FColor(160, 160, 160), FColor(70, 70, 75), FColor(190, 150, 105),

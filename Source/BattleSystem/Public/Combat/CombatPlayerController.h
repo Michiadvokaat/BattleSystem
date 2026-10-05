@@ -64,6 +64,9 @@ private:
 	void OnRotatePiece();
 	/** Key I: the LevelDesigner eyedropper (Build Mode). */
 	void OnEyedropper();
+	/** PageUp / PageDown: raise or lower the next wall item (Build Mode). */
+	void OnRaiseWallItem();
+	void OnLowerWallItem();
 	/** LevelDesigner: Ctrl+Z undo, Ctrl+Shift+Z or Ctrl+Y redo. */
 	void OnUndoKey();
 	void OnRedoKey();

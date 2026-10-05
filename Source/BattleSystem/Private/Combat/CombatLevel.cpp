@@ -32,6 +32,7 @@ void FCombatLevel::Resize(int32 NewWidth, int32 NewHeight)
 	Normalize();
 	Units.RemoveAll([this](const FCombatLevelUnit& Unit) { return !IsInBounds(Unit.Cell); });
 	Pieces.RemoveAll([this](const FCombatLevelPiece& Piece) { return !IsPieceInBounds(Piece); });
+	RemoveUnsupportedWallItems();
 	for (FCombatLevelWave& Wave : Waves)
 	{
 		Wave.Spawns.RemoveAll([this](const FCombatLevelSpawn& Spawn) { return !IsInBounds(Spawn.Cell); });
@@ -74,10 +75,26 @@ FVector2D FCombatLevelPiece::GetDetailCenter(float CellSize) const
 	return FVector2D((Cell.X + (Position % Grid + 0.5) / Grid) * CellSize, (Cell.Y + (Position / Grid + 0.5) / Grid) * CellSize);
 }
 
+int32 FCombatLevelPiece::GetWallStart() const
+{
+	return (IsWallItemHorizontal() ? Cell.X : Cell.Y) * FMath::Max(DetailGrid, 1) + Detail;
+}
+
+FVector2D FCombatLevelPiece::GetFacingDirection() const
+{
+	switch (((Facing % 4) + 4) % 4)
+	{
+	case 0: return FVector2D(1.0, 0.0);
+	case 1: return FVector2D(0.0, 1.0);
+	case 2: return FVector2D(-1.0, 0.0);
+	default: return FVector2D(0.0, -1.0);
+	}
+}
+
 void FCombatLevelPiece::GetCells(TArray<FIntPoint>& OutCells) const
 {
 	OutCells.Reset();
-	if (Layer == ECombatPieceLayer::Edge)
+	if (Layer == ECombatPieceLayer::Edge || Layer == ECombatPieceLayer::Wall)
 	{
 		return;
 	}
@@ -99,6 +116,26 @@ void FCombatLevelPiece::GetCells(TArray<FIntPoint>& OutCells) const
 void FCombatLevelPiece::GetEdges(TArray<TPair<FIntPoint, FIntPoint>>& OutEdges) const
 {
 	OutEdges.Reset();
+	if (Layer == ECombatPieceLayer::Wall)
+	{
+		// The borders its positions lie on, along its line.
+		const int32 Grid = FMath::Max(DetailGrid, 1);
+		const int32 Start = GetWallStart();
+		const int32 First = FMath::FloorToInt32(static_cast<double>(Start) / Grid);
+		const int32 Last = FMath::FloorToInt32(static_cast<double>(Start + FMath::Max(Size.X, 1) - 1) / Grid);
+		for (int32 Along = First; Along <= Last; ++Along)
+		{
+			if (IsWallItemHorizontal())
+			{
+				OutEdges.Emplace(FIntPoint(Along, Cell.Y - 1), FIntPoint(Along, Cell.Y));
+			}
+			else
+			{
+				OutEdges.Emplace(FIntPoint(Cell.X - 1, Along), FIntPoint(Cell.X, Along));
+			}
+		}
+		return;
+	}
 	if (Layer != ECombatPieceLayer::Edge)
 	{
 		return;
@@ -126,6 +163,17 @@ bool FCombatLevelPiece::Overlaps(const FCombatLevelPiece& Other) const
 	{
 		// Equal grids compare positions; different grids compare the centers' sub-cells of the finer one.
 		return Cell == Other.Cell && GetDetailCenter(1.f).Equals(Other.GetDetailCenter(1.f), 0.5 / FMath::Max3(DetailGrid, Other.DetailGrid, 1));
+	}
+	if (Layer == ECombatPieceLayer::Wall)
+	{
+		// The same side of the same line, with overlapping positions (compared on the finer grid of the two).
+		const bool bSameLine = Facing == Other.Facing && (IsWallItemHorizontal() ? Cell.Y == Other.Cell.Y : Cell.X == Other.Cell.X);
+		const double Grid = FMath::Max(DetailGrid, 1);
+		const double OtherGrid = FMath::Max(Other.DetailGrid, 1);
+		const double Start = GetWallStart() / Grid;
+		const double OtherStart = Other.GetWallStart() / OtherGrid;
+		return bSameLine && Start < OtherStart + FMath::Max(Other.Size.X, 1) / OtherGrid - UE_KINDA_SMALL_NUMBER
+			&& OtherStart < Start + FMath::Max(Size.X, 1) / Grid - UE_KINDA_SMALL_NUMBER;
 	}
 	if (Layer == ECombatPieceLayer::Edge)
 	{
@@ -156,19 +204,85 @@ bool FCombatLevel::IsPieceInBounds(const FCombatLevelPiece& Piece) const
 	{
 		return IsInBounds(Piece.Cell) && Piece.Detail >= 0 && Piece.Detail < FMath::Square(FMath::Max(Piece.DetailGrid, 1));
 	}
+	if (Piece.Layer == ECombatPieceLayer::Wall)
+	{
+		// Its positions on a border line inside the grid (the outer border too).
+		const int32 Grid = FMath::Max(Piece.DetailGrid, 1);
+		const int32 Start = Piece.GetWallStart();
+		const bool bHorizontal = Piece.IsWallItemHorizontal();
+		const int32 Line = bHorizontal ? Piece.Cell.Y : Piece.Cell.X;
+		return Piece.Detail >= 0 && Piece.Detail < Grid && Start >= 0 && Start + FMath::Max(Piece.Size.X, 1) <= (bHorizontal ? Width : Height) * Grid
+			&& Line >= 0 && Line <= (bHorizontal ? Height : Width);
+	}
 	const FIntPoint RotatedSize = Piece.GetRotatedSize();
 	return IsInBounds(Piece.Cell) && IsInBounds(Piece.Cell + FIntPoint(FMath::Max(RotatedSize.X, 1) - 1, FMath::Max(RotatedSize.Y, 1) - 1));
 }
 
 bool FCombatLevel::PlacePiece(const FCombatLevelPiece& Piece)
 {
-	if (!IsPieceInBounds(Piece))
+	if (!IsPieceInBounds(Piece) || (Piece.Layer == ECombatPieceLayer::Wall && !IsWallItemSupported(Piece)))
 	{
 		return false;
 	}
 	Pieces.RemoveAll([&Piece](const FCombatLevelPiece& Other) { return Other.Overlaps(Piece); });
 	Pieces.Add(Piece);
+	if (Piece.Layer == ECombatPieceLayer::Edge)
+	{
+		RemoveUnsupportedWallItems();
+	}
 	return true;
+}
+
+bool FCombatLevel::IsWallItemSupported(const FCombatLevelPiece& Item) const
+{
+	TArray<TPair<FIntPoint, FIntPoint>> Borders;
+	Item.GetEdges(Borders);
+	TArray<TPair<FIntPoint, FIntPoint>> Edges;
+	for (const TPair<FIntPoint, FIntPoint>& Border : Borders)
+	{
+		bool bWall = false;
+		for (const FCombatLevelPiece& Piece : Pieces)
+		{
+			if (Piece.Layer != ECombatPieceLayer::Edge)
+			{
+				continue;
+			}
+			Piece.GetEdges(Edges);
+			if (Edges.Contains(Border))
+			{
+				if (Piece.Slot == FCombatLevelPiece::OpeningSlot)
+				{
+					return false;
+				}
+				bWall |= Piece.Slot.IsEmpty();
+			}
+		}
+		if (!bWall)
+		{
+			return false;
+		}
+	}
+	return !Borders.IsEmpty();
+}
+
+int32 FCombatLevel::RemoveUnsupportedWallItems()
+{
+	// Decided against the level as it is, then removed together (wall items never support each other).
+	TArray<bool> Unsupported;
+	for (const FCombatLevelPiece& Piece : Pieces)
+	{
+		Unsupported.Add(Piece.Layer == ECombatPieceLayer::Wall && !IsWallItemSupported(Piece));
+	}
+	int32 Removed = 0;
+	for (int32 Index = Pieces.Num() - 1; Index >= 0; --Index)
+	{
+		if (Unsupported[Index])
+		{
+			Pieces.RemoveAt(Index);
+			++Removed;
+		}
+	}
+	return Removed;
 }
 
 int32 FCombatLevel::FindPieceAt(ECombatPieceLayer Layer, const FIntPoint& Cell) const
@@ -205,6 +319,32 @@ int32 FCombatLevel::FindPieceUnder(const FVector2D& Local, float EdgeReach) cons
 			if (Piece.Detail == X + Y * Grid)
 			{
 				return Index;
+			}
+		}
+	}
+
+	// A wall item on the nearest border line within reach, on the point's side, over the point's position along it.
+	{
+		const double RowDistance = FMath::Abs(InCells.Y - FMath::RoundToDouble(InCells.Y));
+		const double ColumnDistance = FMath::Abs(InCells.X - FMath::RoundToDouble(InCells.X));
+		const bool bRow = RowDistance <= ColumnDistance;
+		if (FMath::Min(RowDistance, ColumnDistance) <= EdgeReach)
+		{
+			const int32 Line = FMath::RoundToInt32(bRow ? InCells.Y : InCells.X);
+			const int32 Facing = bRow ? (InCells.Y < Line ? 3 : 1) : (InCells.X < Line ? 2 : 0);
+			for (int32 Index = 0; Index < Pieces.Num(); ++Index)
+			{
+				const FCombatLevelPiece& Piece = Pieces[Index];
+				if (Piece.Layer != ECombatPieceLayer::Wall || Piece.Facing != Facing || (bRow ? Piece.Cell.Y : Piece.Cell.X) != Line)
+				{
+					continue;
+				}
+				const double Grid = FMath::Max(Piece.DetailGrid, 1);
+				const double Along = (bRow ? InCells.X : InCells.Y) * Grid;
+				if (Along >= Piece.GetWallStart() && Along < Piece.GetWallStart() + FMath::Max(Piece.Size.X, 1))
+				{
+					return Index;
+				}
 			}
 		}
 	}
@@ -258,7 +398,7 @@ int32 FCombatLevel::FindPieceUnder(const FVector2D& Local, float EdgeReach) cons
 		const int32 EdgePiece = Topmost([&Borders, &Edges](const FCombatLevelPiece& Piece)
 		{
 			Piece.GetEdges(Edges);
-			return Edges.Contains(Borders[0]);
+			return Piece.Layer == ECombatPieceLayer::Edge && Edges.Contains(Borders[0]);
 		});
 		if (EdgePiece != INDEX_NONE)
 		{

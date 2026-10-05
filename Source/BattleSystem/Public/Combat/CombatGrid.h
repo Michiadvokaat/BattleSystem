@@ -167,6 +167,8 @@ private:
 		TWeakObjectPtr<UPrimitiveComponent> Low;
 		/** Swapped for a preview cut: UpdateWalls leaves its visibility alone. */
 		bool bPreviewHidden = false;
+		/** Wall items hanging on it above the low height: hidden while it is lowered. */
+		TArray<TWeakObjectPtr<UPrimitiveComponent>> Attached;
 		FBox WorldBounds;
 		bool bLowered = false;
 	};

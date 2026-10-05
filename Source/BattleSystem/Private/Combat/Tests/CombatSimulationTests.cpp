@@ -2525,4 +2525,102 @@ bool FCombatWallOpeningsTest::RunTest(const FString& Parameters)
 	return true;
 }
 
+IMPLEMENT_SIMPLE_AUTOMATION_TEST(FCombatWallItemsTest, "BattleSystem.Combat.WallItems",
+	EAutomationTestFlags::EditorContext | EAutomationTestFlags::ProductFilter)
+
+bool FCombatWallItemsTest::RunTest(const FString& Parameters)
+{
+	// A wall along the border between rows 4 and 5, columns 2..4.
+	FCombatLevelPiece Wall;
+	Wall.Id = TEXT("Test/Wall");
+	Wall.Layer = ECombatPieceLayer::Edge;
+	Wall.Cell = FIntPoint(2, 5);
+	Wall.Size = FIntPoint(3, 1);
+	Wall.bBlocksWalking = true;
+	Wall.bBlocksSight = true;
+	auto MakeItem = [](int32 Facing, FIntPoint Cell, int32 Detail, int32 Width)
+	{
+		FCombatLevelPiece Item;
+		Item.Id = TEXT("Test/Painting");
+		Item.Layer = ECombatPieceLayer::Wall;
+		Item.Facing = Facing;
+		Item.Cell = Cell;
+		Item.Detail = Detail;
+		Item.DetailGrid = 4;
+		Item.Size = FIntPoint(Width, 1);
+		Item.Height = 150.f;
+		return Item;
+	};
+
+	FCombatLevel Level = FCombatLevel::MakeEmpty(TEXT("Wall items"), 10, 10);
+	Level.PlacePiece(Wall);
+	FCombatGridData Bare;
+	Level.ToGridData(Bare);
+	TestTrue(TEXT("An item on the wall (positions 9..12: borders of columns 2 and 3)"), Level.PlacePiece(MakeItem(1, FIntPoint(2, 5), 1, 4)));
+	TestFalse(TEXT("Not where there is no wall"), Level.PlacePiece(MakeItem(1, FIntPoint(6, 5), 0, 2)));
+	TestFalse(TEXT("Not sticking out past the wall's end"), Level.PlacePiece(MakeItem(1, FIntPoint(4, 5), 2, 4)));
+	TestTrue(TEXT("The other side of the wall too"), Level.PlacePiece(MakeItem(3, FIntPoint(2, 5), 1, 4)) && Level.Pieces.Num() == 3);
+	TestTrue(TEXT("An overlapping item on the same side replaces the first"), Level.PlacePiece(MakeItem(1, FIntPoint(3, 5), 0, 2))
+		&& Level.Pieces.Num() == 3 && Level.Pieces[2].Facing == 1 && Level.Pieces[2].Cell == FIntPoint(3, 5));
+
+	FCombatGridData Grid;
+	Level.ToGridData(Grid);
+	TestTrue(TEXT("Wall items do not change the grid"), Grid.IsWalkable(FIntPoint(2, 5)) && !Grid.BlocksSight(FIntPoint(2, 5))
+		&& Grid.HasEdgeWall(FIntPoint(2, 4), FIntPoint(2, 5)) && !Grid.HasEdgeWall(FIntPoint(5, 4), FIntPoint(5, 5))
+		&& Grid.IsWalkable(FIntPoint(3, 4)) == Bare.IsWalkable(FIntPoint(3, 4)));
+
+	// Placing under the cursor: the nearest border line, the cursor's side, centered on it.
+	FCombatPieceDefinition Definition;
+	Definition.Id = TEXT("Test/Painting");
+	Definition.Layer = ECombatPieceLayer::Wall;
+	Definition.Size = FIntPoint(4, 1);
+	Definition.DetailGrid = 4;
+	Definition.MountHeight = 120.f;
+	const FCombatLevelPiece Below = CombatPieces::PlaceAt(Definition, FVector2D(250.0, 520.0), 0, 100.f);
+	TestTrue(TEXT("Below the line it faces +Y, starting at position 8"), Below.Facing == 1 && Below.Cell == FIntPoint(2, 5) && Below.Detail == 0
+		&& Below.Height == 120.f && !Below.bBlocksWalking);
+	TestEqual(TEXT("Above the line it faces -Y"), CombatPieces::PlaceAt(Definition, FVector2D(250.0, 480.0), 0, 100.f).Facing, 3);
+	TestEqual(TEXT("Beside a column line it faces +-X"), CombatPieces::PlaceAt(Definition, FVector2D(310.0, 250.0), 0, 100.f).Facing, 0);
+
+	TestEqual(TEXT("Picking takes the item on the cursor's side"), Level.FindPieceUnder(FVector2D(330.0, 510.0)), 2);
+	TestEqual(TEXT("... and on the other side the other one"), Level.FindPieceUnder(FVector2D(260.0, 490.0)), 1);
+
+	// An opening in the wall takes the items on its border with it.
+	FCombatLevelPiece Frame = Wall;
+	Frame.Slot = FCombatLevelPiece::OpeningSlot;
+	Frame.Cell = FIntPoint(3, 5);
+	Frame.Size = FIntPoint(1, 1);
+	Frame.bBlocksWalking = false;
+	Frame.bBlocksSight = false;
+	TestTrue(TEXT("An opening removes the items on its border"), Level.PlacePiece(Frame) && Level.Pieces.Num() == 2);
+
+	// Without its wall an item goes too.
+	FCombatLevel Bare2 = FCombatLevel::MakeEmpty(TEXT("Wall items 2"), 10, 10);
+	Bare2.PlacePiece(Wall);
+	Bare2.PlacePiece(MakeItem(1, FIntPoint(2, 5), 1, 4));
+	Bare2.Pieces.RemoveAt(0);
+	TestEqual(TEXT("Removing the wall leaves the item unsupported"), Bare2.RemoveUnsupportedWallItems(), 1);
+
+	// Where the mesh goes: centered over positions 9..12 (x 275), in front of the wall's face (5) by half its depth (2).
+	const FBox Bounds(FVector(-50.0, -2.0, -25.0), FVector(50.0, 2.0, 25.0));
+	FCombatLevelPiece Item = MakeItem(1, FIntPoint(2, 5), 1, 4);
+	FTransform Transform = CombatPieces::ComputeWallItemTransform(Item, 100.f, Bounds, 0.f, FVector::ZeroVector, 5.0);
+	TestTrue(TEXT("At its height in front of the wall"), Transform.GetLocation().Equals(FVector(275.0, 507.0, 150.0), 0.01));
+	TestTrue(TEXT("Its front (-Y in the mesh) faces +Y"), Transform.TransformVectorNoScale(FVector(0.0, -1.0, 0.0)).Equals(FVector(0.0, 1.0, 0.0), 0.001));
+	Item.Rotation = 8;
+	Transform = CombatPieces::ComputeWallItemTransform(Item, 100.f, Bounds, 0.f, FVector::ZeroVector, 5.0);
+	TestTrue(TEXT("Tilted a quarter turn its width stands upright"), FMath::IsNearlyEqual(FMath::Abs(Transform.TransformVectorNoScale(FVector::XAxisVector).Z), 1.0, 0.001));
+
+	FString Json;
+	FCombatLevel Loaded;
+	FCombatLevel WithItem = FCombatLevel::MakeEmpty(TEXT("Wall items 3"), 10, 10);
+	WithItem.PlacePiece(Wall);
+	WithItem.PlacePiece(MakeItem(3, FIntPoint(2, 5), 1, 4));
+	WithItem.Pieces.Last().Height = 165.f;
+	TestTrue(TEXT("Writes and reads"), CombatLevels::ToJson(WithItem, Json) && CombatLevels::FromJson(Json, Loaded));
+	TestTrue(TEXT("Facing and height survive"), Loaded.Pieces.Num() == 2 && Loaded.Pieces[1].Layer == ECombatPieceLayer::Wall
+		&& Loaded.Pieces[1].Facing == 3 && Loaded.Pieces[1].Height == 165.f && Loaded.Pieces[1].Detail == 1);
+	return true;
+}
+
 #endif // WITH_DEV_AUTOMATION_TESTS

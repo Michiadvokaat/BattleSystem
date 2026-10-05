@@ -7,6 +7,11 @@ Every static mesh in CATALOG_PATH/<Group>/<Sub>/ becomes a piece with category "
 "<Group>/<Sub>/<MeshName>"; the LevelDesigner shows the groups (Building, Furniture, Props) in one row and their
 subcategories in a second. Pieces already in the catalog are kept as they are (tuned in the editor); new meshes are
 added with defaults from their bounds, by their subcategory (the last folder):
+- Everything under WALL_GROUP (WallProps): wall items (hung on walls), never block; the width (the longer horizontal
+  side) in positions of WALL_GRID per cell, the thin side as the depth (MeshYaw 90 when the width lies along Y), and
+  MountHeight WALL_MOUNT_HEIGHT. The front must face -Y after MeshYaw: a mesh whose depth lies on one side of its
+  pivot (the pivot on its back, against the wall) is turned so that side is the front (+180 when it lies on +Y);
+  for a mesh centered on its pivot that cannot be told, so one hung back to front needs MeshYaw + 180 in the catalog.
 - Everything under DETAIL_GROUP (Props): detail layer (small objects on a DETAIL_GRID x DETAIL_GRID grid per cell),
   never block by default.
 - Floors: floor layer, footprint = size in cells, never blocks.
@@ -40,6 +45,12 @@ BORDER_CATEGORIES = ("Walls", "Windows", "Doors", "DoorLeaves")
 SLOT_CATEGORIES = {"DoorLeaves": "Leaf", "Windows": "Opening", "Doors": "Opening"}
 VISUAL_ONLY_CATEGORIES = ("Doors",)
 DETAIL_GROUP = "Props"
+WALL_GROUP = "WallProps"
+# Wall items: positions per cell along the wall, and the default height of their center (cm).
+WALL_GRID = 4
+WALL_MOUNT_HEIGHT = 150.0
+# How far (cm) a mesh may reach past its pivot and still count as having the pivot on its back.
+PIVOT_TOLERANCE = 1.0
 DETAIL_GRID = 3
 # Border piece id -> lengths in cells of its scaled-to-fit variants.
 VARIANTS = {"Building/Walls/SM_Walls_008": (1, 2, 3)}
@@ -52,6 +63,7 @@ CATEGORY_ORDER = (
     "Building/Walls", "Building/Windows", "Building/Doors", "Building/DoorLeaves", "Building/Floors",
     "Furniture/Chairs", "Furniture/Tables",
     "Props/Food", "Props/OfficeSupplies", "Props/Toys",
+    "WallProps",
 )
 
 
@@ -89,7 +101,21 @@ def make_definition(category, mesh):
     definition.set_editor_property("category", category)
     definition.set_editor_property("mesh", mesh)
 
-    if category.split("/")[0] == DETAIL_GROUP:
+    if category.split("/")[0] == WALL_GROUP:
+        long_along_x = size.x >= size.y
+        width = max(size.x, size.y)
+        layer, footprint, walk, sight = unreal.CombatPieceLayer.WALL, (max(1, int(round(width / (CELL_SIZE / WALL_GRID)))), 1), False, False
+        yaw = 0.0 if long_along_x else 90.0
+        # The pivot on the back: the depth lies on the front's side. Yaw 0 keeps mesh -Y as the front, yaw 90 makes
+        # mesh -X the front; when the depth lies on the positive side instead, turn half a turn more.
+        depth_min, depth_max = (box.min.y, box.max.y) if long_along_x else (box.min.x, box.max.x)
+        if depth_min >= -PIVOT_TOLERANCE and depth_max > PIVOT_TOLERANCE:
+            yaw += 180.0
+        definition.set_editor_property("detail_grid", WALL_GRID)
+        definition.set_editor_property("mount_height", WALL_MOUNT_HEIGHT)
+        if size.z < min(size.x, size.y):
+            unreal.log_warning(f"{LOG_TAG} {category}/{mesh.get_name()} is thinnest in Z ({size.x:.0f} x {size.y:.0f} x {size.z:.0f} cm): it may lie flat")
+    elif category.split("/")[0] == DETAIL_GROUP:
         layer, footprint, walk, sight, yaw = unreal.CombatPieceLayer.DETAIL, (1, 1), False, False, 0.0
         definition.set_editor_property("detail_grid", DETAIL_GRID)
     elif sub == "Floors":
@@ -109,7 +135,8 @@ def make_definition(category, mesh):
     definition.set_editor_property("blocks_walking", walk)
     definition.set_editor_property("blocks_sight", sight)
     definition.set_editor_property("mesh_yaw", yaw)
-    log(f"  + {category}/{mesh.get_name()}: {layer.name} {footprint[0]}x{footprint[1]} walk={walk} sight={sight} yaw={yaw}")
+    log(f"  + {category}/{mesh.get_name()}: {layer.name} {footprint[0]}x{footprint[1]} walk={walk} sight={sight} yaw={yaw} "
+        f"size={size.x:.0f}x{size.y:.0f}x{size.z:.0f} min=({box.min.x:.0f},{box.min.y:.0f},{box.min.z:.0f})")
     return definition
 
 

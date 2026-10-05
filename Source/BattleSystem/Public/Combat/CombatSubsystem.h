@@ -201,14 +201,8 @@ public:
 
 	/** Piece tool: the catalog piece to place (its Id) and its rotation (R, Shift+R, Rotate). */
 	/** Choosing another piece while moving one puts the moved piece back first. */
-	void SetDesignPiece(const FString& Id)
-	{
-		if (DesignMovingPiece.IsSet() && Id != DesignPieceId)
-		{
-			CancelDesignPieceMove();
-		}
-		DesignPieceId = Id;
-	}
+	/** Selects the piece to place; a wall item starts at its catalog MountHeight. */
+	void SetDesignPiece(const FString& Id);
 	const FString& GetDesignPiece() const { return DesignPieceId; }
 	/**
 	 * Ctrl+click: picks up the topmost piece under WorldPoint to move it: it leaves the level and becomes the selection
@@ -233,10 +227,15 @@ public:
 	 */
 	void SetDesignEyedropper(bool bActive) { bDesignEyedropper = bActive; }
 	bool IsDesignEyedropper() const { return bDesignEyedropper; }
-	/** Turns the selected piece by Steps of its layer: 45 degrees for details, 90 for the others. */
+	/** Turns the selected piece by Steps of its layer: 45 degrees for details, 11.25 (tilt) for wall items, 90 for the others. */
 	void RotateDesignPiece(int32 Steps);
 	/** The selected piece's rotation in degrees. */
-	int32 GetDesignPieceDegrees();
+	float GetDesignPieceDegrees();
+	/** Whether the selected piece hangs on walls (Wall layer). */
+	bool IsDesignPieceWallItem();
+	/** Raises (Steps > 0) or lowers the next wall item by Steps x WallItemHeightStep (PageUp / PageDown); kept for the next one. */
+	void RaiseDesignWallItem(int32 Steps);
+	float GetDesignWallItemHeight() const { return DesignWallItemHeight; }
 	/** The settings' PieceCatalog, loaded on first use; null if none is set. */
 	const UCombatPieceCatalog* GetPieceCatalog();
 	/** Piece tool: shows where the selected piece goes under WorldPoint (green; red if it does not fit; orange when erasing). */
@@ -465,6 +464,9 @@ private:
 	FString DesignPieceId;
 	/** In eighth turns (45 degrees); pieces that turn in quarters use half of it. */
 	int32 DesignPieceRotation = 0;
+	/** Wall items: the tilt (1/32 turns) and the height (cm) of the next one placed. */
+	int32 DesignWallItemTilt = 0;
+	float DesignWallItemHeight = 150.f;
 	/** The selected piece's rotation in its layer's steps. */
 	int32 GetDesignPieceSteps();
 

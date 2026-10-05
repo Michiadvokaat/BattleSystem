@@ -45,6 +45,8 @@ void ACombatPlayerController::SetupInputComponent()
 	InputComponent->BindKey(EKeys::V, IE_Pressed, this, &ACombatPlayerController::OnCycleWalls);
 	InputComponent->BindKey(EKeys::R, IE_Pressed, this, &ACombatPlayerController::OnRotatePiece);
 	InputComponent->BindKey(EKeys::I, IE_Pressed, this, &ACombatPlayerController::OnEyedropper);
+	InputComponent->BindKey(EKeys::PageUp, IE_Pressed, this, &ACombatPlayerController::OnRaiseWallItem);
+	InputComponent->BindKey(EKeys::PageDown, IE_Pressed, this, &ACombatPlayerController::OnLowerWallItem);
 	InputComponent->BindKey(EKeys::Z, IE_Pressed, this, &ACombatPlayerController::OnUndoKey);
 	InputComponent->BindKey(EKeys::Y, IE_Pressed, this, &ACombatPlayerController::OnRedoKey);
 }
@@ -197,6 +199,24 @@ void ACombatPlayerController::OnEyedropper()
 	if (Subsystem && Subsystem->IsDesignMode() && Subsystem->GetDesignTool() == ECombatDesignTool::Build)
 	{
 		Subsystem->SetDesignEyedropper(!Subsystem->IsDesignEyedropper());
+	}
+}
+
+void ACombatPlayerController::OnRaiseWallItem()
+{
+	UCombatSubsystem* Subsystem = GetWorld()->GetSubsystem<UCombatSubsystem>();
+	if (Subsystem && Subsystem->IsDesignMode() && Subsystem->GetDesignTool() == ECombatDesignTool::Build)
+	{
+		Subsystem->RaiseDesignWallItem(1);
+	}
+}
+
+void ACombatPlayerController::OnLowerWallItem()
+{
+	UCombatSubsystem* Subsystem = GetWorld()->GetSubsystem<UCombatSubsystem>();
+	if (Subsystem && Subsystem->IsDesignMode() && Subsystem->GetDesignTool() == ECombatDesignTool::Build)
+	{
+		Subsystem->RaiseDesignWallItem(-1);
 	}
 }
 
