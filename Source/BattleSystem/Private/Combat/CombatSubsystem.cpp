@@ -446,6 +446,31 @@ namespace CombatSubsystemPrivate
 	}
 }
 
+namespace CombatSubsystemPrivate
+{
+	/** Index of the unit or spawn in Cell whose position is nearest to Local (grid-local cm), or INDEX_NONE. */
+	template <typename TEntry>
+	int32 FindNearestInCell(const TArray<TEntry>& Entries, const FIntPoint& Cell, const FVector2D& Local, float CellSize)
+	{
+		int32 Found = INDEX_NONE;
+		double Best = TNumericLimits<double>::Max();
+		for (int32 Index = 0; Index < Entries.Num(); ++Index)
+		{
+			if (Entries[Index].Cell == Cell)
+			{
+				const FVector2D Spot = CellSize * FVector2D(Cell.X + 0.5, Cell.Y + 0.5) + CombatLevels::GetUnitPositionOffset(Entries[Index].Position, CellSize);
+				const double Distance = FVector2D::DistSquared(Spot, Local);
+				if (Distance < Best)
+				{
+					Best = Distance;
+					Found = Index;
+				}
+			}
+		}
+		return Found;
+	}
+}
+
 void UCombatSubsystem::SpawnUnitActor(const FCombatUnit& Unit)
 {
 	// Unit IDs grow by one with every spawn, so the actor arrays stay indexed by unit ID.
@@ -1574,26 +1599,7 @@ void UCombatSubsystem::DesignPaint(const FVector& WorldPoint, bool bErase, bool 
 	{
 		// The unit (and the selected wave's spawn) on the position, else the one in the cell nearest to the point.
 		const FVector2D Local(WorldPoint.X - Origin.X, WorldPoint.Y - Origin.Y);
-		auto Nearest = [this, &Cell, &Local](auto& Entries)
-		{
-			int32 Found = INDEX_NONE;
-			double Best = TNumericLimits<double>::Max();
-			for (int32 Index = 0; Index < Entries.Num(); ++Index)
-			{
-				if (Entries[Index].Cell == Cell)
-				{
-					const FVector2D Spot = DesignLevel.CellSize * FVector2D(Cell.X + 0.5, Cell.Y + 0.5)
-						+ CombatLevels::GetUnitPositionOffset(Entries[Index].Position, DesignLevel.CellSize);
-					const double Distance = FVector2D::DistSquared(Spot, Local);
-					if (Distance < Best)
-					{
-						Best = Distance;
-						Found = Index;
-					}
-				}
-			}
-			return Found;
-		};
+		auto Nearest = [this, &Cell, &Local](const auto& Entries) { return CombatSubsystemPrivate::FindNearestInCell(Entries, Cell, Local, DesignLevel.CellSize); };
 		const int32 EraseUnit = UnitIndex != INDEX_NONE ? UnitIndex : Nearest(DesignLevel.Units);
 		if (EraseUnit != INDEX_NONE)
 		{
@@ -1610,18 +1616,25 @@ void UCombatSubsystem::DesignPaint(const FVector& WorldPoint, bool bErase, bool 
 	}
 	else if (DesignTool == ECombatDesignTool::Unit)
 	{
-		// One unit per position, only where its size fits; placing on a unit replaces it.
+		// One unit per position, only where its size fits; placing on a unit replaces it. A moved unit keeps its team.
 		const bool bWalkable = IsDesignSpotFree(Cell, Position, DesignUnitType);
-		if (bStroke || !bWalkable || DesignUnitType.IsEmpty())
+		if (bStroke || !bWalkable || DesignUnitType.IsEmpty() || !(bDesignUnitSelected || DesignMovingUnit.IsSet()))
 		{
 			return;
 		}
-		FCombatLevelUnit Unit;
+		FCombatLevelUnit Unit = DesignMovingUnit.IsSet() ? DesignMovingUnit.GetValue() : FCombatLevelUnit();
 		Unit.Type = DesignUnitType;
-		Unit.Team = DesignUnitTeam;
+		Unit.Team = DesignMovingUnit.IsSet() ? Unit.Team : DesignUnitTeam;
 		Unit.Cell = Cell;
 		Unit.Position = Position;
 		Unit.Rotation = DesignUnitRotation;
+		// Putting down a moved unit completes the move: one undo step with its pick-up.
+		if (DesignMovingUnit.IsSet())
+		{
+			ActiveDesignStroke = DesignMoveStroke;
+			DesignMovingUnit.Reset();
+			DesignMoveStroke = INDEX_NONE;
+		}
 		if (UnitIndex != INDEX_NONE)
 		{
 			DesignLevel.Units[UnitIndex] = Unit;
@@ -1634,26 +1647,39 @@ void UCombatSubsystem::DesignPaint(const FVector& WorldPoint, bool bErase, bool 
 	}
 	else if (DesignTool == ECombatDesignTool::Spawn)
 	{
-		// One spawn per position and wave, only where its size fits; placing on a spawn replaces it. Without waves, wave 1 is made.
+		// One spawn per position and wave, only where its size fits; placing on a spawn replaces it. Without waves, wave 1
+		// is made. A moved spawn keeps its time and goes back into its own wave.
 		const bool bWalkable = IsDesignSpotFree(Cell, Position, DesignUnitType);
-		if (bStroke || !bWalkable || DesignUnitType.IsEmpty())
+		if (bStroke || !bWalkable || DesignUnitType.IsEmpty() || !(bDesignUnitSelected || DesignMovingSpawn.IsSet()))
 		{
 			return;
+		}
+		if (DesignMovingSpawn.IsSet() && DesignLevel.Waves.IsValidIndex(DesignMovingSpawnWave))
+		{
+			DesignWave = DesignMovingSpawnWave;
 		}
 		if (!DesignLevel.Waves.IsValidIndex(DesignWave))
 		{
 			AddDesignWave();
 		}
-		FCombatLevelSpawn Spawn;
+		FCombatLevelSpawn Spawn = DesignMovingSpawn.IsSet() ? DesignMovingSpawn.GetValue() : FCombatLevelSpawn();
 		Spawn.Type = DesignUnitType;
 		Spawn.Cell = Cell;
-		Spawn.Time = DesignSpawnTime;
+		Spawn.Time = DesignMovingSpawn.IsSet() ? Spawn.Time : DesignSpawnTime;
 		Spawn.Position = Position;
 		Spawn.Rotation = DesignUnitRotation;
-		TArray<FCombatLevelSpawn>& Spawns = DesignLevel.Waves[DesignWave].Spawns;
-		if (SpawnIndex != INDEX_NONE)
+		if (DesignMovingSpawn.IsSet())
 		{
-			Spawns[SpawnIndex] = Spawn;
+			ActiveDesignStroke = DesignMoveStroke;
+			DesignMovingSpawn.Reset();
+			DesignMovingSpawnWave = INDEX_NONE;
+			DesignMoveStroke = INDEX_NONE;
+		}
+		const int32 Occupant = DesignLevel.FindSpawnAt(DesignWave, Cell, Position);
+		TArray<FCombatLevelSpawn>& Spawns = DesignLevel.Waves[DesignWave].Spawns;
+		if (Occupant != INDEX_NONE)
+		{
+			Spawns[Occupant] = Spawn;
 		}
 		else
 		{
@@ -1704,6 +1730,8 @@ void UCombatSubsystem::RecordDesignChange()
 void UCombatSubsystem::ResetDesignHistory()
 {
 	DesignMovingPiece.Reset();
+	DesignMovingUnit.Reset();
+	DesignMovingSpawn.Reset();
 	DesignMoveStroke = INDEX_NONE;
 	DesignUndo.Reset();
 	DesignRedo.Reset();
@@ -1737,6 +1765,8 @@ void UCombatSubsystem::RestoreDesignLevel(FCombatLevel Level)
 	LastRecordedStroke = INDEX_NONE;
 	DesignSpawnMove.Reset();
 	DesignMovingPiece.Reset();
+	DesignMovingUnit.Reset();
+	DesignMovingSpawn.Reset();
 	DesignMoveStroke = INDEX_NONE;
 	if (!DesignLevel.Waves.IsValidIndex(DesignWave))
 	{
@@ -1835,6 +1865,101 @@ bool UCombatSubsystem::PickDesignPiece(const FVector& WorldPoint)
 	return true;
 }
 
+bool UCombatSubsystem::PickDesignUnit(const FVector& WorldPoint)
+{
+	if (!bDesignMode || DesignTool == ECombatDesignTool::Build)
+	{
+		return false;
+	}
+	CancelDesignPieceMove();
+	CancelDesignUnitMove();
+	DesignSpawnMove.Reset();
+
+	FIntPoint Cell;
+	int32 Position = CombatLevels::MiddlePosition;
+	GetDesignSpot(WorldPoint, Cell, Position);
+	const ACombatGrid* Grid = ACombatGrid::Find(GetWorld());
+	const FVector Origin = Grid ? Grid->GetActorLocation() : FVector::ZeroVector;
+	const FVector2D Local(WorldPoint.X - Origin.X, WorldPoint.Y - Origin.Y);
+
+	// The pick-up is a stroke of its own; putting it down joins it, so both are one undo step.
+	if (DesignTool == ECombatDesignTool::Unit)
+	{
+		int32 Index = DesignLevel.FindUnitAt(Cell, Position);
+		Index = Index != INDEX_NONE ? Index : CombatSubsystemPrivate::FindNearestInCell(DesignLevel.Units, Cell, Local, DesignLevel.CellSize);
+		if (Index == INDEX_NONE)
+		{
+			return false;
+		}
+		const FCombatLevelUnit Unit = DesignLevel.Units[Index];
+		DesignUnitType = Unit.Type;
+		DesignUnitTeam = Unit.Team;
+		DesignUnitRotation = Unit.Rotation;
+		DesignMovingUnit = Unit;
+		DesignMoveStroke = ++DesignStrokeSerial;
+		ActiveDesignStroke = DesignMoveStroke;
+		DesignLevel.Units.RemoveAt(Index);
+	}
+	else
+	{
+		if (!DesignLevel.Waves.IsValidIndex(DesignWave))
+		{
+			return false;
+		}
+		TArray<FCombatLevelSpawn>& Spawns = DesignLevel.Waves[DesignWave].Spawns;
+		int32 Index = DesignLevel.FindSpawnAt(DesignWave, Cell, Position);
+		Index = Index != INDEX_NONE ? Index : CombatSubsystemPrivate::FindNearestInCell(Spawns, Cell, Local, DesignLevel.CellSize);
+		if (Index == INDEX_NONE)
+		{
+			return false;
+		}
+		const FCombatLevelSpawn Spawn = Spawns[Index];
+		DesignUnitType = Spawn.Type;
+		DesignUnitRotation = Spawn.Rotation;
+		DesignMovingSpawn = Spawn;
+		DesignMovingSpawnWave = DesignWave;
+		DesignMoveStroke = ++DesignStrokeSerial;
+		ActiveDesignStroke = DesignMoveStroke;
+		Spawns.RemoveAt(Index);
+	}
+	bDesignUnitSelected = true;
+	RefreshDesignView(false);
+	ActiveDesignStroke = INDEX_NONE;
+	return true;
+}
+
+void UCombatSubsystem::CancelDesignUnitMove()
+{
+	if (!IsMovingDesignUnit())
+	{
+		return;
+	}
+	const bool bPickUpRecorded = LastRecordedStroke == DesignMoveStroke;
+	const TOptional<FCombatLevelUnit> Unit = DesignMovingUnit;
+	const TOptional<FCombatLevelSpawn> Spawn = DesignMovingSpawn;
+	const int32 SpawnWave = DesignMovingSpawnWave;
+	DesignMovingUnit.Reset();
+	DesignMovingSpawn.Reset();
+	DesignMovingSpawnWave = INDEX_NONE;
+	DesignMoveStroke = INDEX_NONE;
+	// As for pieces: undo the pick-up if it is the last step, else add it again.
+	if (bPickUpRecorded)
+	{
+		UndoDesign();
+		DesignRedo.Reset();
+		return;
+	}
+	if (Unit.IsSet())
+	{
+		DesignLevel.Units.Add(Unit.GetValue());
+	}
+	else if (Spawn.IsSet() && DesignLevel.Waves.IsValidIndex(SpawnWave))
+	{
+		DesignLevel.Waves[SpawnWave].Spawns.Add(Spawn.GetValue());
+	}
+	RefreshDesignView(false);
+}
+
 void UCombatSubsystem::CancelDesignPieceMove()
 {
 	if (!DesignMovingPiece.IsSet())
@@ -1870,10 +1995,21 @@ void UCombatSubsystem::DesignRightClick(const FVector& WorldPoint, bool bHasPoin
 		CancelDesignPieceMove();
 		return;
 	}
+	if (IsMovingDesignUnit())
+	{
+		CancelDesignUnitMove();
+		return;
+	}
 	if (DesignTool == ECombatDesignTool::Build && HasDesignPieceSelected())
 	{
 		DesignPieceId.Reset();
 		HideDesignPiecePreview();
+		return;
+	}
+	if (DesignTool != ECombatDesignTool::Build && bDesignUnitSelected)
+	{
+		bDesignUnitSelected = false;
+		HideDesignUnitGhost();
 		return;
 	}
 	if (bHasPoint)
@@ -2022,7 +2158,7 @@ void UCombatSubsystem::UpdateDesignUnitGhost(const FVector& WorldPoint)
 {
 	ACombatGrid* Grid = ACombatGrid::Find(GetWorld());
 	const UCombatUnitDefinition* Definition = FindUnitDefinition(DesignUnitType);
-	if (!bDesignMode || !Grid || !Definition)
+	if (!bDesignMode || !Grid || !Definition || !(bDesignUnitSelected || IsMovingDesignUnit()))
 	{
 		HideDesignUnitGhost();
 		return;

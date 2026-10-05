@@ -186,9 +186,19 @@ public:
 	bool PlayDesignLevel(int32 Seed);
 	void SetDesignSize(int32 Width, int32 Height);
 
-	void SetDesignTool(ECombatDesignTool Tool) { DesignTool = Tool; bDesignEyedropper = false; }
+	/** Also selects the unit type again (Unit and Spawn Mode). */
+	void SetDesignTool(ECombatDesignTool Tool) { DesignTool = Tool; bDesignEyedropper = false; bDesignUnitSelected = true; }
 	ECombatDesignTool GetDesignTool() const { return DesignTool; }
-	void SetDesignUnitType(const FString& Type) { DesignUnitType = Type; }
+	void SetDesignUnitType(const FString& Type) { DesignUnitType = Type; bDesignUnitSelected = true; }
+	/** Unit and Spawn Mode: whether a unit type is selected to place (a right click deselects it). */
+	bool HasDesignUnitSelected() const { return bDesignUnitSelected; }
+	/**
+	 * Ctrl+click in Unit Mode (a unit) or Spawn Mode (a spawn of the selected wave): picks up the one on the position
+	 * under WorldPoint (else the nearest in that cell) to move it; its type, team and rotation become the selection.
+	 * The next placement puts it down (one undo step with the pick-up); a right click puts it back.
+	 */
+	bool PickDesignUnit(const FVector& WorldPoint);
+	bool IsMovingDesignUnit() const { return DesignMovingUnit.IsSet() || DesignMovingSpawn.IsSet(); }
 	const FString& GetDesignUnitType() const { return DesignUnitType; }
 	/**
 	 * LevelDesigner undo / redo (Ctrl+Z, Ctrl+Y or Ctrl+Shift+Z, buttons): one step per change of the edited level,
@@ -212,8 +222,9 @@ public:
 	bool IsMovingDesignPiece() const { return DesignMovingPiece.IsSet(); }
 	bool HasDesignPieceSelected() const { return !DesignPieceId.IsEmpty(); }
 	/**
-	 * Right click in edit mode: puts a moved piece back, else deselects the selected piece, else erases what is under
-	 * WorldPoint (the cell; with the Piece tool the topmost piece). bHasPoint is false when the click missed the grid plane.
+	 * Right click in edit mode: puts a moved piece, unit or spawn back, else deselects the selected piece (Build Mode) or
+	 * unit type (Unit and Spawn Mode), else erases what is under WorldPoint (Build Mode: the topmost piece; Unit and
+	 * Spawn Mode: the unit or spawn there). bHasPoint is false when the click missed the grid plane.
 	 */
 	void DesignRightClick(const FVector& WorldPoint, bool bHasPoint);
 	/** Color of the next tintable piece (solid floor) placed; sRGB. */
@@ -373,6 +384,8 @@ private:
 	void ResetDesignHistory();
 	/** Puts a piece that is being moved back where it was (undoing the pick-up). */
 	void CancelDesignPieceMove();
+	/** Puts a picked-up unit or spawn back (undo of the pick-up, or adding it again after other edits). */
+	void CancelDesignUnitMove();
 	/** Undo / redo: shows Level as the edited level (keeping the current name). */
 	void RestoreDesignLevel(FCombatLevel Level);
 	/** The selected piece under WorldPoint and its definition; false without a catalog or a valid selection. */
@@ -464,9 +477,14 @@ private:
 	int32 ActiveDesignStroke = INDEX_NONE;
 	int32 LastRecordedStroke = INDEX_NONE;
 
-	/** The piece being moved, as it was before the pick-up, and the stroke serial of the pick-up. */
+	/** The piece being moved, as it was before the pick-up, and the stroke serial of the pick-up (also for units and spawns). */
 	TOptional<FCombatLevelPiece> DesignMovingPiece;
 	int32 DesignMoveStroke = INDEX_NONE;
+	/** The unit or spawn being moved (Ctrl+click), as it was, and the spawn's wave. */
+	TOptional<FCombatLevelUnit> DesignMovingUnit;
+	TOptional<FCombatLevelSpawn> DesignMovingSpawn;
+	int32 DesignMovingSpawnWave = INDEX_NONE;
+	bool bDesignUnitSelected = true;
 
 	FString DesignPieceId;
 	/** In eighth turns (45 degrees); pieces that turn in quarters use half of it. */
