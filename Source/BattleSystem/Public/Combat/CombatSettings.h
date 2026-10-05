@@ -8,6 +8,7 @@
 #include "CombatSettings.generated.h"
 
 class UCombatCueTable;
+class UCombatPieceCatalog;
 class UCombatSetup;
 
 /** How an active effect is shown on a unit. */
@@ -136,6 +137,10 @@ public:
 	/** Maps cue tags to VFX, sound and debug colors. */
 	UPROPERTY(Config, EditAnywhere, Category = "Presentation")
 	TSoftObjectPtr<UCombatCueTable> CueTable;
+
+	/** Pieces the LevelDesigner can place (walls, floors, furniture); shown levels take their meshes from it. */
+	UPROPERTY(Config, EditAnywhere, Category = "Arena")
+	TSoftObjectPtr<UCombatPieceCatalog> PieceCatalog = TSoftObjectPtr<UCombatPieceCatalog>(FSoftObjectPath(TEXT("/Game/Environment/DA_PieceCatalog.DA_PieceCatalog")));
 
 	/** How long the flash of an area attack going off stays visible. */
 	UPROPERTY(Config, EditAnywhere, Category = "Presentation", meta = (ClampMin = 0, Units = "s"))

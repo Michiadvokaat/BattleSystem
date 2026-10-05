@@ -2,6 +2,10 @@
 
 #include "Combat/CombatGrid.h"
 #include "Combat/CombatObstacle.h"
+#include "Combat/CombatPieces.h"
+#include "Combat/CombatSettings.h"
+#include "Combat/CombatSubsystem.h"
+#include "Engine/StaticMesh.h"
 #include "Components/InstancedStaticMeshComponent.h"
 #include "Components/StaticMeshComponent.h"
 #include "Materials/MaterialInstanceDynamic.h"
@@ -78,6 +82,11 @@ void ACombatGrid::ApplyLevel(const FCombatLevel& Level)
 	Level.ToGridData(LevelGridData);
 	SetObstaclesHidden(true);
 	ShowGrid(LevelGridData);
+	// Floor pieces lie at Z = 0: the grid's floor goes just below them (cells without a floor piece still show it).
+	if (Level.Pieces.ContainsByPredicate([](const FCombatLevelPiece& Piece) { return Piece.Layer == ECombatPieceLayer::Floor; }))
+	{
+		FloorMesh->SetRelativeLocation(FloorMesh->GetRelativeLocation() - FVector(0.0, 0.0, PieceFloorDrop));
+	}
 
 	// One block per wall, hedge and water cell (WallHeight, HedgeHeight, WaterHeight); the engine cube is 100 cm.
 	struct FBlockKind
@@ -115,6 +124,53 @@ void ACombatGrid::ApplyLevel(const FCombatLevel& Level)
 			}
 		}
 	}
+	ShowPieces(Level);
+}
+
+void ACombatGrid::ShowPieces(const FCombatLevel& Level)
+{
+	ClearPieces();
+	if (Level.Pieces.IsEmpty())
+	{
+		return;
+	}
+	const UCombatPieceCatalog* Catalog = GetDefault<UCombatSettings>()->PieceCatalog.LoadSynchronous();
+	if (!Catalog)
+	{
+		UE_LOG(LogCombat, Warning, TEXT("Level %s has %d pieces but no PieceCatalog is set (Project Settings > Combat)."), *Level.Name, Level.Pieces.Num());
+		return;
+	}
+
+	for (const FCombatLevelPiece& Piece : Level.Pieces)
+	{
+		const FCombatPieceDefinition* Definition = Catalog->Find(Piece.Id);
+		UStaticMesh* Mesh = Definition ? Definition->Mesh.Get() : nullptr;
+		if (!Mesh)
+		{
+			UE_LOG(LogCombat, Warning, TEXT("Level %s: piece %s is not in the catalog or has no mesh."), *Level.Name, *Piece.Id);
+			continue;
+		}
+		UStaticMeshComponent* Component = NewObject<UStaticMeshComponent>(this);
+		Component->SetupAttachment(RootComponent);
+		Component->SetStaticMesh(Mesh);
+		Component->SetCollisionEnabled(ECollisionEnabled::NoCollision);
+		Component->SetRelativeTransform(CombatPieces::ComputeMeshTransform(Piece, Level.CellSize, Mesh->GetBoundingBox(),
+			Definition->MeshYaw, Definition->Offset, Definition->bScaleToFit));
+		Component->RegisterComponent();
+		PieceComponents.Add(Component);
+	}
+}
+
+void ACombatGrid::ClearPieces()
+{
+	for (UStaticMeshComponent* Component : PieceComponents)
+	{
+		if (Component)
+		{
+			Component->DestroyComponent();
+		}
+	}
+	PieceComponents.Reset();
 }
 
 void ACombatGrid::ClearLevel()
@@ -127,6 +183,7 @@ void ACombatGrid::ClearLevel()
 	WallBlocks->ClearInstances();
 	HedgeBlocks->ClearInstances();
 	WaterBlocks->ClearInstances();
+	ClearPieces();
 	SetObstaclesHidden(false);
 	ShowGrid(GetGridData());
 }

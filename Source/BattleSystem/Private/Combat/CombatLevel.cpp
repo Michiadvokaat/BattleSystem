@@ -40,6 +40,7 @@ void FCombatLevel::Resize(int32 NewWidth, int32 NewHeight)
 	Height = NewHeight;
 	Normalize();
 	Units.RemoveAll([this](const FCombatLevelUnit& Unit) { return !IsInBounds(Unit.Cell); });
+	Pieces.RemoveAll([this](const FCombatLevelPiece& Piece) { return !IsPieceInBounds(Piece); });
 	for (FCombatLevelWave& Wave : Waves)
 	{
 		Wave.Spawns.RemoveAll([this](const FCombatLevelSpawn& Spawn) { return !IsInBounds(Spawn.Cell); });
@@ -98,6 +99,111 @@ bool FCombatLevel::RemoveSpawnsAt(const FIntPoint& Cell)
 	return Removed > 0;
 }
 
+FIntPoint FCombatLevelPiece::GetRotatedSize() const
+{
+	return Rotation % 2 == 0 ? Size : FIntPoint(Size.Y, Size.X);
+}
+
+void FCombatLevelPiece::GetCells(TArray<FIntPoint>& OutCells) const
+{
+	OutCells.Reset();
+	if (Layer == ECombatPieceLayer::Edge)
+	{
+		return;
+	}
+	const FIntPoint RotatedSize = GetRotatedSize();
+	for (int32 Y = 0; Y < FMath::Max(RotatedSize.Y, 1); ++Y)
+	{
+		for (int32 X = 0; X < FMath::Max(RotatedSize.X, 1); ++X)
+		{
+			OutCells.Add(Cell + FIntPoint(X, Y));
+		}
+	}
+}
+
+void FCombatLevelPiece::GetEdges(TArray<TPair<FIntPoint, FIntPoint>>& OutEdges) const
+{
+	OutEdges.Reset();
+	if (Layer != ECombatPieceLayer::Edge)
+	{
+		return;
+	}
+	for (int32 Index = 0; Index < FMath::Max(Size.X, 1); ++Index)
+	{
+		if (IsHorizontalEdge())
+		{
+			OutEdges.Emplace(FIntPoint(Cell.X + Index, Cell.Y - 1), FIntPoint(Cell.X + Index, Cell.Y));
+		}
+		else
+		{
+			OutEdges.Emplace(FIntPoint(Cell.X - 1, Cell.Y + Index), FIntPoint(Cell.X, Cell.Y + Index));
+		}
+	}
+}
+
+bool FCombatLevelPiece::Overlaps(const FCombatLevelPiece& Other) const
+{
+	if (Layer != Other.Layer)
+	{
+		return false;
+	}
+	if (Layer == ECombatPieceLayer::Edge)
+	{
+		TArray<TPair<FIntPoint, FIntPoint>> Mine;
+		TArray<TPair<FIntPoint, FIntPoint>> Theirs;
+		GetEdges(Mine);
+		Other.GetEdges(Theirs);
+		return Mine.ContainsByPredicate([&Theirs](const TPair<FIntPoint, FIntPoint>& Edge) { return Theirs.Contains(Edge); });
+	}
+	TArray<FIntPoint> Mine;
+	TArray<FIntPoint> Theirs;
+	GetCells(Mine);
+	Other.GetCells(Theirs);
+	return Mine.ContainsByPredicate([&Theirs](const FIntPoint& Cell) { return Theirs.Contains(Cell); });
+}
+
+bool FCombatLevel::IsPieceInBounds(const FCombatLevelPiece& Piece) const
+{
+	if (Piece.Layer == ECombatPieceLayer::Edge)
+	{
+		// A border line: horizontal ones may lie on row borders 0..Height, vertical ones on column borders 0..Width.
+		const int32 Length = FMath::Max(Piece.Size.X, 1);
+		return Piece.IsHorizontalEdge()
+			? Piece.Cell.X >= 0 && Piece.Cell.X + Length <= Width && Piece.Cell.Y >= 0 && Piece.Cell.Y <= Height
+			: Piece.Cell.Y >= 0 && Piece.Cell.Y + Length <= Height && Piece.Cell.X >= 0 && Piece.Cell.X <= Width;
+	}
+	const FIntPoint RotatedSize = Piece.GetRotatedSize();
+	return IsInBounds(Piece.Cell) && IsInBounds(Piece.Cell + FIntPoint(FMath::Max(RotatedSize.X, 1) - 1, FMath::Max(RotatedSize.Y, 1) - 1));
+}
+
+bool FCombatLevel::PlacePiece(const FCombatLevelPiece& Piece)
+{
+	if (!IsPieceInBounds(Piece))
+	{
+		return false;
+	}
+	Pieces.RemoveAll([&Piece](const FCombatLevelPiece& Other) { return Other.Overlaps(Piece); });
+	Pieces.Add(Piece);
+	return true;
+}
+
+int32 FCombatLevel::FindPieceAt(ECombatPieceLayer Layer, const FIntPoint& Cell) const
+{
+	TArray<FIntPoint> Cells;
+	for (int32 Index = 0; Index < Pieces.Num(); ++Index)
+	{
+		if (Pieces[Index].Layer == Layer)
+		{
+			Pieces[Index].GetCells(Cells);
+			if (Cells.Contains(Cell))
+			{
+				return Index;
+			}
+		}
+	}
+	return INDEX_NONE;
+}
+
 void FCombatLevel::ToGridData(FCombatGridData& OutGrid) const
 {
 	OutGrid.Init(Width, Height, CellSize);
@@ -106,6 +212,31 @@ void FCombatLevel::ToGridData(FCombatGridData& OutGrid) const
 		for (int32 X = 0; X < Width; ++X)
 		{
 			OutGrid.AddFlags(FIntPoint(X, Y), FlagsFor(GetCell(FIntPoint(X, Y))));
+		}
+	}
+
+	// Pieces in list order; flags and edge walls only add, so the order does not change the result.
+	TArray<FIntPoint> Cells;
+	TArray<TPair<FIntPoint, FIntPoint>> Edges;
+	for (const FCombatLevelPiece& Piece : Pieces)
+	{
+		if (Piece.Layer == ECombatPieceLayer::Cell)
+		{
+			const ECombatCellFlags Flags = (Piece.bBlocksWalking ? ECombatCellFlags::Blocked : ECombatCellFlags::None)
+				| (Piece.bBlocksSight ? ECombatCellFlags::BlocksSight : ECombatCellFlags::None);
+			Piece.GetCells(Cells);
+			for (const FIntPoint& Cell : Cells)
+			{
+				OutGrid.AddFlags(Cell, Flags);
+			}
+		}
+		else if (Piece.Layer == ECombatPieceLayer::Edge && (Piece.bBlocksWalking || Piece.bBlocksSight))
+		{
+			Piece.GetEdges(Edges);
+			for (const TPair<FIntPoint, FIntPoint>& Edge : Edges)
+			{
+				OutGrid.AddEdgeWall(Edge.Key, Edge.Value);
+			}
 		}
 	}
 }

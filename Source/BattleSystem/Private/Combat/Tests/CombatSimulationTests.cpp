@@ -8,6 +8,7 @@
 #include "Combat/CombatCamera.h"
 #include "Combat/CombatLevel.h"
 #include "Combat/CombatPathfinding.h"
+#include "Combat/CombatPieces.h"
 #include "Combat/CombatReplay.h"
 #include "Combat/CombatSimulation.h"
 #include "Combat/CombatTags.h"
@@ -2041,6 +2042,165 @@ bool FCombatEdgeWallFightTest::RunTest(const FString& Parameters)
 
 	TestTrue(TEXT("Same seed, same checksum after every step, with edge walls"),
 		CombatTests::RunAndCollectChecksums(Config) == CombatTests::RunAndCollectChecksums(Config));
+	return true;
+}
+
+IMPLEMENT_SIMPLE_AUTOMATION_TEST(FCombatPieceFootprintTest, "BattleSystem.Combat.PieceFootprint",
+	EAutomationTestFlags::EditorContext | EAutomationTestFlags::ProductFilter)
+
+bool FCombatPieceFootprintTest::RunTest(const FString& Parameters)
+{
+	FCombatLevelPiece Table;
+	Table.Layer = ECombatPieceLayer::Cell;
+	Table.Cell = FIntPoint(2, 3);
+	Table.Size = FIntPoint(2, 1);
+	TArray<FIntPoint> Cells;
+	Table.GetCells(Cells);
+	TestTrue(TEXT("A 2x1 piece covers two cells along X"), Cells == TArray<FIntPoint>({ FIntPoint(2, 3), FIntPoint(3, 3) }));
+	Table.Rotation = 1;
+	Table.GetCells(Cells);
+	TestTrue(TEXT("Turned a quarter it covers two cells along Y"), Cells == TArray<FIntPoint>({ FIntPoint(2, 3), FIntPoint(2, 4) }));
+
+	FCombatLevelPiece Wall;
+	Wall.Layer = ECombatPieceLayer::Edge;
+	Wall.Cell = FIntPoint(1, 2);
+	Wall.Size = FIntPoint(3, 1);
+	TArray<TPair<FIntPoint, FIntPoint>> Edges;
+	Wall.GetEdges(Edges);
+	TestEqual(TEXT("A wall of 3 covers 3 borders"), Edges.Num(), 3);
+	TestTrue(TEXT("Horizontal: between rows 1 and 2, from column 1"), Edges[0] == TPair<FIntPoint, FIntPoint>(FIntPoint(1, 1), FIntPoint(1, 2)) && Edges[2].Value == FIntPoint(3, 2));
+	Wall.Rotation = 3;
+	Wall.GetEdges(Edges);
+	TestTrue(TEXT("Vertical: between columns 0 and 1, from row 2"), Edges[0] == TPair<FIntPoint, FIntPoint>(FIntPoint(0, 2), FIntPoint(1, 2)) && Edges[2].Value == FIntPoint(1, 4));
+	Wall.GetCells(Cells);
+	TestEqual(TEXT("A border piece covers no cells"), Cells.Num(), 0);
+
+	FCombatLevel Level = FCombatLevel::MakeEmpty(TEXT("Pieces"), 6, 5);
+	FCombatLevelPiece Floor;
+	Floor.Layer = ECombatPieceLayer::Floor;
+	Floor.Size = FIntPoint(4, 4);
+	TestTrue(TEXT("A 4x4 floor fits at (0,0)"), Level.PlacePiece(Floor));
+	Floor.Cell = FIntPoint(3, 0);
+	TestFalse(TEXT("... but not at (3,0) of a 6 wide level"), Level.PlacePiece(Floor));
+	Table.Rotation = 0;
+	TestTrue(TEXT("A table goes on the floor (another layer)"), Level.PlacePiece(Table));
+	FCombatLevelPiece Chair = Table;
+	Chair.Size = FIntPoint(1, 1);
+	Chair.Cell = FIntPoint(3, 3);
+	TestTrue(TEXT("A chair on the table's second cell replaces the table"), Level.PlacePiece(Chair));
+	TestEqual(TEXT("Floor and chair are left"), Level.Pieces.Num(), 2);
+	TestEqual(TEXT("FindPieceAt finds the chair"), Level.FindPieceAt(ECombatPieceLayer::Cell, FIntPoint(3, 3)), 1);
+	TestEqual(TEXT("... and nothing where the table was"), Level.FindPieceAt(ECombatPieceLayer::Cell, FIntPoint(2, 3)), INDEX_NONE);
+	FCombatLevelPiece Border = Wall;
+	Border.Rotation = 0;
+	Border.Cell = FIntPoint(3, 5);
+	TestTrue(TEXT("A border piece may lie on the outer border"), Level.IsPieceInBounds(Border));
+	Border.Cell = FIntPoint(4, 5);
+	TestFalse(TEXT("... but not stick out of it"), Level.IsPieceInBounds(Border));
+	return true;
+}
+
+IMPLEMENT_SIMPLE_AUTOMATION_TEST(FCombatPieceGridTest, "BattleSystem.Combat.PieceGrid",
+	EAutomationTestFlags::EditorContext | EAutomationTestFlags::ProductFilter)
+
+bool FCombatPieceGridTest::RunTest(const FString& Parameters)
+{
+	FCombatPieceDefinition WallDefinition;
+	WallDefinition.Id = TEXT("Walls/TestWall");
+	WallDefinition.Layer = ECombatPieceLayer::Edge;
+	WallDefinition.Size = FIntPoint(2, 1);
+	FCombatPieceDefinition DoorDefinition = WallDefinition;
+	DoorDefinition.Id = TEXT("Doors/TestDoor");
+	DoorDefinition.Size = FIntPoint(1, 1);
+	DoorDefinition.bBlocksWalking = false;
+	FCombatPieceDefinition ClosetDefinition;
+	ClosetDefinition.Id = TEXT("Furniture/TestCloset");
+	ClosetDefinition.bBlocksSight = true;
+	FCombatPieceDefinition FloorDefinition;
+	FloorDefinition.Id = TEXT("Floors/TestFloor");
+	FloorDefinition.Layer = ECombatPieceLayer::Floor;
+
+	FCombatLevel Level = FCombatLevel::MakeEmpty(TEXT("PieceGrid"), 8, 6);
+	TestTrue(TEXT("Wall placed"), Level.PlacePiece(WallDefinition.MakePiece(FIntPoint(2, 2), 0)));
+	TestTrue(TEXT("Door placed"), Level.PlacePiece(DoorDefinition.MakePiece(FIntPoint(5, 1), 1)));
+	TestTrue(TEXT("Closet placed"), Level.PlacePiece(ClosetDefinition.MakePiece(FIntPoint(6, 4), 0)));
+	TestTrue(TEXT("Floor placed"), Level.PlacePiece(FloorDefinition.MakePiece(FIntPoint(0, 0), 0)));
+	TestFalse(TEXT("A floor never blocks"), Level.Pieces.Last().bBlocksWalking);
+
+	FCombatGridData Grid;
+	Level.ToGridData(Grid);
+	TestTrue(TEXT("The wall blocks its two borders"), Grid.HasEdgeWall(FIntPoint(2, 1), FIntPoint(2, 2)) && Grid.HasEdgeWall(FIntPoint(3, 1), FIntPoint(3, 2)));
+	TestFalse(TEXT("... and not the next one"), Grid.HasEdgeWall(FIntPoint(4, 1), FIntPoint(4, 2)));
+	TestFalse(TEXT("A door frame does not block"), Grid.HasEdgeWall(FIntPoint(4, 1), FIntPoint(5, 1)));
+	TestTrue(TEXT("The closet blocks walking and sight"), !Grid.IsWalkable(FIntPoint(6, 4)) && Grid.BlocksSight(FIntPoint(6, 4)));
+	TestTrue(TEXT("The floor cell stays open"), Grid.IsWalkable(FIntPoint(0, 0)) && !Grid.BlocksSight(FIntPoint(0, 0)));
+
+	FString Json;
+	FCombatLevel Loaded;
+	TestTrue(TEXT("JSON round trip"), CombatLevels::ToJson(Level, Json) && CombatLevels::FromJson(Json, Loaded));
+	FCombatGridData LoadedGrid;
+	Loaded.ToGridData(LoadedGrid);
+	TestEqual(TEXT("Same pieces after loading"), Loaded.Pieces.Num(), Level.Pieces.Num());
+	TestEqual(TEXT("Same grid after loading"), LoadedGrid.ComputeChecksum(), Grid.ComputeChecksum());
+
+	Level.Resize(5, 6);
+	TestTrue(TEXT("Resize removes pieces that no longer fit"), Level.FindPieceAt(ECombatPieceLayer::Cell, FIntPoint(6, 4)) == INDEX_NONE && Level.Pieces.Num() == 3);
+	return true;
+}
+
+IMPLEMENT_SIMPLE_AUTOMATION_TEST(FCombatPieceTransformTest, "BattleSystem.Combat.PieceTransform",
+	EAutomationTestFlags::EditorContext | EAutomationTestFlags::ProductFilter)
+
+bool FCombatPieceTransformTest::RunTest(const FString& Parameters)
+{
+	FCombatLevelPiece Wall;
+	Wall.Layer = ECombatPieceLayer::Edge;
+	Wall.Cell = FIntPoint(2, 3);
+	Wall.Size = FIntPoint(4, 1);
+	const FBox WallBounds(FVector(-200.0, -10.0, 0.0), FVector(200.0, 10.0, 400.0));
+	FTransform Transform = CombatPieces::ComputeMeshTransform(Wall, 100.f, WallBounds, 0.f, FVector::ZeroVector);
+	TestTrue(TEXT("Horizontal wall: centered on its border line"), Transform.GetLocation().Equals(FVector(400.0, 300.0, 0.0), 0.01));
+	Wall.Rotation = 1;
+	Transform = CombatPieces::ComputeMeshTransform(Wall, 100.f, WallBounds, 0.f, FVector::ZeroVector);
+	TestTrue(TEXT("Vertical wall: along the column border, turned 90"), Transform.GetLocation().Equals(FVector(200.0, 500.0, 0.0), 0.01)
+		&& FMath::IsNearlyEqual(Transform.Rotator().Yaw, 90.0, 0.01));
+
+	// A door with its pivot at one end and a window centered on its height.
+	FCombatLevelPiece Door = Wall;
+	Door.Size = FIntPoint(1, 1);
+	Door.Rotation = 0;
+	Door.Cell = FIntPoint(5, 5);
+	Transform = CombatPieces::ComputeMeshTransform(Door, 100.f, FBox(FVector(0.0, -11.0, 0.0), FVector(104.0, 11.0, 240.0)), 0.f, FVector::ZeroVector);
+	TestTrue(TEXT("Off-center pivot: the bounds are centered, not the pivot"), Transform.GetLocation().Equals(FVector(498.0, 500.0, 0.0), 0.01));
+	Transform = CombatPieces::ComputeMeshTransform(Door, 100.f, FBox(FVector(-80.0, -10.0, -100.0), FVector(80.0, 10.0, 100.0)), 0.f, FVector(0.0, 0.0, 90.0));
+	TestTrue(TEXT("Centered height: the bottom on the floor, plus the offset"), FMath::IsNearlyEqual(Transform.GetLocation().Z, 190.0, 0.01));
+
+	FCombatLevelPiece Floor;
+	Floor.Layer = ECombatPieceLayer::Floor;
+	Floor.Size = FIntPoint(4, 2);
+	Floor.Rotation = 1;
+	Transform = CombatPieces::ComputeMeshTransform(Floor, 100.f, FBox(FVector(-200.0, -100.0, 0.0), FVector(200.0, 100.0, 0.0)), 0.f, FVector::ZeroVector);
+	TestTrue(TEXT("A turned 4x2 floor is centered on its 2x4 cells"), Transform.GetLocation().Equals(FVector(100.0, 200.0, 0.0), 0.01));
+
+	// A mesh long along Y gets MeshYaw 90 so that it lies along the border.
+	Wall.Rotation = 0;
+	Transform = CombatPieces::ComputeMeshTransform(Wall, 100.f, FBox(FVector(-10.0, -200.0, 0.0), FVector(10.0, 200.0, 400.0)), 90.f, FVector::ZeroVector);
+	TestTrue(TEXT("MeshYaw turns the mesh onto the border"), FMath::IsNearlyEqual(Transform.Rotator().Yaw, 90.0, 0.01) && Transform.GetLocation().Equals(FVector(400.0, 300.0, 0.0), 0.01));
+
+	// Scale to fit: a 4 m wall as a 1 m piece, and an off-center 4 m wall as a 2 m piece.
+	Wall.Size = FIntPoint(1, 1);
+	Transform = CombatPieces::ComputeMeshTransform(Wall, 100.f, WallBounds, 0.f, FVector::ZeroVector, true);
+	TestTrue(TEXT("Scale to fit: a quarter along the length, depth and height kept"), Transform.GetScale3D().Equals(FVector(0.25, 1.0, 1.0), 0.001));
+	TestTrue(TEXT("... centered on its one border"), Transform.GetLocation().Equals(FVector(250.0, 300.0, 0.0), 0.01));
+	Wall.Size = FIntPoint(2, 1);
+	Transform = CombatPieces::ComputeMeshTransform(Wall, 100.f, FBox(FVector(0.0, -10.0, 0.0), FVector(400.0, 10.0, 400.0)), 0.f, FVector::ZeroVector, true);
+	TestTrue(TEXT("Off-center pivot scaled: the scaled bounds are centered"), Transform.GetLocation().Equals(FVector(200.0, 300.0, 0.0), 0.01));
+	Transform = CombatPieces::ComputeMeshTransform(Wall, 100.f, FBox(FVector(-10.0, -200.0, 0.0), FVector(10.0, 200.0, 400.0)), 90.f, FVector::ZeroVector, true);
+	TestTrue(TEXT("A mesh long along Y scales its Y"), Transform.GetScale3D().Equals(FVector(1.0, 0.5, 1.0), 0.001));
+	Floor.Size = FIntPoint(2, 2);
+	Floor.Rotation = 0;
+	Transform = CombatPieces::ComputeMeshTransform(Floor, 100.f, FBox(FVector(-200.0, -100.0, 0.0), FVector(200.0, 100.0, 0.0)), 0.f, FVector::ZeroVector, true);
+	TestTrue(TEXT("A floor scales in X and Y"), Transform.GetScale3D().Equals(FVector(0.5, 1.0, 1.0), 0.001));
 	return true;
 }
 

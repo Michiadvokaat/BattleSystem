@@ -1,0 +1,618 @@
+{
+	"formatVersion": 3,
+	"name": "PiecesDemo",
+	"width": 20,
+	"height": 12,
+	"cellSize": 100,
+	"rows": [
+		"....................",
+		"....................",
+		"....................",
+		"....................",
+		"....................",
+		"....................",
+		"....................",
+		"....................",
+		"....................",
+		"....................",
+		"....................",
+		"...................."
+	],
+	"units": [
+		{
+			"type": "DA_Krijger",
+			"team": 0,
+			"cell": {
+				"x": 4,
+				"y": 4
+			}
+		},
+		{
+			"type": "DA_Boogschutter",
+			"team": 0,
+			"cell": {
+				"x": 4,
+				"y": 8
+			}
+		},
+		{
+			"type": "DA_Tank",
+			"team": 0,
+			"cell": {
+				"x": 12,
+				"y": 4
+			}
+		},
+		{
+			"type": "DA_Brute",
+			"team": 1,
+			"cell": {
+				"x": 17,
+				"y": 4
+			}
+		},
+		{
+			"type": "DA_Brute",
+			"team": 1,
+			"cell": {
+				"x": 17,
+				"y": 8
+			}
+		},
+		{
+			"type": "DA_Krijger",
+			"team": 1,
+			"cell": {
+				"x": 18,
+				"y": 6
+			}
+		}
+	],
+	"waves": [],
+	"pieces": [
+		{
+			"id": "Floors/SM_floor_002",
+			"layer": "Floor",
+			"cell": {
+				"x": 0,
+				"y": 0
+			},
+			"rotation": 0,
+			"size": {
+				"x": 4,
+				"y": 4
+			},
+			"bBlocksWalking": false,
+			"bBlocksSight": false,
+			"detail": -1
+		},
+		{
+			"id": "Floors/SM_floor_002",
+			"layer": "Floor",
+			"cell": {
+				"x": 4,
+				"y": 0
+			},
+			"rotation": 0,
+			"size": {
+				"x": 4,
+				"y": 4
+			},
+			"bBlocksWalking": false,
+			"bBlocksSight": false,
+			"detail": -1
+		},
+		{
+			"id": "Floors/SM_floor_002",
+			"layer": "Floor",
+			"cell": {
+				"x": 8,
+				"y": 0
+			},
+			"rotation": 0,
+			"size": {
+				"x": 4,
+				"y": 4
+			},
+			"bBlocksWalking": false,
+			"bBlocksSight": false,
+			"detail": -1
+		},
+		{
+			"id": "Floors/SM_floor_002",
+			"layer": "Floor",
+			"cell": {
+				"x": 12,
+				"y": 0
+			},
+			"rotation": 0,
+			"size": {
+				"x": 4,
+				"y": 4
+			},
+			"bBlocksWalking": false,
+			"bBlocksSight": false,
+			"detail": -1
+		},
+		{
+			"id": "Floors/SM_floor_002",
+			"layer": "Floor",
+			"cell": {
+				"x": 16,
+				"y": 0
+			},
+			"rotation": 0,
+			"size": {
+				"x": 4,
+				"y": 4
+			},
+			"bBlocksWalking": false,
+			"bBlocksSight": false,
+			"detail": -1
+		},
+		{
+			"id": "Floors/SM_floor_002",
+			"layer": "Floor",
+			"cell": {
+				"x": 0,
+				"y": 4
+			},
+			"rotation": 0,
+			"size": {
+				"x": 4,
+				"y": 4
+			},
+			"bBlocksWalking": false,
+			"bBlocksSight": false,
+			"detail": -1
+		},
+		{
+			"id": "Floors/SM_floor_002",
+			"layer": "Floor",
+			"cell": {
+				"x": 4,
+				"y": 4
+			},
+			"rotation": 0,
+			"size": {
+				"x": 4,
+				"y": 4
+			},
+			"bBlocksWalking": false,
+			"bBlocksSight": false,
+			"detail": -1
+		},
+		{
+			"id": "Floors/SM_floor_002",
+			"layer": "Floor",
+			"cell": {
+				"x": 8,
+				"y": 4
+			},
+			"rotation": 0,
+			"size": {
+				"x": 4,
+				"y": 4
+			},
+			"bBlocksWalking": false,
+			"bBlocksSight": false,
+			"detail": -1
+		},
+		{
+			"id": "Floors/SM_floor_002",
+			"layer": "Floor",
+			"cell": {
+				"x": 12,
+				"y": 4
+			},
+			"rotation": 0,
+			"size": {
+				"x": 4,
+				"y": 4
+			},
+			"bBlocksWalking": false,
+			"bBlocksSight": false,
+			"detail": -1
+		},
+		{
+			"id": "Floors/SM_floor_002",
+			"layer": "Floor",
+			"cell": {
+				"x": 16,
+				"y": 4
+			},
+			"rotation": 0,
+			"size": {
+				"x": 4,
+				"y": 4
+			},
+			"bBlocksWalking": false,
+			"bBlocksSight": false,
+			"detail": -1
+		},
+		{
+			"id": "Floors/SM_floor_002",
+			"layer": "Floor",
+			"cell": {
+				"x": 0,
+				"y": 8
+			},
+			"rotation": 0,
+			"size": {
+				"x": 4,
+				"y": 4
+			},
+			"bBlocksWalking": false,
+			"bBlocksSight": false,
+			"detail": -1
+		},
+		{
+			"id": "Floors/SM_floor_002",
+			"layer": "Floor",
+			"cell": {
+				"x": 4,
+				"y": 8
+			},
+			"rotation": 0,
+			"size": {
+				"x": 4,
+				"y": 4
+			},
+			"bBlocksWalking": false,
+			"bBlocksSight": false,
+			"detail": -1
+		},
+		{
+			"id": "Floors/SM_floor_002",
+			"layer": "Floor",
+			"cell": {
+				"x": 8,
+				"y": 8
+			},
+			"rotation": 0,
+			"size": {
+				"x": 4,
+				"y": 4
+			},
+			"bBlocksWalking": false,
+			"bBlocksSight": false,
+			"detail": -1
+		},
+		{
+			"id": "Floors/SM_floor_002",
+			"layer": "Floor",
+			"cell": {
+				"x": 12,
+				"y": 8
+			},
+			"rotation": 0,
+			"size": {
+				"x": 4,
+				"y": 4
+			},
+			"bBlocksWalking": false,
+			"bBlocksSight": false,
+			"detail": -1
+		},
+		{
+			"id": "Floors/SM_floor_002",
+			"layer": "Floor",
+			"cell": {
+				"x": 16,
+				"y": 8
+			},
+			"rotation": 0,
+			"size": {
+				"x": 4,
+				"y": 4
+			},
+			"bBlocksWalking": false,
+			"bBlocksSight": false,
+			"detail": -1
+		},
+		{
+			"id": "Walls/SM_Walls_008",
+			"layer": "Edge",
+			"cell": {
+				"x": 2,
+				"y": 2
+			},
+			"rotation": 0,
+			"size": {
+				"x": 4,
+				"y": 1
+			},
+			"bBlocksWalking": true,
+			"bBlocksSight": true,
+			"detail": -1
+		},
+		{
+			"id": "Windows/SM_window_007",
+			"layer": "Edge",
+			"cell": {
+				"x": 6,
+				"y": 2
+			},
+			"rotation": 0,
+			"size": {
+				"x": 2,
+				"y": 1
+			},
+			"bBlocksWalking": true,
+			"bBlocksSight": true,
+			"detail": -1
+		},
+		{
+			"id": "Windows/SM_window_007",
+			"layer": "Edge",
+			"cell": {
+				"x": 8,
+				"y": 2
+			},
+			"rotation": 0,
+			"size": {
+				"x": 2,
+				"y": 1
+			},
+			"bBlocksWalking": true,
+			"bBlocksSight": true,
+			"detail": -1
+		},
+		{
+			"id": "Walls/SM_Walls_008",
+			"layer": "Edge",
+			"cell": {
+				"x": 10,
+				"y": 2
+			},
+			"rotation": 0,
+			"size": {
+				"x": 4,
+				"y": 1
+			},
+			"bBlocksWalking": true,
+			"bBlocksSight": true,
+			"detail": -1
+		},
+		{
+			"id": "Walls/SM_Walls_008",
+			"layer": "Edge",
+			"cell": {
+				"x": 2,
+				"y": 10
+			},
+			"rotation": 0,
+			"size": {
+				"x": 4,
+				"y": 1
+			},
+			"bBlocksWalking": true,
+			"bBlocksSight": true,
+			"detail": -1
+		},
+		{
+			"id": "Walls/SM_Walls_008",
+			"layer": "Edge",
+			"cell": {
+				"x": 6,
+				"y": 10
+			},
+			"rotation": 0,
+			"size": {
+				"x": 4,
+				"y": 1
+			},
+			"bBlocksWalking": true,
+			"bBlocksSight": true,
+			"detail": -1
+		},
+		{
+			"id": "Walls/SM_Walls_008",
+			"layer": "Edge",
+			"cell": {
+				"x": 10,
+				"y": 10
+			},
+			"rotation": 0,
+			"size": {
+				"x": 4,
+				"y": 1
+			},
+			"bBlocksWalking": true,
+			"bBlocksSight": true,
+			"detail": -1
+		},
+		{
+			"id": "Walls/SM_Walls_008",
+			"layer": "Edge",
+			"cell": {
+				"x": 2,
+				"y": 2
+			},
+			"rotation": 1,
+			"size": {
+				"x": 4,
+				"y": 1
+			},
+			"bBlocksWalking": true,
+			"bBlocksSight": true,
+			"detail": -1
+		},
+		{
+			"id": "Walls/SM_Walls_008",
+			"layer": "Edge",
+			"cell": {
+				"x": 2,
+				"y": 6
+			},
+			"rotation": 1,
+			"size": {
+				"x": 4,
+				"y": 1
+			},
+			"bBlocksWalking": true,
+			"bBlocksSight": true,
+			"detail": -1
+		},
+		{
+			"id": "Furniture/SM_kitchen_table_025",
+			"layer": "Cell",
+			"cell": {
+				"x": 6,
+				"y": 5
+			},
+			"rotation": 0,
+			"size": {
+				"x": 1,
+				"y": 1
+			},
+			"bBlocksWalking": true,
+			"bBlocksSight": false,
+			"detail": -1
+		},
+		{
+			"id": "Furniture/SM_kitchen_table_025",
+			"layer": "Cell",
+			"cell": {
+				"x": 9,
+				"y": 5
+			},
+			"rotation": 0,
+			"size": {
+				"x": 1,
+				"y": 1
+			},
+			"bBlocksWalking": true,
+			"bBlocksSight": false,
+			"detail": -1
+		},
+		{
+			"id": "Furniture/SM_kitchen_table_025",
+			"layer": "Cell",
+			"cell": {
+				"x": 6,
+				"y": 8
+			},
+			"rotation": 0,
+			"size": {
+				"x": 1,
+				"y": 1
+			},
+			"bBlocksWalking": true,
+			"bBlocksSight": false,
+			"detail": -1
+		},
+		{
+			"id": "Furniture/SM_kitchen_table_025",
+			"layer": "Cell",
+			"cell": {
+				"x": 9,
+				"y": 8
+			},
+			"rotation": 0,
+			"size": {
+				"x": 1,
+				"y": 1
+			},
+			"bBlocksWalking": true,
+			"bBlocksSight": false,
+			"detail": -1
+		},
+		{
+			"id": "Furniture/SM_kitchen_chair_003",
+			"layer": "Cell",
+			"cell": {
+				"x": 7,
+				"y": 5
+			},
+			"rotation": 1,
+			"size": {
+				"x": 1,
+				"y": 1
+			},
+			"bBlocksWalking": true,
+			"bBlocksSight": false,
+			"detail": -1
+		},
+		{
+			"id": "Furniture/SM_kitchen_chair_003",
+			"layer": "Cell",
+			"cell": {
+				"x": 10,
+				"y": 8
+			},
+			"rotation": 1,
+			"size": {
+				"x": 1,
+				"y": 1
+			},
+			"bBlocksWalking": true,
+			"bBlocksSight": false,
+			"detail": -1
+		},
+		{
+			"id": "Walls/SM_Walls_008",
+			"layer": "Edge",
+			"cell": {
+				"x": 14,
+				"y": 2
+			},
+			"rotation": 1,
+			"size": {
+				"x": 4,
+				"y": 1
+			},
+			"bBlocksWalking": true,
+			"bBlocksSight": true,
+			"detail": -1
+		},
+		{
+			"id": "Walls/SM_Walls_008_1m",
+			"layer": "Edge",
+			"cell": {
+				"x": 14,
+				"y": 6
+			},
+			"rotation": 1,
+			"size": {
+				"x": 1,
+				"y": 1
+			},
+			"bBlocksWalking": true,
+			"bBlocksSight": true,
+			"detail": -1
+		},
+		{
+			"id": "Doors/SM_door_009",
+			"layer": "Edge",
+			"cell": {
+				"x": 14,
+				"y": 7
+			},
+			"rotation": 1,
+			"size": {
+				"x": 1,
+				"y": 1
+			},
+			"bBlocksWalking": false,
+			"bBlocksSight": false,
+			"detail": -1
+		},
+		{
+			"id": "Walls/SM_Walls_008_2m",
+			"layer": "Edge",
+			"cell": {
+				"x": 14,
+				"y": 8
+			},
+			"rotation": 1,
+			"size": {
+				"x": 2,
+				"y": 1
+			},
+			"bBlocksWalking": true,
+			"bBlocksSight": true,
+			"detail": -1
+		}
+	]
+}

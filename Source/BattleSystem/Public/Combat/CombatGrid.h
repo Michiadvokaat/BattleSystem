@@ -101,6 +101,10 @@ private:
 	UPROPERTY(EditAnywhere, Category = "Grid|Level", meta = (ClampMin = 1, Units = "cm"))
 	float WaterHeight = 6.f;
 
+	/** How far the grid's own floor sinks while a level has floor pieces, so the two never fight at the same height. */
+	UPROPERTY(EditAnywhere, Category = "Grid|Level", meta = (ClampMin = 0, Units = "cm"))
+	float PieceFloorDrop = 2.f;
+
 	UPROPERTY(EditDefaultsOnly, Category = "Grid|Level")
 	FLinearColor WallColor = FLinearColor(0.3f, 0.3f, 0.32f);
 
@@ -109,6 +113,16 @@ private:
 
 	UPROPERTY(EditDefaultsOnly, Category = "Grid|Level")
 	FLinearColor WaterColor = FLinearColor(0.08f, 0.3f, 0.85f);
+
+	/**
+	 * Shows the level's pieces with the meshes of the settings' PieceCatalog: one plain static mesh component per piece
+	 * (no instancing, so pack materials need no instancing usage flag; UE batches equal meshes itself).
+	 */
+	void ShowPieces(const FCombatLevel& Level);
+	void ClearPieces();
+
+	UPROPERTY(Transient)
+	TArray<TObjectPtr<UStaticMeshComponent>> PieceComponents;
 
 	bool bHasLevel = false;
 	FCombatGridData LevelGridData;

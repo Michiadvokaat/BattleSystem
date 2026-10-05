@@ -41,6 +41,59 @@ struct FCombatLevelWave
 	UPROPERTY() TArray<FCombatLevelSpawn> Spawns;
 };
 
+/** Where a piece goes: each cell has one piece per layer (floor, cell, border; detail later). */
+UENUM(BlueprintType)
+enum class ECombatPieceLayer : uint8
+{
+	/** Under everything; never blocks. */
+	Floor,
+	/** Fills its footprint cells: furniture, pillars. Can block walking and/or sight. */
+	Cell,
+	/** On the borders between cells: walls, windows (block walking and sight), door frames (visual only). */
+	Edge,
+	/** Small objects on the detail grid inside a cell (not placeable yet). */
+	Detail,
+};
+
+/**
+ * A piece placed in a level (LevelDesigner). Its footprint and blocking are copied from the catalog when it is
+ * placed, so the level, fights and replays never need the catalog: UCombatPieceCatalog only gives the look (by Id).
+ */
+USTRUCT()
+struct BATTLESYSTEM_API FCombatLevelPiece
+{
+	GENERATED_BODY()
+
+	/** Catalog id, "Category/MeshName". */
+	UPROPERTY() FString Id;
+	UPROPERTY() ECombatPieceLayer Layer = ECombatPieceLayer::Cell;
+	/**
+	 * Floor and Cell: the footprint's first cell (smallest X and Y). Edge: the cell after the first border, so a
+	 * horizontal piece (even rotation) runs along the border between rows Cell.Y - 1 and Cell.Y from column Cell.X on,
+	 * a vertical one (odd rotation) along the border between columns Cell.X - 1 and Cell.X from row Cell.Y on.
+	 */
+	UPROPERTY() FIntPoint Cell = FIntPoint::ZeroValue;
+	/** Quarter turns, 0..3. */
+	UPROPERTY() int32 Rotation = 0;
+	/** Footprint in cells before rotation; Edge: X = the number of borders it covers. */
+	UPROPERTY() FIntPoint Size = FIntPoint(1, 1);
+	/** Cell pieces: their cells block walking / sight. Edge pieces block both when either is set. */
+	UPROPERTY() bool bBlocksWalking = false;
+	UPROPERTY() bool bBlocksSight = false;
+	/** Position on the detail grid of its cell (Detail layer, later); INDEX_NONE for the other layers. */
+	UPROPERTY() int32 Detail = INDEX_NONE;
+
+	/** Size after rotation (X and Y swap on odd rotations). */
+	FIntPoint GetRotatedSize() const;
+	bool IsHorizontalEdge() const { return Rotation % 2 == 0; }
+	/** Floor and Cell: the footprint cells; nothing for Edge. */
+	void GetCells(TArray<FIntPoint>& OutCells) const;
+	/** Edge: the cell pairs on both sides of each border it covers; nothing for the other layers. */
+	void GetEdges(TArray<TPair<FIntPoint, FIntPoint>>& OutEdges) const;
+	/** Whether it shares a cell (Floor, Cell) or a border (Edge) with another piece of the same layer. */
+	bool Overlaps(const FCombatLevelPiece& Other) const;
+};
+
 /**
  * A level built with the LevelDesigner: grid size, cells, starting units and enemy waves. Saved as readable JSON in
  * <Project>/Levels/<Name>.json and copied into replays. Cells are text rows, one character per cell.
@@ -61,8 +114,8 @@ struct BATTLESYSTEM_API FCombatLevel
 	static constexpr int32 MinSize = 5;
 	static constexpr int32 MaxSize = 40;
 
-	/** 1 = no waves; 2 = with waves (version 1 files load as levels without waves). */
-	UPROPERTY() int32 FormatVersion = 2;
+	/** 1 = no waves; 2 = with waves; 3 = with pieces (older files load without them). */
+	UPROPERTY() int32 FormatVersion = 3;
 	UPROPERTY() FString Name;
 	UPROPERTY() int32 Width = 20;
 	UPROPERTY() int32 Height = 12;
@@ -72,6 +125,8 @@ struct BATTLESYSTEM_API FCombatLevel
 	UPROPERTY() TArray<FCombatLevelUnit> Units;
 	/** Enemy waves, in order; see FCombatSimConfig::Waves for when each starts. */
 	UPROPERTY() TArray<FCombatLevelWave> Waves;
+	/** Placed pieces (walls, floors, furniture); their blocking is added to the cells of Rows. */
+	UPROPERTY() TArray<FCombatLevelPiece> Pieces;
 
 	/** An open level of the given size (clamped to MinSize..MaxSize). */
 	static FCombatLevel MakeEmpty(const FString& InName, int32 InWidth, int32 InHeight);
@@ -79,7 +134,7 @@ struct BATTLESYSTEM_API FCombatLevel
 	/** Clamps the size and makes every row exactly Width characters (padding with open cells). */
 	void Normalize();
 
-	/** Changes the size; cells, units and spawns outside the new size are removed. */
+	/** Changes the size; cells, units, spawns and pieces outside the new size are removed. */
 	void Resize(int32 NewWidth, int32 NewHeight);
 
 	bool IsInBounds(const FIntPoint& Cell) const { return Cell.X >= 0 && Cell.Y >= 0 && Cell.X < Width && Cell.Y < Height; }
@@ -93,6 +148,15 @@ struct BATTLESYSTEM_API FCombatLevel
 	int32 FindSpawnAt(int32 WaveIndex, const FIntPoint& Cell) const;
 	/** Removes the spawns on Cell from every wave; returns whether there were any. */
 	bool RemoveSpawnsAt(const FIntPoint& Cell);
+
+	/** Whether a piece fits in the grid. Edge pieces may lie on the outer border (visual only there). */
+	bool IsPieceInBounds(const FCombatLevelPiece& Piece) const;
+
+	/** Adds a piece and removes the pieces of its layer that it overlaps; false (nothing changes) if it does not fit. */
+	bool PlacePiece(const FCombatLevelPiece& Piece);
+
+	/** Index of the piece of a Floor or Cell layer that covers Cell, or INDEX_NONE. */
+	int32 FindPieceAt(ECombatPieceLayer Layer, const FIntPoint& Cell) const;
 
 	void ToGridData(FCombatGridData& OutGrid) const;
 };
