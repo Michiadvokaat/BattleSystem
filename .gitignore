@@ -34,6 +34,9 @@ Content/Textures/
 # Local environment assets (kept out of the repo)
 Content/Environment/
 
+# Local meshes (kept out of the repo)
+Content/Meshes/
+
 # Claude Code local settings
 .claude/settings.local.json
 
