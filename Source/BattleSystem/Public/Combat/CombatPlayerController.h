@@ -10,6 +10,8 @@
 enum class ECombatCameraDrag : uint8
 {
 	None,
+	/** Left button down outside edit mode: a release is a click (select, Move target), the right button makes it PanScreen. */
+	PendingClick,
 	/** Right button down, not moved past CameraDragThreshold yet: a release now is a click (cancel). */
 	PendingLook,
 	/** Right drag: look around; WASD/QE fly. */
@@ -20,6 +22,8 @@ enum class ECombatCameraDrag : uint8
 	Orbit,
 	/** Alt + right drag: move forward and back. */
 	Dolly,
+	/** Left + right drag: sideways along the camera's right, up and down along world Z. */
+	PanScreen,
 };
 
 /**
@@ -27,9 +31,10 @@ enum class ECombatCameraDrag : uint8
  * In LevelDesigner edit mode instead: left places with the current tool, right erases; holding paints a stroke.
  * Clicks are turned into points on the grid plane, so they do not depend on collision. Clicks on the HUD
  * panels go to the UI instead.
- * The camera moves like the editor viewport: right drag looks (+ WASD/QE), middle drag pans, the wheel zooms to the
- * cursor, Alt + left drag orbits, Alt + right drag dollies, F returns to the overview. In edit mode the right button
- * erases, so there the camera uses the middle button, the wheel and Alt.
+ * The camera moves like the editor viewport: right drag looks (+ WASD/QE), middle drag pans, left + right drag moves
+ * sideways and up/down, the wheel zooms to the cursor, Alt + left drag orbits, Alt + right drag dollies, F returns to
+ * the overview. In edit mode the right button erases, so there the camera uses the middle button, both buttons, the
+ * wheel and Alt. Outside edit mode a left click acts on release, so pressing the right button too never selects.
  */
 UCLASS()
 class BATTLESYSTEM_API ACombatPlayerController : public APlayerController
@@ -61,6 +66,8 @@ private:
 	bool GetArenaPointAt(const FVector2D& ScreenPosition, double PlaneHeight, FVector& OutPoint) const;
 
 	void BeginCameraDrag(ECombatCameraDrag Drag, const FKey& Key);
+	/** Both buttons are down: stop painting, erasing or a pending click/look and pan instead. */
+	void BeginScreenPan();
 	/** Moves the camera for the drag in progress; ends it when its button is up. */
 	void UpdateCameraDrag(float DeltaTime);
 	/** Positive steps zoom in towards the point under the cursor. */
@@ -72,6 +79,10 @@ private:
 	FVector2D DragStartMouse = FVector2D::ZeroVector;
 	FVector2D LastMouse = FVector2D::ZeroVector;
 	FVector OrbitPivot = FVector::ZeroVector;
+	/** PendingClick: the arena point under the cursor when the left button went down. */
+	FVector ClickPoint = FVector::ZeroVector;
+	/** Left + right: this drag needs both buttons. */
+	FKey CameraDragSecondKey;
 	/** Changed with the wheel while flying, like the editor's camera speed. */
 	double FlySpeedScale = 1.0;
 };

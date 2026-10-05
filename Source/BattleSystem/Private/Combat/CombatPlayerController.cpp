@@ -64,6 +64,11 @@ void ACombatPlayerController::PlayerTick(float DeltaTime)
 
 void ACombatPlayerController::OnLeftClick()
 {
+	if (IsInputKeyDown(EKeys::RightMouseButton))
+	{
+		BeginScreenPan();
+		return;
+	}
 	if (CombatPlayerControllerPrivate::IsAltDown(*this))
 	{
 		BeginCameraDrag(ECombatCameraDrag::Orbit, EKeys::LeftMouseButton);
@@ -83,11 +88,18 @@ void ACombatPlayerController::OnLeftClick()
 		Subsystem->DesignPaint(Point, false, false);
 		return;
 	}
-	Subsystem->HandleArenaClick(Point);
+	// Acts on release (UpdateCameraDrag), unless the right button joins in for a pan.
+	BeginCameraDrag(ECombatCameraDrag::PendingClick, EKeys::LeftMouseButton);
+	ClickPoint = Point;
 }
 
 void ACombatPlayerController::OnRightClick()
 {
+	if (IsInputKeyDown(EKeys::LeftMouseButton))
+	{
+		BeginScreenPan();
+		return;
+	}
 	if (CombatPlayerControllerPrivate::IsAltDown(*this))
 	{
 		BeginCameraDrag(ECombatCameraDrag::Dolly, EKeys::RightMouseButton);
@@ -111,6 +123,14 @@ void ACombatPlayerController::OnRightClick()
 	}
 	// Cancel on release, unless the mouse moves first: then it is a look drag.
 	BeginCameraDrag(ECombatCameraDrag::PendingLook, EKeys::RightMouseButton);
+}
+
+void ACombatPlayerController::BeginScreenPan()
+{
+	bPainting = false;
+	bErasing = false;
+	BeginCameraDrag(ECombatCameraDrag::PanScreen, EKeys::LeftMouseButton);
+	CameraDragSecondKey = EKeys::RightMouseButton;
 }
 
 void ACombatPlayerController::OnMiddleClick()
@@ -165,6 +185,7 @@ void ACombatPlayerController::BeginCameraDrag(ECombatCameraDrag Drag, const FKey
 
 	CameraDrag = Drag;
 	CameraDragKey = Key;
+	CameraDragSecondKey = FKey();
 	DragStartMouse = FVector2D(MouseX, MouseY);
 	LastMouse = DragStartMouse;
 	if (Drag == ECombatCameraDrag::Orbit && !GetArenaPointAt(DragStartMouse, Subsystem->GetGridHeight(), OrbitPivot))
@@ -193,8 +214,17 @@ void ACombatPlayerController::UpdateCameraDrag(float DeltaTime)
 	const FVector2D Mouse(MouseX, MouseY);
 	const UCombatSettings* Settings = GetDefault<UCombatSettings>();
 
-	// A release over the HUD never reaches the game, so check the button itself.
-	const bool bHeld = IsInputKeyDown(CameraDragKey);
+	// A release over the HUD never reaches the game, so check the buttons themselves.
+	const bool bHeld = IsInputKeyDown(CameraDragKey) && (!CameraDragSecondKey.IsValid() || IsInputKeyDown(CameraDragSecondKey));
+	if (CameraDrag == ECombatCameraDrag::PendingClick)
+	{
+		if (!bHeld)
+		{
+			CameraDrag = ECombatCameraDrag::None;
+			Subsystem->HandleArenaClick(ClickPoint);
+		}
+		return;
+	}
 	if (CameraDrag == ECombatCameraDrag::PendingLook)
 	{
 		if (!bHeld)
@@ -211,6 +241,7 @@ void ACombatPlayerController::UpdateCameraDrag(float DeltaTime)
 	}
 	if (!bHeld)
 	{
+		// Releasing one button of a left + right pan ends it; the other button does nothing until it is released.
 		CameraDrag = ECombatCameraDrag::None;
 		return;
 	}
@@ -244,6 +275,16 @@ void ACombatPlayerController::UpdateCameraDrag(float DeltaTime)
 		const double Distance = CombatCamera::RayToPlane(Location, Rotation.Vector(), Subsystem->GetGridHeight(), Ground)
 			? FVector::Distance(Location, Ground) : FallbackGroundDistance;
 		Location += Rotation.Vector() * (-Delta.Y / DollyPixelsPerStep) * Distance * Settings->CameraZoomStep;
+		break;
+	}
+	case ECombatCameraDrag::PanScreen:
+	{
+		// Like dolly: one zoom step of the distance to the grid plane per DollyPixelsPerStep pixels.
+		FVector Ground;
+		const double Distance = CombatCamera::RayToPlane(Location, Rotation.Vector(), Subsystem->GetGridHeight(), Ground)
+			? FVector::Distance(Location, Ground) : FallbackGroundDistance;
+		const double PerPixel = Distance * Settings->CameraZoomStep / DollyPixelsPerStep;
+		Location += FRotationMatrix(Rotation).GetScaledAxis(EAxis::Y) * Delta.X * PerPixel + FVector::UpVector * -Delta.Y * PerPixel;
 		break;
 	}
 	case ECombatCameraDrag::Pan:

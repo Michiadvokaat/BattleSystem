@@ -226,17 +226,18 @@ Code: `Source/BattleSystem/{Public,Private}/Combat/`. Layers: grid ← simulatio
   - One button per player ability (`GetAbilityName`: the ability's `DisplayName`, or the last part of its type), which sends an `Ability` command.
 - `ACombatPlayerController` (set by `ACombatGameMode`):
   - It turns the mouse into a point on the grid plane (deproject plus a plane intersection, no collision needed).
-  - Left click goes to `HandleArenaClick`. While targeting it sends a `Move` command to the clicked cell; otherwise it selects the nearest own living unit within its radius + 30 cm, or deselects.
+  - Left click goes to `HandleArenaClick` on release (with the point where the button went down), so pressing the right button as well can still turn it into a camera pan. While targeting it sends a `Move` command to the clicked cell; otherwise it selects the nearest own living unit within its radius + 30 cm, or deselects.
   - Right click goes to `HandleArenaCancel` (cancel targeting, else deselect) on release, if the mouse moved less than `CameraDragThreshold` pixels; otherwise it was a camera drag. Esc is not used, because it ends PIE.
   - Clicks on the HUD panels go to the UI (also the wheel over a list).
 - Free camera (`ACombatPlayerController`, like the editor viewport; presentation only). It moves the view target camera (`UCombatSubsystem::GetArenaCamera`, which first remembers its placed transform):
   - Right drag: look around; while held WASD fly, Q/E down/up, Shift ×`CameraFastMultiplier`, and the wheel scales the fly speed (×1.25 per step, 0.1–10).
   - Middle drag: pan; the grid-plane point under the cursor stays under it.
+  - Left + right drag (either pressed first): like the editor, mouse X moves along the camera's right axis and mouse Y along world Z (up/down), one `CameraZoomStep` of the distance to the grid plane per 10 pixels. It stops painting, erasing, a pending click or a look drag, and ends when either button is released; no click or cancel follows.
   - Wheel: zoom along the cursor ray by `CameraZoomStep` of the distance to the grid plane (out by the inverse, so in + out cancel).
   - Alt + left drag: orbit around the grid point where the drag began (`CombatCamera::Orbit`). Alt + right drag: dolly, one zoom step per 10 pixels.
   - F (and **Reset camera** on the control panel): `ResetCameraToOverview`.
   - Look, orbit and dolly put the cursor back at the drag start every frame, so a drag never reaches the screen edge. Releases are checked with `IsInputKeyDown`, because a release over the HUD never reaches the game.
-  - In LevelDesigner edit mode the right button erases, so the camera uses the middle button, the wheel and Alt there.
+  - In LevelDesigner edit mode the right button erases, so the camera uses the middle button, both buttons, the wheel and Alt there.
   - After every move `CombatCamera::Clamp` keeps the camera inside `GetCameraBounds()` (the shown grid plus `CameraBoundsMargin`, `CameraMinHeight`–`CameraMaxHeight` above it) and the pitch within `CameraMinPitch`–`CameraMaxPitch` (default -90 to 0). The speeds use the frame time, so pause and the speed buttons do not affect them.
 - Selection is presentation state in the subsystem (`SelectedUnitId`, `bAwaitingMoveTarget`). A selected unit that dies is deselected. Everything reaches the fight only through `IssueCommand`.
 - `ACombatUnitActor`:
