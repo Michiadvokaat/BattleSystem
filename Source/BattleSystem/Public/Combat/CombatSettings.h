@@ -160,6 +160,44 @@ public:
 	UPROPERTY(Config, EditAnywhere, Category = "Presentation")
 	TArray<FLinearColor> TeamColors;
 
+	/** Rotation per mouse pixel while looking around (RMB drag) or orbiting (Alt+LMB drag). */
+	UPROPERTY(Config, EditAnywhere, Category = "Camera", meta = (ClampMin = 0.01, Units = "deg"))
+	float CameraLookSpeed = 0.2f;
+
+	/** Flying speed with WASD/QE while RMB is held (Shift = 3x; the mouse wheel scales it while flying). */
+	UPROPERTY(Config, EditAnywhere, Category = "Camera", meta = (ClampMin = 10, Units = "cm/s"))
+	float CameraFlySpeed = 1500.f;
+
+	/** Flying speed factor while Shift is held. */
+	UPROPERTY(Config, EditAnywhere, Category = "Camera", meta = (ClampMin = 1))
+	float CameraFastMultiplier = 3.f;
+
+	/** One wheel step moves this fraction of the distance to the point under the cursor. */
+	UPROPERTY(Config, EditAnywhere, Category = "Camera", meta = (ClampMin = 0.01, ClampMax = 0.9))
+	float CameraZoomStep = 0.15f;
+
+	/** A right click that moves less than this is a click (cancel); more is a camera drag. */
+	UPROPERTY(Config, EditAnywhere, Category = "Camera", meta = (ClampMin = 0))
+	float CameraDragThreshold = 4.f;
+
+	/** How far the camera may go past the edges of the shown grid. */
+	UPROPERTY(Config, EditAnywhere, Category = "Camera", meta = (ClampMin = 0, Units = "cm"))
+	float CameraBoundsMargin = 1500.f;
+
+	/** Lowest and highest camera position above the grid. */
+	UPROPERTY(Config, EditAnywhere, Category = "Camera", meta = (ClampMin = 0, Units = "cm"))
+	float CameraMinHeight = 100.f;
+
+	UPROPERTY(Config, EditAnywhere, Category = "Camera", meta = (ClampMin = 0, Units = "cm"))
+	float CameraMaxHeight = 8000.f;
+
+	/** Pitch limits: -90 is straight down, 0 is level with the horizon. */
+	UPROPERTY(Config, EditAnywhere, Category = "Camera", meta = (ClampMin = -90, ClampMax = 90, Units = "deg"))
+	float CameraMinPitch = -90.f;
+
+	UPROPERTY(Config, EditAnywhere, Category = "Camera", meta = (ClampMin = -90, ClampMax = 90, Units = "deg"))
+	float CameraMaxPitch = 0.f;
+
 	FLinearColor GetTeamColor(int32 Team) const;
 	int32 SecondsToTicks(float Seconds) const { return FMath::RoundToInt32(Seconds * TickRate); }
 };

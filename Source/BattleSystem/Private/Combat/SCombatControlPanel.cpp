@@ -134,13 +134,24 @@ void SCombatControlPanel::Construct(const FArguments& InArgs)
 				[
 					MakeButton(INVTEXT("Stop"), FOnClicked::CreateSP(this, &SCombatControlPanel::OnStopClicked))
 				]
-				+ SHorizontalBox::Slot().AutoWidth()
+				+ SHorizontalBox::Slot().AutoWidth().Padding(0.f, 0.f, 4.f, 0.f)
 				[
 					SNew(SButton)
 					.OnClicked(this, &SCombatControlPanel::OnPauseClicked)
 					[
 						SNew(STextBlock).Text(this, &SCombatControlPanel::GetPauseText)
 					]
+				]
+				+ SHorizontalBox::Slot().AutoWidth()
+				[
+					MakeButton(INVTEXT("Reset camera (F)"), FOnClicked::CreateLambda([this]()
+					{
+						if (UCombatSubsystem* CombatSubsystem = Subsystem.Get())
+						{
+							CombatSubsystem->ResetCameraToOverview();
+						}
+						return FReply::Handled();
+					}))
 				]
 			]
 

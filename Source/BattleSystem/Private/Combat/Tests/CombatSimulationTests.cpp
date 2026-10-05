@@ -3,6 +3,7 @@
 #include "Misc/AutomationTest.h"
 #include "Combat/CombatAppearance.h"
 #include "Combat/CombatBatch.h"
+#include "Combat/CombatCamera.h"
 #include "Combat/CombatLevel.h"
 #include "Combat/CombatPathfinding.h"
 #include "Combat/CombatReplay.h"
@@ -1867,6 +1868,41 @@ bool FCombatAppearancePicksTest::RunTest(const FString& Parameters)
 	Look->WidthScale = 1.5f;
 	Look->HeightScale = 0.5f;
 	TestTrue(TEXT("Mesh scale: uniform times width across, times height up"), Look->GetMeshScale().Equals(FVector(3.0, 3.0, 1.0)));
+	return true;
+}
+
+IMPLEMENT_SIMPLE_AUTOMATION_TEST(FCombatCameraMathTest, "BattleSystem.Combat.CameraMath",
+	EAutomationTestFlags::EditorContext | EAutomationTestFlags::ProductFilter)
+
+bool FCombatCameraMathTest::RunTest(const FString& Parameters)
+{
+	// A camera 10 m back and 10 m up, looking at the pivot.
+	const FVector Pivot(500.0, 300.0, 0.0);
+	FVector Location = Pivot + FVector(-1000.0, 0.0, 1000.0);
+	FRotator Rotation = (Pivot - Location).Rotation();
+	const double StartDistance = FVector::Distance(Location, Pivot);
+
+	CombatCamera::Orbit(Location, Rotation, Pivot, 90.0, -10.0, -90.0, 0.0);
+	TestTrue(TEXT("Orbit keeps the distance to the pivot"), FMath::IsNearlyEqual(FVector::Distance(Location, Pivot), StartDistance, 0.01));
+	TestTrue(TEXT("Orbit keeps looking at the pivot"), (Pivot - Location).GetSafeNormal().Equals(Rotation.Vector(), 1e-4));
+	TestTrue(TEXT("Orbit turns by the yaw and pitch"), FMath::IsNearlyEqual(Rotation.Yaw, 90.0, 1e-4) && FMath::IsNearlyEqual(Rotation.Pitch, -55.0, 1e-4));
+
+	CombatCamera::Orbit(Location, Rotation, Pivot, 0.0, -80.0, -80.0, 0.0);
+	TestTrue(TEXT("Orbit stops at the pitch limit"), FMath::IsNearlyEqual(Rotation.Pitch, -80.0, 1e-4));
+	TestTrue(TEXT("Orbit at the limit still looks at the pivot"), (Pivot - Location).GetSafeNormal().Equals(Rotation.Vector(), 1e-4));
+
+	const FBox Bounds(FVector(0.0, 0.0, 100.0), FVector(2000.0, 1000.0, 5000.0));
+	FVector Outside(-50.0, 1500.0, 20.0);
+	FRotator Tilted(20.0, 45.0, 10.0);
+	CombatCamera::Clamp(Outside, Tilted, Bounds, -90.0, 0.0);
+	TestTrue(TEXT("Clamp keeps the location inside the bounds"), Outside.Equals(FVector(0.0, 1000.0, 100.0)));
+	TestTrue(TEXT("Clamp limits the pitch and removes the roll"), Tilted.Equals(FRotator(0.0, 45.0, 0.0)));
+
+	FVector Hit;
+	TestTrue(TEXT("A ray down hits the plane"), CombatCamera::RayToPlane(FVector(0.0, 0.0, 500.0), FVector(1.0, 0.0, -1.0).GetSafeNormal(), 100.0, Hit));
+	TestTrue(TEXT("At the right point"), Hit.Equals(FVector(400.0, 0.0, 100.0), 0.01));
+	TestFalse(TEXT("A ray up misses"), CombatCamera::RayToPlane(FVector(0.0, 0.0, 500.0), FVector(0.0, 0.0, 1.0), 100.0, Hit));
+	TestFalse(TEXT("A level ray misses"), CombatCamera::RayToPlane(FVector(0.0, 0.0, 500.0), FVector(1.0, 0.0, 0.0), 100.0, Hit));
 	return true;
 }
 

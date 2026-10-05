@@ -1113,28 +1113,85 @@ void UCombatSubsystem::ShowSourceInArena(const FCombatFightSource& Source)
 	if (Source.Level.IsSet())
 	{
 		Grid->ApplyLevel(Source.Level.GetValue());
-		FitCameraToShownGrid();
+		ShowOverviewIfChanged(true);
 	}
 	else
 	{
 		Grid->ClearLevel();
+		ShowOverviewIfChanged(false);
+	}
+}
+
+ACameraActor* UCombatSubsystem::GetArenaCamera()
+{
+	APlayerController* PlayerController = GetWorld()->GetFirstPlayerController();
+	ACameraActor* Camera = PlayerController ? Cast<ACameraActor>(PlayerController->GetViewTarget()) : nullptr;
+	if (Camera && ArenaCamera.Get() != Camera)
+	{
+		ArenaCamera = Camera;
+		OriginalCameraTransform = Camera->GetActorTransform();
+	}
+	if (Camera && !bHasOverview)
+	{
+		// The map's own camera is the first overview, so moving it before the first fight is kept too.
+		ACombatGrid* Grid = ACombatGrid::Find(GetWorld());
+		bHasOverview = true;
+		bOverviewIsLevel = false;
+		OverviewGridSize = Grid ? Grid->GetShownGridData().GetLocalSize() : FVector2D::ZeroVector;
+	}
+	return Camera;
+}
+
+FBox UCombatSubsystem::GetCameraBounds() const
+{
+	const UCombatSettings* Settings = GetDefault<UCombatSettings>();
+	ACombatGrid* Grid = ACombatGrid::Find(GetWorld());
+	const FVector Origin = Grid ? Grid->GetActorLocation() : GridOrigin;
+	const FVector2D Size = Grid ? Grid->GetShownGridData().GetLocalSize() : FVector2D::ZeroVector;
+	const double Margin = Settings->CameraBoundsMargin;
+	return FBox(
+		Origin + FVector(-Margin, -Margin, Settings->CameraMinHeight),
+		Origin + FVector(Size.X + Margin, Size.Y + Margin, FMath::Max(Settings->CameraMaxHeight, Settings->CameraMinHeight)));
+}
+
+void UCombatSubsystem::ResetCameraToOverview()
+{
+	ShowOverview(bHasOverview && bOverviewIsLevel);
+}
+
+void UCombatSubsystem::ShowOverview(bool bLevel)
+{
+	if (bLevel)
+	{
+		FitCameraToShownGrid();
+	}
+	else
+	{
 		RestoreCamera();
+	}
+	ACombatGrid* Grid = ACombatGrid::Find(GetWorld());
+	bHasOverview = true;
+	bOverviewIsLevel = bLevel;
+	OverviewGridSize = Grid ? Grid->GetShownGridData().GetLocalSize() : FVector2D::ZeroVector;
+}
+
+void UCombatSubsystem::ShowOverviewIfChanged(bool bLevel)
+{
+	ACombatGrid* Grid = ACombatGrid::Find(GetWorld());
+	const FVector2D GridSize = Grid ? Grid->GetShownGridData().GetLocalSize() : FVector2D::ZeroVector;
+	if (!bHasOverview || bOverviewIsLevel != bLevel || !OverviewGridSize.Equals(GridSize))
+	{
+		ShowOverview(bLevel);
 	}
 }
 
 void UCombatSubsystem::FitCameraToShownGrid()
 {
-	APlayerController* PlayerController = GetWorld()->GetFirstPlayerController();
-	ACameraActor* Camera = PlayerController ? Cast<ACameraActor>(PlayerController->GetViewTarget()) : nullptr;
+	ACameraActor* Camera = GetArenaCamera();
 	ACombatGrid* Grid = ACombatGrid::Find(GetWorld());
 	if (!Camera || !Grid)
 	{
 		return;
-	}
-	if (!OriginalCameraTransform.IsSet() || FittedCamera.Get() != Camera)
-	{
-		FittedCamera = Camera;
-		OriginalCameraTransform = Camera->GetActorTransform();
 	}
 
 	const FCombatGridData& Data = Grid->GetShownGridData();
@@ -1171,12 +1228,10 @@ void UCombatSubsystem::FitCameraToShownGrid()
 
 void UCombatSubsystem::RestoreCamera()
 {
-	if (AActor* Camera = FittedCamera.Get(); Camera && OriginalCameraTransform.IsSet())
+	if (AActor* Camera = ArenaCamera.Get(); Camera && OriginalCameraTransform.IsSet())
 	{
 		Camera->SetActorTransform(OriginalCameraTransform.GetValue());
 	}
-	OriginalCameraTransform.Reset();
-	FittedCamera.Reset();
 }
 
 void UCombatSubsystem::EnterDesignMode()
@@ -1222,7 +1277,7 @@ void UCombatSubsystem::ExitDesignMode()
 	{
 		Grid->ClearLevel();
 	}
-	RestoreCamera();
+	ShowOverviewIfChanged(false);
 	++FightSerial;
 }
 
@@ -1500,7 +1555,7 @@ void UCombatSubsystem::RefreshDesignView(bool bFitCamera)
 	GridOrigin = Grid->GetActorLocation();
 	if (bFitCamera)
 	{
-		FitCameraToShownGrid();
+		ShowOverviewIfChanged(true);
 	}
 
 	// Preview units: the unit actors, standing on their cells, facing the other side. No simulation.

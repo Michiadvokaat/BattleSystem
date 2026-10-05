@@ -10,6 +10,7 @@
 #include "Combat/CombatUnitActor.h"
 #include "CombatSubsystem.generated.h"
 
+class ACameraActor;
 class ACombatProjectileActor;
 class UCombatCommandScript;
 class UCombatCueTable;
@@ -130,6 +131,16 @@ public:
 	void HandleArenaCancel();
 	/** Height of the grid plane (for turning mouse clicks into arena points). */
 	double GetGridHeight() const { return GridOrigin.Z; }
+
+	/**
+	 * The camera the arena is seen through (the player's view target, an ACameraActor), for the free camera of
+	 * ACombatPlayerController. The first call remembers its placed transform, which the overview of a setup returns to.
+	 */
+	ACameraActor* GetArenaCamera();
+	/** Where the free camera may be: the shown grid plus CameraBoundsMargin, CameraMinHeight to CameraMaxHeight above it. */
+	FBox GetCameraBounds() const;
+	/** Back to the overview: the fitted top view for a level, else the map's own camera (F, Reset camera). */
+	void ResetCameraToOverview();
 
 	/** Changes on every start and stop, so UI can rebuild per fight. */
 	int32 GetFightSerial() const { return FightSerial; }
@@ -275,6 +286,10 @@ private:
 	/** Moves the view camera straight above the shown grid, high enough to see all of it. */
 	void FitCameraToShownGrid();
 	void RestoreCamera();
+	/** The overview: fitted top view for a level (bLevel), else the map's own camera. Remembers which one it showed. */
+	void ShowOverview(bool bLevel);
+	/** ShowOverview, but only when the kind of overview or the grid size changed, so a camera the player moved stays. */
+	void ShowOverviewIfChanged(bool bLevel);
 	/** Shows the edited level in the arena and rebuilds the preview units. */
 	void RefreshDesignView(bool bFitCamera);
 	void DestroyDesignPreviews();
@@ -314,9 +329,13 @@ private:
 	/** Set when the current fight comes from a level (copied into replays). */
 	TOptional<FCombatLevel> CurrentLevel;
 
-	/** The view camera as placed in the arena, before it was fitted to a level. */
-	TWeakObjectPtr<AActor> FittedCamera;
+	/** The view camera and its transform as placed in the arena, remembered before it was first fitted or moved. */
+	TWeakObjectPtr<AActor> ArenaCamera;
 	TOptional<FTransform> OriginalCameraTransform;
+	/** The overview last shown (level or not, and the grid size), so the camera only resets when it changes. */
+	bool bHasOverview = false;
+	bool bOverviewIsLevel = false;
+	FVector2D OverviewGridSize = FVector2D::ZeroVector;
 	FCombatSimSettings CurrentSettings;
 
 	bool bIsReplay = false;
