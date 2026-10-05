@@ -21,6 +21,9 @@ changed (RestructureCatalog.py did this for the move to groups). Pieces whose me
 removed. The pieces are ordered by CATEGORY_ORDER (the LevelDesigner shows categories in catalog order; it sorts the
 pieces of a category by size itself). The meshes are local content, so the catalog is local too.
 VARIANTS adds shorter versions of border pieces ("<id>_<n>m", Size n, Scale To Fit) for openings next to doors.
+SOLID_FLOOR_SIZES adds solid floors ("Building/Floors/SolidFloor_<n>x<n>"): the engine plane scaled to n x n cells,
+Tintable, so the LevelDesigner gives each placed one its own color (BasicShapeMaterial's Color parameter). Their mesh
+is not in the catalog folder; they are kept anyway.
 """
 
 import unreal
@@ -40,6 +43,10 @@ DETAIL_GROUP = "Props"
 DETAIL_GRID = 3
 # Border piece id -> lengths in cells of its scaled-to-fit variants.
 VARIANTS = {"Building/Walls/SM_Walls_008": (1, 2, 3)}
+# Solid floors: the engine plane, tinted per placed piece.
+SOLID_FLOOR_MESH = "/Engine/BasicShapes/Plane.Plane"
+SOLID_FLOOR_CATEGORY = "Building/Floors"
+SOLID_FLOOR_SIZES = (1, 2, 3, 4)
 # Catalog (and so LevelDesigner) order of the categories; others follow alphabetically.
 CATEGORY_ORDER = (
     "Building/Walls", "Building/Windows", "Building/Doors", "Building/DoorLeaves", "Building/Floors",
@@ -117,6 +124,21 @@ def make_variant(definition, length):
     return variant
 
 
+def make_solid_floor(mesh, size):
+    definition = unreal.CombatPieceDefinition()
+    definition.set_editor_property("id", f"{SOLID_FLOOR_CATEGORY}/SolidFloor_{size}x{size}")
+    definition.set_editor_property("category", SOLID_FLOOR_CATEGORY)
+    definition.set_editor_property("mesh", mesh)
+    definition.set_editor_property("layer", unreal.CombatPieceLayer.FLOOR)
+    definition.set_editor_property("size", unreal.IntPoint(size, size))
+    definition.set_editor_property("blocks_walking", False)
+    definition.set_editor_property("blocks_sight", False)
+    definition.set_editor_property("scale_to_fit", True)
+    definition.set_editor_property("tintable", True)
+    log(f"  + {definition.get_editor_property('id')}: solid floor {size}x{size}, tintable")
+    return definition
+
+
 def load_or_create_catalog():
     full_path = f"{ASSET_PATH}/{ASSET_NAME}"
     if unreal.EditorAssetLibrary.does_asset_exist(full_path):
@@ -168,6 +190,13 @@ def main():
             found.add(variant_id)
             if base and variant_id not in known:
                 pieces.append(make_variant(base, length))
+
+    solid_mesh = unreal.load_asset(SOLID_FLOOR_MESH)
+    for size in SOLID_FLOOR_SIZES:
+        solid_id = f"{SOLID_FLOOR_CATEGORY}/SolidFloor_{size}x{size}"
+        found.add(solid_id)
+        if solid_mesh and solid_id not in known:
+            pieces.append(make_solid_floor(solid_mesh, size))
 
     for piece in pieces:
         wanted = SLOT_CATEGORIES.get(sub_category(piece.get_editor_property("category")), "")

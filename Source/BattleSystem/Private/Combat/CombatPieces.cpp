@@ -1,7 +1,10 @@
 // Copyright Epic Games, Inc. All Rights Reserved.
 
 #include "Combat/CombatPieces.h"
+#include "Combat/CombatSettings.h"
+#include "Components/MeshComponent.h"
 #include "Engine/StaticMesh.h"
+#include "Materials/MaterialInstanceDynamic.h"
 
 FCombatLevelPiece FCombatPieceDefinition::MakePiece(const FIntPoint& Cell, int32 Rotation) const
 {
@@ -80,6 +83,26 @@ namespace CombatPieces
 			+ FVector(0.0, 0.0, BaseHeight - MeshBounds.Min.Z)
 			+ Rotation.RotateVector(Offset);
 		return FTransform(Rotation, Location, Scale);
+	}
+
+	void ApplyTint(UMeshComponent& Mesh, const FColor& Color)
+	{
+		UMaterialInterface* Base = GetDefault<UCombatSettings>()->TintMaterial.LoadSynchronous();
+		if (!Base)
+		{
+			return;
+		}
+		for (int32 Index = 0; Index < Mesh.GetNumMaterials(); ++Index)
+		{
+			// Reuse the slot's instance (the preview is tinted every frame); the mesh's own material is replaced.
+			UMaterialInstanceDynamic* Material = Cast<UMaterialInstanceDynamic>(Mesh.GetMaterial(Index));
+			if (!Material || Material->Parent != Base)
+			{
+				Material = UMaterialInstanceDynamic::Create(Base, &Mesh);
+				Mesh.SetMaterial(Index, Material);
+			}
+			Material->SetVectorParameterValue(TEXT("Color"), FLinearColor(Color));
+		}
 	}
 
 	int32 GetRotationSteps(ECombatPieceLayer Layer)

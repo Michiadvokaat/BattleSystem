@@ -186,7 +186,7 @@ public:
 	bool PlayDesignLevel(int32 Seed);
 	void SetDesignSize(int32 Width, int32 Height);
 
-	void SetDesignTool(ECombatDesignTool Tool) { DesignTool = Tool; }
+	void SetDesignTool(ECombatDesignTool Tool) { DesignTool = Tool; bDesignEyedropper = false; }
 	ECombatDesignTool GetDesignTool() const { return DesignTool; }
 	void SetDesignUnitType(const FString& Type) { DesignUnitType = Type; }
 	const FString& GetDesignUnitType() const { return DesignUnitType; }
@@ -222,6 +222,17 @@ public:
 	 * WorldPoint (the cell; with the Piece tool the topmost piece). bHasPoint is false when the click missed the grid plane.
 	 */
 	void DesignRightClick(const FVector& WorldPoint, bool bHasPoint);
+	/** Color of the next tintable piece (solid floor) placed; sRGB. */
+	void SetDesignPieceColor(const FColor& Color) { DesignPieceColor = Color; }
+	const FColor& GetDesignPieceColor() const { return DesignPieceColor; }
+	/** Whether the selected piece takes a color (bTintable). */
+	bool IsDesignPieceTintable();
+	/**
+	 * Eyedropper (button, key I): the next left click in the arena takes the color and the piece of the tintable floor
+	 * under it instead of placing; a right click cancels.
+	 */
+	void SetDesignEyedropper(bool bActive) { bDesignEyedropper = bActive; }
+	bool IsDesignEyedropper() const { return bDesignEyedropper; }
 	/** Turns the selected piece by Steps of its layer: 45 degrees for details, 90 for the others. */
 	void RotateDesignPiece(int32 Steps);
 	/** The selected piece's rotation in degrees. */
@@ -471,6 +482,8 @@ private:
 	int32 DesignGhostTeam = INDEX_NONE;
 	/** Start rotation (eighth turns) of the next unit or spawn placed. */
 	int32 DesignUnitRotation = 0;
+	FColor DesignPieceColor = FColor::White;
+	bool bDesignEyedropper = false;
 	ECombatWallMode WallMode = ECombatWallMode::Cutaway;
 
 	int32 SelectedUnitId = INDEX_NONE;

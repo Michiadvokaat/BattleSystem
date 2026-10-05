@@ -71,7 +71,8 @@ public:
 	 * LevelDesigner preview of a piece: its mesh at MeshTransform (when placing) and a colored plate per footprint cell
 	 * or bar per border: PreviewPlaceColor, PreviewBlockedColor when it does not fit, PreviewEraseColor when erasing.
 	 */
-	void ShowPiecePreview(const FCombatLevelPiece& Piece, float InCellSize, UStaticMesh* Mesh, const FTransform& MeshTransform, bool bFits, bool bErase);
+	void ShowPiecePreview(const FCombatLevelPiece& Piece, float InCellSize, UStaticMesh* Mesh, const FTransform& MeshTransform, bool bFits, bool bErase,
+		bool bTinted = false);
 
 	/**
 	 * While an opening is previewed, the shown walls on its borders are swapped for versions with its cut box (mesh

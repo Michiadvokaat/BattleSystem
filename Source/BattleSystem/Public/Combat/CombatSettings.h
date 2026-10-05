@@ -160,6 +160,18 @@ public:
 	UPROPERTY(Config, EditAnywhere, Category = "Presentation", meta = (ClampMin = 0, ClampMax = 1))
 	float DesignGhostOpacity = 0.45f;
 
+	/**
+	 * Tintable pieces (solid floors) get a dynamic instance of this material on every slot, with vector parameter
+	 * "Color" = the piece color. The engine's BasicShapeMaterial has it (the engine plane itself uses WorldGridMaterial).
+	 */
+	UPROPERTY(Config, EditAnywhere, Category = "Arena")
+	TSoftObjectPtr<UMaterialInterface> TintMaterial = TSoftObjectPtr<UMaterialInterface>(FSoftObjectPath(TEXT("/Engine/BasicShapes/BasicShapeMaterial.BasicShapeMaterial")));
+
+	/** LevelDesigner: the color swatches for tintable pieces (solid floors); any other color comes from the color picker. */
+	UPROPERTY(Config, EditAnywhere, Category = "Arena")
+	TArray<FColor> FloorColors = { FColor(235, 235, 230), FColor(160, 160, 160), FColor(70, 70, 75), FColor(190, 150, 105),
+		FColor(120, 80, 50), FColor(200, 70, 60), FColor(80, 140, 75), FColor(70, 110, 180), FColor(230, 200, 90) };
+
 	/** Height of border pieces (walls, windows, door frames) while they are lowered (walls Cutaway / Down, key V). */
 	UPROPERTY(Config, EditAnywhere, Category = "Presentation", meta = (ClampMin = 1, Units = "cm"))
 	float LowWallHeight = 40.f;

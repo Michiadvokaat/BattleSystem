@@ -10,6 +10,8 @@
 #include "Styling/CoreStyle.h"
 #include "Widgets/Input/SButton.h"
 #include "Widgets/Input/SEditableTextBox.h"
+#include "Widgets/Colors/SColorBlock.h"
+#include "Widgets/Colors/SColorPicker.h"
 #include "Widgets/Input/SSpinBox.h"
 #include "Widgets/Layout/SBorder.h"
 #include "Widgets/Layout/SBox.h"
@@ -457,6 +459,42 @@ void SCombatLevelDesigner::Construct(const FArguments& InArgs)
 						MakeButton(INVTEXT("Back (Shift+R)"), [this]() { if (UCombatSubsystem* Current = Subsystem.Get()) { Current->RotateDesignPiece(-1); } })
 					]
 				]
+				// Tintable pieces (solid floors): the swatches, the current color (opens the color picker) and the eyedropper.
+				+ SVerticalBox::Slot().AutoHeight().Padding(0.f, 4.f, 0.f, 0.f)
+				[
+					SNew(SHorizontalBox)
+					.Visibility_Lambda([this]()
+					{
+						UCombatSubsystem* Current = Subsystem.Get();
+						return Current && Current->IsDesignPieceTintable() ? EVisibility::Visible : EVisibility::Collapsed;
+					})
+					+ SHorizontalBox::Slot().AutoWidth().VAlign(VAlign_Center)[ MakeLabel(INVTEXT("Color")) ]
+					+ SHorizontalBox::Slot().AutoWidth().VAlign(VAlign_Center).Padding(0.f, 0.f, 8.f, 0.f)[ MakeColorSwatches() ]
+					+ SHorizontalBox::Slot().AutoWidth().VAlign(VAlign_Center).Padding(0.f, 0.f, 8.f, 0.f)
+					[
+						SNew(SButton)
+						.ToolTipText(INVTEXT("Current color: click for the color picker"))
+						.OnClicked(this, &SCombatLevelDesigner::OnPickColorClicked)
+						[
+							SNew(SBox)
+							.WidthOverride(36.f)
+							.HeightOverride(18.f)
+							[
+								SNew(SColorBlock).Color_Lambda([this]()
+								{
+									const UCombatSubsystem* Current = Subsystem.Get();
+									return FLinearColor(Current ? Current->GetDesignPieceColor() : FColor::White);
+								})
+							]
+						]
+					]
+					+ SHorizontalBox::Slot().AutoWidth().VAlign(VAlign_Center)
+					[
+						MakeButton(INVTEXT("Pipet (I)"),
+							[this]() { if (UCombatSubsystem* Current = Subsystem.Get()) { Current->SetDesignEyedropper(!Current->IsDesignEyedropper()); } },
+							[this]() { const UCombatSubsystem* Current = Subsystem.Get(); return Current && Current->IsDesignEyedropper(); })
+					]
+				]
 			]
 
 			+ SVerticalBox::Slot().AutoHeight().Padding(0.f, 6.f, 0.f, 0.f)
@@ -466,7 +504,7 @@ void SCombatLevelDesigner::Construct(const FArguments& InArgs)
 				.Text_Lambda([this]()
 				{
 					return IsTool(ECombatDesignTool::Build)
-						? INVTEXT("Left: place   Ctrl+Left: move a piece   Shift+Left: erase   R / Shift+R: rotate   Right click: deselect / put back / erase   Right drag: look")
+						? INVTEXT("Left: place   Ctrl+Left: move a piece   Shift+Left: erase   R / Shift+R: rotate   I: pick a floor color   Right click: deselect / put back / erase   Right drag: look")
 						: INVTEXT("Left: place   Shift+Left: erase   R / Shift+R: rotate   Right click: erase   Right drag: look");
 				})
 				.ColorAndOpacity(FLinearColor(0.75f, 0.75f, 0.75f))
@@ -725,6 +763,58 @@ TSharedRef<SWidget> SCombatLevelDesigner::MakeButton(const FText& Label, TFuncti
 		[
 			SNew(STextBlock).Text(Label)
 		];
+}
+
+TSharedRef<SWidget> SCombatLevelDesigner::MakeColorSwatches()
+{
+	TSharedRef<SHorizontalBox> Swatches = SNew(SHorizontalBox);
+	for (const FColor& Color : GetDefault<UCombatSettings>()->FloorColors)
+	{
+		Swatches->AddSlot().AutoWidth().Padding(0.f, 0.f, 2.f, 0.f)
+		[
+			SNew(SButton)
+			.ContentPadding(1.f)
+			.ButtonColorAndOpacity_Lambda([this, Color]()
+			{
+				const UCombatSubsystem* Current = Subsystem.Get();
+				return FSlateColor(Current && Current->GetDesignPieceColor() == Color ? CombatLevelDesigner::ActiveColor : FLinearColor::White);
+			})
+			.OnClicked_Lambda([this, Color]()
+			{
+				if (UCombatSubsystem* Current = Subsystem.Get())
+				{
+					Current->SetDesignPieceColor(Color);
+				}
+				return FReply::Handled();
+			})
+			[
+				SNew(SBox)
+				.WidthOverride(18.f)
+				.HeightOverride(18.f)
+				[
+					SNew(SColorBlock).Color(FLinearColor(Color))
+				]
+			]
+		];
+	}
+	return Swatches;
+}
+
+FReply SCombatLevelDesigner::OnPickColorClicked()
+{
+	const UCombatSubsystem* Current = Subsystem.Get();
+	FColorPickerArgs Args(FLinearColor(Current ? Current->GetDesignPieceColor() : FColor::White),
+		FOnLinearColorValueChanged::CreateSPLambda(this, [this](FLinearColor Color)
+		{
+			if (UCombatSubsystem* Picked = Subsystem.Get())
+			{
+				Picked->SetDesignPieceColor(Color.ToFColor(true));
+			}
+		}));
+	Args.bUseAlpha = false;
+	Args.ParentWidget = AsShared();
+	OpenColorPicker(Args);
+	return FReply::Handled();
 }
 
 TSharedRef<SWidget> SCombatLevelDesigner::MakeLabel(const FText& Label)

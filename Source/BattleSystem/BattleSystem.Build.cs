@@ -10,7 +10,7 @@ public class BattleSystem : ModuleRules
 	
 		PublicDependencyModuleNames.AddRange(new string[] { "Core", "CoreUObject", "Engine", "InputCore", "EnhancedInput", "GameplayTags", "DeveloperSettings" });
 
-		PrivateDependencyModuleNames.AddRange(new string[] { "AssetRegistry", "Slate", "SlateCore", "Niagara", "Json", "JsonUtilities", "UMG", "SkeletalMerging", "GeometryCore", "GeometryFramework", "GeometryScriptingCore" });
+		PrivateDependencyModuleNames.AddRange(new string[] { "AssetRegistry", "Slate", "SlateCore", "Niagara", "Json", "JsonUtilities", "UMG", "SkeletalMerging", "GeometryCore", "GeometryFramework", "GeometryScriptingCore", "AppFramework" });
 
 		if (Target.bBuildEditor)
 		{

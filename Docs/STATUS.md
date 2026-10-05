@@ -21,6 +21,8 @@ _Last updated: 2026-10-05_
 
 - Unit ghost and rotation in the LevelDesigner (checked by the user in PIE; merged to `main` from `unit-ghost`, tag `before-unit-ghost`): a see-through ghost of the unit under the cursor in Unit and Spawn Mode, and a start rotation in 45 degree steps (R / Shift+R) stored per unit and spawn (level format 5, presentation only).
 
+- Solid floors (checked by the user in PIE; merged to `main` from `solid-floors`, tag `before-solid-floors`): `Building/Floors/SolidFloor_1x1`..`_4x4` with a color per placed piece (swatches, color picker, eyedropper I), level format 6.
+
 ## Open work
 
 - Balance (from the batch): team 0 wins `DA_Setup_AoE` 86.5% and `DA_Setup_Mixed` 99.7%; the Brutes win `DA_Setup_Test` and `DA_Setup_Taunt`.
