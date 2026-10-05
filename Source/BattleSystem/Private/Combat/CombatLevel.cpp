@@ -317,9 +317,20 @@ void FCombatLevel::ToGridData(FCombatGridData& OutGrid) const
 		}
 	}
 
+	// Borders with a door frame (an opening that does not block): a wall there is passable; a leaf or window still blocks.
+	TArray<TPair<FIntPoint, FIntPoint>> OpenBorders;
+	TArray<TPair<FIntPoint, FIntPoint>> Edges;
+	for (const FCombatLevelPiece& Piece : Pieces)
+	{
+		if (Piece.Layer == ECombatPieceLayer::Edge && Piece.Slot == FCombatLevelPiece::OpeningSlot && !Piece.bBlocksWalking && !Piece.bBlocksSight)
+		{
+			Piece.GetEdges(Edges);
+			OpenBorders.Append(Edges);
+		}
+	}
+
 	// Pieces in list order; flags and edge walls only add, so the order does not change the result.
 	TArray<FIntPoint> Cells;
-	TArray<TPair<FIntPoint, FIntPoint>> Edges;
 	for (const FCombatLevelPiece& Piece : Pieces)
 	{
 		// A blocking detail blocks its whole cell: the simulation has no sub-cells.
@@ -338,7 +349,10 @@ void FCombatLevel::ToGridData(FCombatGridData& OutGrid) const
 			Piece.GetEdges(Edges);
 			for (const TPair<FIntPoint, FIntPoint>& Edge : Edges)
 			{
-				OutGrid.AddEdgeWall(Edge.Key, Edge.Value);
+				if (!Piece.Slot.IsEmpty() || !OpenBorders.Contains(Edge))
+				{
+					OutGrid.AddEdgeWall(Edge.Key, Edge.Value);
+				}
 			}
 		}
 	}

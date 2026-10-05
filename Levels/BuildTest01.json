@@ -293,6 +293,7 @@
 		},
 		{
 			"id": "Doors/SM_door_010",
+			"slot": "Opening",
 			"layer": "Edge",
 			"cell":
 			{

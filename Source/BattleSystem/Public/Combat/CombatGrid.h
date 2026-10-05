@@ -8,7 +8,9 @@
 #include "Combat/CombatLevel.h"
 #include "CombatGrid.generated.h"
 
+class UDynamicMesh;
 class UInstancedStaticMeshComponent;
+class UPrimitiveComponent;
 
 /** How border pieces (walls) are shown, so units behind them stay visible (key V, control panel). */
 enum class ECombatWallMode : uint8
@@ -70,11 +72,18 @@ public:
 	 * or bar per border: PreviewPlaceColor, PreviewBlockedColor when it does not fit, PreviewEraseColor when erasing.
 	 */
 	void ShowPiecePreview(const FCombatLevelPiece& Piece, float InCellSize, UStaticMesh* Mesh, const FTransform& MeshTransform, bool bFits, bool bErase);
+
+	/**
+	 * While an opening is previewed, the shown walls on its borders are swapped for versions with its cut box (mesh
+	 * space of the opening) cut out as well; recomputed only when the previewed opening moves. Null Opening restores them.
+	 */
+	void UpdatePreviewCuts(const FCombatLevelPiece* Opening, const FTransform& OpeningTransform, const FBox& CutBox, float InCellSize);
 	void HidePiecePreview();
 
 	/**
 	 * Lowers border pieces to LowWallHeight: all of them (Down), none (Up), or those whose full-height bounds the line
-	 * from CameraLocation to one of Targets crosses (Cutaway). Only changes components whose state changes.
+	 * from CameraLocation to one of Targets crosses (Cutaway). Lowering shows a version cut off at LowWallHeight instead
+	 * of the full piece (nothing for a piece wholly above it). Only changes components whose state changes.
 	 */
 	void UpdateWalls(ECombatWallMode Mode, const FVector& CameraLocation, TConstArrayView<FVector> Targets);
 
@@ -161,24 +170,54 @@ private:
 
 	/**
 	 * Shows the level's pieces with the meshes of the settings' PieceCatalog: one plain static mesh component per piece
-	 * (no instancing, so pack materials need no instancing usage flag; UE batches equal meshes itself).
+	 * (no instancing, so pack materials need no instancing usage flag; UE batches equal meshes itself). A wall with
+	 * openings (windows, door frames) on its borders becomes a dynamic mesh with their cut boxes cut out.
 	 */
 	void ShowPieces(const FCombatLevel& Level);
 	void ClearPieces();
 
+	/** A dynamic mesh component showing Mesh with the boxes (mesh space) cut out; equal cuts come from CutWallCache. */
+	UPrimitiveComponent* MakeCutWall(UStaticMesh* Mesh, TConstArrayView<FBox> MeshSpaceCuts, bool& bOutFromCache);
+
 	UPROPERTY(Transient)
-	TArray<TObjectPtr<UStaticMeshComponent>> PieceComponents;
+	TArray<TObjectPtr<UPrimitiveComponent>> PieceComponents;
+
+	/** Cut walls by MakeCutKey, kept while the grid lives, so rebuilding a level only cuts what changed. */
+	UPROPERTY(Transient)
+	TMap<FString, TObjectPtr<UDynamicMesh>> CutWallCache;
 
 	/** Border pieces taller than LowWallHeight, parallel arrays: component, full and lowered transform, full world bounds. */
 	struct FWallPiece
 	{
-		TWeakObjectPtr<UStaticMeshComponent> Component;
-		FTransform FullTransform;
-		FTransform LowTransform;
+		TWeakObjectPtr<UPrimitiveComponent> Full;
+		/** The piece cut off at LowWallHeight (a cut wall); null if it lies wholly above it. */
+		TWeakObjectPtr<UPrimitiveComponent> Low;
+		/** Swapped for a preview cut: UpdateWalls leaves its visibility alone. */
+		bool bPreviewHidden = false;
 		FBox WorldBounds;
 		bool bLowered = false;
 	};
 	TArray<FWallPiece> WallPieces;
+
+	/** Shown walls (Edge, no slot) with what a preview cut needs: piece, mesh, transform, its own cuts, WallPieces index. */
+	struct FShownWall
+	{
+		FCombatLevelPiece Piece;
+		TWeakObjectPtr<UStaticMesh> Mesh;
+		FTransform Transform;
+		TArray<FBox> Cuts;
+		int32 WallPiece = INDEX_NONE;
+		TWeakObjectPtr<UPrimitiveComponent> Full;
+	};
+	TArray<FShownWall> ShownWalls;
+
+	/** Preview cuts: the walls (ShownWalls indices) swapped out, their cut stand-ins, and the opening they are for. */
+	TArray<int32> PreviewCutWalls;
+	UPROPERTY(Transient)
+	TArray<TObjectPtr<UPrimitiveComponent>> PreviewCutComponents;
+	FString PreviewCutKey;
+	/** Shows a shown wall again as the wall mode wants it (full or low). */
+	void RestoreShownWall(int32 Index);
 
 	bool bHasLevel = false;
 	FCombatGridData LevelGridData;

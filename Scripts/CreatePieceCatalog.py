@@ -8,7 +8,9 @@ catalog are kept as they are (tuned in the editor); new meshes are added with de
 - Details*: detail layer (small objects on a DETAIL_GRID x DETAIL_GRID grid per cell), never block by default.
 - Floors: floor layer, footprint = size in cells, never blocks.
 - Walls, Windows, Doors, DoorLeaves thinner than THIN_LIMIT: border pieces along the long side, length in cells;
-  Doors (frames) do not block; DoorLeaves get the slot "Leaf" (they share a border with a frame) and block.
+  Windows and Doors (frames) get the slot "Opening" (they share a border with a wall and cut it; frames do not block);
+  DoorLeaves get the slot "Leaf" (they share a border with a frame) and block.
+The slot per category (SLOT_CATEGORIES) is also set on existing entries, so an old catalog gets the slots.
 - Everything else: cell pieces, footprint = size in cells (at least 1); Walls block walking and sight, others walking.
 Pieces whose mesh is no longer in its category folder (deleted, or moved to another category) are removed, so a moved
 mesh is not listed twice; levels that use such an id lose that piece's look until the id is changed. The meshes are local content, so the catalog is local too.
@@ -26,7 +28,7 @@ CELL_SIZE = 100.0
 THIN_LIMIT = 50.0
 BORDER_CATEGORIES = ("Walls", "Windows", "Doors", "DoorLeaves")
 # Category -> slot: pieces only replace pieces of the same layer and slot.
-SLOT_CATEGORIES = {"DoorLeaves": "Leaf"}
+SLOT_CATEGORIES = {"DoorLeaves": "Leaf", "Windows": "Opening", "Doors": "Opening"}
 VISUAL_ONLY_CATEGORIES = ("Doors",)
 DETAIL_PREFIX = "Details"
 DETAIL_GRID = 3
@@ -124,6 +126,12 @@ def main():
             found.add(variant_id)
             if base and variant_id not in known:
                 pieces.append(make_variant(base, length))
+
+    for piece in pieces:
+        wanted = SLOT_CATEGORIES.get(piece.get_editor_property("category"), "")
+        if piece.get_editor_property("slot") != wanted:
+            piece.set_editor_property("slot", wanted)
+            log(f"  slot {piece.get_editor_property('id')} = '{wanted}'")
 
     gone = known - found
     for piece_id in sorted(gone):

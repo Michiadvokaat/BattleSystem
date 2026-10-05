@@ -340,7 +340,8 @@
 			},
 			"bBlocksWalking": true,
 			"bBlocksSight": true,
-			"detail": -1
+			"detail": -1,
+			"slot": "Opening"
 		},
 		{
 			"id": "Windows/SM_window_007",
@@ -356,7 +357,8 @@
 			},
 			"bBlocksWalking": true,
 			"bBlocksSight": true,
-			"detail": -1
+			"detail": -1,
+			"slot": "Opening"
 		},
 		{
 			"id": "Walls/SM_Walls_008",
@@ -597,7 +599,7 @@
 			"bBlocksWalking": false,
 			"bBlocksSight": false,
 			"detail": -1,
-			"slot": ""
+			"slot": "Opening"
 		},
 		{
 			"id": "Walls/SM_Walls_008_2m",

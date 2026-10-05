@@ -67,8 +67,15 @@ struct BATTLESYSTEM_API FCombatLevelPiece
 	/** Catalog id, "Category/MeshName". */
 	UPROPERTY() FString Id;
 	UPROPERTY() ECombatPieceLayer Layer = ECombatPieceLayer::Cell;
-	/** Pieces only replace pieces of the same layer and slot, so a door leaf ("Leaf") and a door frame ("") share a border. */
+	/**
+	 * Pieces only replace pieces of the same layer and slot: a wall (""), an opening ("Opening": window, door frame;
+	 * cuts the wall visually) and a door leaf ("Leaf") share a border. A non-blocking opening (a door frame) makes the
+	 * wall's border passable.
+	 */
 	UPROPERTY() FString Slot;
+
+	static constexpr const TCHAR* OpeningSlot = TEXT("Opening");
+	static constexpr const TCHAR* LeafSlot = TEXT("Leaf");
 	/**
 	 * Floor and Cell: the footprint's first cell (smallest X and Y). Edge: the cell after the first border, so a
 	 * horizontal piece (even rotation) runs along the border between rows Cell.Y - 1 and Cell.Y from column Cell.X on,

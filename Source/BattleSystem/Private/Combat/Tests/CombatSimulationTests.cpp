@@ -2421,4 +2421,69 @@ bool FCombatPieceSlotsTest::RunTest(const FString& Parameters)
 	return true;
 }
 
+IMPLEMENT_SIMPLE_AUTOMATION_TEST(FCombatWallOpeningsTest, "BattleSystem.Combat.WallOpenings",
+	EAutomationTestFlags::EditorContext | EAutomationTestFlags::ProductFilter)
+
+bool FCombatWallOpeningsTest::RunTest(const FString& Parameters)
+{
+	FCombatPieceDefinition Wall;
+	Wall.Id = TEXT("Walls/Wall");
+	Wall.Layer = ECombatPieceLayer::Edge;
+	Wall.Size = FIntPoint(4, 1);
+	Wall.bBlocksSight = true;
+	FCombatPieceDefinition Frame;
+	Frame.Id = TEXT("Doors/Frame");
+	Frame.Layer = ECombatPieceLayer::Edge;
+	Frame.Slot = FCombatLevelPiece::OpeningSlot;
+	Frame.bBlocksWalking = false;
+	FCombatPieceDefinition Window = Frame;
+	Window.Id = TEXT("Windows/Window");
+	Window.Size = FIntPoint(2, 1);
+	Window.bBlocksWalking = true;
+	Window.bBlocksSight = true;
+	FCombatPieceDefinition Leaf = Frame;
+	Leaf.Id = TEXT("DoorLeaves/Leaf");
+	Leaf.Slot = FCombatLevelPiece::LeafSlot;
+	Leaf.bBlocksWalking = true;
+
+	// A 4 m wall on the border between rows 1 and 2, columns 0..3; a door frame on column 1, a window on 2..3.
+	FCombatLevel Level = FCombatLevel::MakeEmpty(TEXT("Openings"), 6, 6);
+	Level.PlacePiece(Wall.MakePiece(FIntPoint(0, 2), 0));
+	TestTrue(TEXT("A door frame stands in the wall"), Level.PlacePiece(Frame.MakePiece(FIntPoint(1, 2), 0)) && Level.Pieces.Num() == 2);
+	TestTrue(TEXT("A window stands in the wall too"), Level.PlacePiece(Window.MakePiece(FIntPoint(2, 2), 0)) && Level.Pieces.Num() == 3);
+
+	FCombatGridData Grid;
+	Level.ToGridData(Grid);
+	TestTrue(TEXT("The wall blocks where nothing is in it"), Grid.HasEdgeWall(FIntPoint(0, 1), FIntPoint(0, 2)));
+	TestFalse(TEXT("The door frame makes its border passable"), Grid.HasEdgeWall(FIntPoint(1, 1), FIntPoint(1, 2)));
+	TestTrue(TEXT("The window still blocks"), Grid.HasEdgeWall(FIntPoint(2, 1), FIntPoint(2, 2)) && Grid.HasEdgeWall(FIntPoint(3, 1), FIntPoint(3, 2)));
+	Level.PlacePiece(Leaf.MakePiece(FIntPoint(1, 2), 0));
+	Level.ToGridData(Grid);
+	TestTrue(TEXT("With a door leaf the door is closed"), Grid.HasEdgeWall(FIntPoint(1, 1), FIntPoint(1, 2)));
+
+	TestTrue(TEXT("The frame shares a border with the wall"), CombatPieces::SharesBorder(Level.Pieces[0], Level.Pieces[1]));
+	TestFalse(TEXT("... the window not with the frame"), CombatPieces::SharesBorder(Level.Pieces[1], Level.Pieces[2]));
+
+	// The cut box: the frame's box, a cell deep on both sides of the border line (row border at Y = 200).
+	const FCombatLevelPiece& FramePiece = Level.Pieces[1];
+	const FBox FrameBox(FVector(-60.0, -10.0, 0.0), FVector(60.0, 10.0, 240.0));
+	const FTransform FrameTransform(FVector(150.0, 200.0, 0.0));
+	const FBox Cut = CombatPieces::ComputeCutBox(FramePiece, FrameTransform, FrameBox, 100.f, 100.f);
+	TestTrue(TEXT("Cut box: the frame's width and height, through the wall"), Cut.Min.Equals(FVector(90.0, 100.0, 0.0)) && Cut.Max.Equals(FVector(210.0, 300.0, 240.0)));
+
+	// In the space of a wall turned 90 degrees and scaled to half its length.
+	const FTransform WallTransform(FRotator(0.0, 90.0, 0.0), FVector(100.0, 0.0, 0.0), FVector(0.5, 1.0, 1.0));
+	const FBox Local(FVector(80.0, 10.0, 0.0), FVector(120.0, 30.0, 50.0));
+	const FBox InMesh = CombatPieces::ToMeshSpace(Local, WallTransform);
+	TestTrue(TEXT("Back into the mesh's own space"), InMesh.Min.Equals(FVector(20.0, -20.0, 0.0), 0.01) && InMesh.Max.Equals(FVector(60.0, 20.0, 50.0), 0.01));
+
+	const FBox LowCut = CombatPieces::ComputeLowCutBox(FBox(FVector(0.0, -10.0, 0.0), FVector(400.0, 10.0, 300.0)), 40.f);
+	TestTrue(TEXT("Lowering cuts everything above 40 cm"), LowCut.IsValid && LowCut.Min.Z == 40.0 && LowCut.Max.Z > 300.0 && LowCut.Min.X < 0.0 && LowCut.Max.X > 400.0);
+	TestFalse(TEXT("A piece wholly above it has no low version"), CombatPieces::ComputeLowCutBox(FBox(FVector(0.0, -10.0, 90.0), FVector(200.0, 10.0, 250.0)), 40.f).IsValid != 0);
+
+	TestEqual(TEXT("Equal cuts, equal key"), CombatPieces::MakeCutKey(TEXT("Wall"), { Cut }), CombatPieces::MakeCutKey(TEXT("Wall"), { Cut.ShiftBy(FVector(0.01)) }));
+	TestNotEqual(TEXT("Another cut, another key"), CombatPieces::MakeCutKey(TEXT("Wall"), { Cut }), CombatPieces::MakeCutKey(TEXT("Wall"), { Cut.ShiftBy(FVector(5.0)) }));
+	return true;
+}
+
 #endif // WITH_DEV_AUTOMATION_TESTS

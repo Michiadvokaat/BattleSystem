@@ -1883,6 +1883,9 @@ void UCombatSubsystem::UpdateDesignPiecePreview(const FVector& WorldPoint, bool 
 	const FTransform MeshTransform = CombatPieces::ComputeMeshTransform(Piece, DesignLevel.CellSize, Definition->Mesh->GetBoundingBox(),
 		Definition->MeshYaw, Definition->Offset, Definition->bScaleToFit, BaseHeight);
 	Grid->ShowPiecePreview(Piece, DesignLevel.CellSize, Definition->Mesh, MeshTransform, DesignLevel.IsPieceInBounds(Piece), bErase);
+	// An opening being placed shows its cut in the walls it would stand in.
+	const bool bOpening = !bErase && Piece.Layer == ECombatPieceLayer::Edge && Piece.Slot == FCombatLevelPiece::OpeningSlot;
+	Grid->UpdatePreviewCuts(bOpening ? &Piece : nullptr, MeshTransform, Definition->GetCutBox(Definition->Mesh->GetBoundingBox()), DesignLevel.CellSize);
 }
 
 void UCombatSubsystem::HideDesignPiecePreview()

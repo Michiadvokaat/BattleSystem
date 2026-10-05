@@ -24,6 +24,11 @@ FCombatLevelPiece FCombatPieceDefinition::MakePiece(const FIntPoint& Cell, int32
 	return Piece;
 }
 
+FBox FCombatPieceDefinition::GetCutBox(const FBox& MeshBounds) const
+{
+	return bCustomCut ? FBox::BuildAABB(MeshBounds.GetCenter() + CutOffset, CutSize * 0.5) : MeshBounds;
+}
+
 const FCombatPieceDefinition* UCombatPieceCatalog::Find(const FString& Id) const
 {
 	return Pieces.FindByPredicate([&Id](const FCombatPieceDefinition& Definition) { return Definition.Id == Id; });
@@ -109,6 +114,66 @@ namespace CombatPieces
 		const FBox MeshBounds = Mesh->GetBoundingBox();
 		const FTransform Transform = ComputeMeshTransform(Below, Level.CellSize, MeshBounds, Definition->MeshYaw, Definition->Offset, Definition->bScaleToFit);
 		return GetSurfaceHeight(MeshBounds.TransformBy(Transform), Definition->SurfaceHeight, Detail.GetDetailCenter(Level.CellSize));
+	}
+
+	bool SharesBorder(const FCombatLevelPiece& A, const FCombatLevelPiece& B)
+	{
+		TArray<TPair<FIntPoint, FIntPoint>> EdgesA;
+		TArray<TPair<FIntPoint, FIntPoint>> EdgesB;
+		A.GetEdges(EdgesA);
+		B.GetEdges(EdgesB);
+		return EdgesA.ContainsByPredicate([&EdgesB](const TPair<FIntPoint, FIntPoint>& Edge) { return EdgesB.Contains(Edge); });
+	}
+
+	FBox ComputeCutBox(const FCombatLevelPiece& Opening, const FTransform& OpeningTransform, const FBox& CutBox, float CellSize, float Depth)
+	{
+		FBox Box = CutBox.TransformBy(OpeningTransform);
+		// Across the border line: deep enough on both sides for any wall.
+		if (Opening.IsHorizontalEdge())
+		{
+			const double Line = Opening.Cell.Y * CellSize;
+			Box.Min.Y = FMath::Min(Box.Min.Y, Line - Depth);
+			Box.Max.Y = FMath::Max(Box.Max.Y, Line + Depth);
+		}
+		else
+		{
+			const double Line = Opening.Cell.X * CellSize;
+			Box.Min.X = FMath::Min(Box.Min.X, Line - Depth);
+			Box.Max.X = FMath::Max(Box.Max.X, Line + Depth);
+		}
+		return Box;
+	}
+
+	FBox ComputeLowCutBox(const FBox& PlacedBounds, float LowHeight)
+	{
+		if (PlacedBounds.Min.Z >= LowHeight)
+		{
+			return FBox(ForceInit);
+		}
+		constexpr double Margin = 10.0;
+		return FBox(FVector(PlacedBounds.Min.X - Margin, PlacedBounds.Min.Y - Margin, LowHeight),
+			FVector(PlacedBounds.Max.X + Margin, PlacedBounds.Max.Y + Margin, PlacedBounds.Max.Z + Margin));
+	}
+
+	FBox ToMeshSpace(const FBox& LocalBox, const FTransform& Transform)
+	{
+		FBox Result(ForceInit);
+		for (int32 Corner = 0; Corner < 8; ++Corner)
+		{
+			const FVector Point((Corner & 1) ? LocalBox.Max.X : LocalBox.Min.X, (Corner & 2) ? LocalBox.Max.Y : LocalBox.Min.Y, (Corner & 4) ? LocalBox.Max.Z : LocalBox.Min.Z);
+			Result += Transform.InverseTransformPosition(Point);
+		}
+		return Result;
+	}
+
+	FString MakeCutKey(const FString& MeshPath, TConstArrayView<FBox> Cuts)
+	{
+		FString Key = MeshPath;
+		for (const FBox& Cut : Cuts)
+		{
+			Key += FString::Printf(TEXT("|%.1f,%.1f,%.1f,%.1f,%.1f,%.1f"), Cut.Min.X, Cut.Min.Y, Cut.Min.Z, Cut.Max.X, Cut.Max.Y, Cut.Max.Z);
+		}
+		return Key;
 	}
 
 	FCombatLevelPiece PlaceAt(const FCombatPieceDefinition& Definition, const FVector2D& Local, int32 Rotation, float CellSize)

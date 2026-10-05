@@ -31,8 +31,8 @@ struct BATTLESYSTEM_API FCombatPieceDefinition
 	ECombatPieceLayer Layer = ECombatPieceLayer::Cell;
 
 	/**
-	 * Pieces only replace pieces of the same layer and slot. Empty for most; "Leaf" for door leaves, so a leaf and a
-	 * frame share a border (the script sets it per category).
+	 * Pieces only replace pieces of the same layer and slot. Empty for most; "Opening" for windows and door frames (they
+	 * share a border with a wall and cut it), "Leaf" for door leaves (in a frame). The script sets it per category.
 	 */
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Piece")
 	FString Slot;
@@ -58,6 +58,19 @@ struct BATTLESYSTEM_API FCombatPieceDefinition
 	 */
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Fit")
 	bool bScaleToFit = false;
+
+	/** Openings: cut CutSize at the mesh bounds' center + CutOffset (mesh axes) instead of the whole mesh bounds. */
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Cut")
+	bool bCustomCut = false;
+
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Cut", meta = (EditCondition = "bCustomCut", Units = "cm"))
+	FVector CutSize = FVector(100.0, 30.0, 200.0);
+
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Cut", meta = (EditCondition = "bCustomCut", Units = "cm"))
+	FVector CutOffset = FVector::ZeroVector;
+
+	/** The box an opening cuts, in the mesh's own space. */
+	FBox GetCutBox(const FBox& MeshBounds) const;
 
 	/** Moves the mesh after the automatic fit, in the mesh's own axes (for example Z for a window's sill height). */
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Fit", meta = (Units = "cm"))
@@ -121,4 +134,25 @@ namespace CombatPieces
 	 * are centered along it.
 	 */
 	BATTLESYSTEM_API FCombatLevelPiece PlaceAt(const FCombatPieceDefinition& Definition, const FVector2D& Local, int32 Rotation, float CellSize);
+
+	/** Whether two Edge pieces cover at least one common border. */
+	BATTLESYSTEM_API bool SharesBorder(const FCombatLevelPiece& A, const FCombatLevelPiece& B);
+
+	/**
+	 * The box an opening cuts out of walls, in grid-local space: its cut box placed with its transform, made Depth deep
+	 * on both sides of its border line so it goes through any wall standing there.
+	 */
+	BATTLESYSTEM_API FBox ComputeCutBox(const FCombatLevelPiece& Opening, const FTransform& OpeningTransform, const FBox& CutBox, float CellSize, float Depth);
+
+	/**
+	 * The box that cuts a placed piece down to LowHeight (walls lowered): everything above LowHeight within its placed
+	 * bounds (grid-local), with a margin around. Invalid (bIsValid false) if the piece lies wholly above LowHeight.
+	 */
+	BATTLESYSTEM_API FBox ComputeLowCutBox(const FBox& PlacedBounds, float LowHeight);
+
+	/** A grid-local box seen from a mesh placed with Transform: the bounds of its corners in the mesh's own space. */
+	BATTLESYSTEM_API FBox ToMeshSpace(const FBox& LocalBox, const FTransform& Transform);
+
+	/** Cache key of a mesh with boxes cut out (mesh space, rounded to millimeters): equal keys give equal meshes. */
+	BATTLESYSTEM_API FString MakeCutKey(const FString& MeshPath, TConstArrayView<FBox> Cuts);
 }
