@@ -104,11 +104,23 @@ FIntPoint FCombatLevelPiece::GetRotatedSize() const
 	return Rotation % 2 == 0 ? Size : FIntPoint(Size.Y, Size.X);
 }
 
+FVector2D FCombatLevelPiece::GetDetailCenter(float CellSize) const
+{
+	const int32 Grid = FMath::Max(DetailGrid, 1);
+	const int32 Position = FMath::Clamp(Detail, 0, Grid * Grid - 1);
+	return FVector2D((Cell.X + (Position % Grid + 0.5) / Grid) * CellSize, (Cell.Y + (Position / Grid + 0.5) / Grid) * CellSize);
+}
+
 void FCombatLevelPiece::GetCells(TArray<FIntPoint>& OutCells) const
 {
 	OutCells.Reset();
 	if (Layer == ECombatPieceLayer::Edge)
 	{
+		return;
+	}
+	if (Layer == ECombatPieceLayer::Detail)
+	{
+		OutCells.Add(Cell);
 		return;
 	}
 	const FIntPoint RotatedSize = GetRotatedSize();
@@ -147,6 +159,11 @@ bool FCombatLevelPiece::Overlaps(const FCombatLevelPiece& Other) const
 	{
 		return false;
 	}
+	if (Layer == ECombatPieceLayer::Detail)
+	{
+		// Equal grids compare positions; different grids compare the centers' sub-cells of the finer one.
+		return Cell == Other.Cell && GetDetailCenter(1.f).Equals(Other.GetDetailCenter(1.f), 0.5 / FMath::Max3(DetailGrid, Other.DetailGrid, 1));
+	}
 	if (Layer == ECombatPieceLayer::Edge)
 	{
 		TArray<TPair<FIntPoint, FIntPoint>> Mine;
@@ -171,6 +188,10 @@ bool FCombatLevel::IsPieceInBounds(const FCombatLevelPiece& Piece) const
 		return Piece.IsHorizontalEdge()
 			? Piece.Cell.X >= 0 && Piece.Cell.X + Length <= Width && Piece.Cell.Y >= 0 && Piece.Cell.Y <= Height
 			: Piece.Cell.Y >= 0 && Piece.Cell.Y + Length <= Height && Piece.Cell.X >= 0 && Piece.Cell.X <= Width;
+	}
+	if (Piece.Layer == ECombatPieceLayer::Detail)
+	{
+		return IsInBounds(Piece.Cell) && Piece.Detail >= 0 && Piece.Detail < FMath::Square(FMath::Max(Piece.DetailGrid, 1));
 	}
 	const FIntPoint RotatedSize = Piece.GetRotatedSize();
 	return IsInBounds(Piece.Cell) && IsInBounds(Piece.Cell + FIntPoint(FMath::Max(RotatedSize.X, 1) - 1, FMath::Max(RotatedSize.Y, 1) - 1));
@@ -220,7 +241,8 @@ void FCombatLevel::ToGridData(FCombatGridData& OutGrid) const
 	TArray<TPair<FIntPoint, FIntPoint>> Edges;
 	for (const FCombatLevelPiece& Piece : Pieces)
 	{
-		if (Piece.Layer == ECombatPieceLayer::Cell)
+		// A blocking detail blocks its whole cell: the simulation has no sub-cells.
+		if (Piece.Layer == ECombatPieceLayer::Cell || Piece.Layer == ECombatPieceLayer::Detail)
 		{
 			const ECombatCellFlags Flags = (Piece.bBlocksWalking ? ECombatCellFlags::Blocked : ECombatCellFlags::None)
 				| (Piece.bBlocksSight ? ECombatCellFlags::BlocksSight : ECombatCellFlags::None);

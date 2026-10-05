@@ -1611,6 +1611,30 @@ const UCombatPieceCatalog* UCombatSubsystem::GetPieceCatalog()
 	return PieceCatalog;
 }
 
+void UCombatSubsystem::RotateDesignPiece(int32 Steps)
+{
+	const UCombatPieceCatalog* Catalog = GetPieceCatalog();
+	const FCombatPieceDefinition* Definition = Catalog ? Catalog->Find(DesignPieceId) : nullptr;
+	const int32 EighthsPerStep = Definition && Definition->Layer == ECombatPieceLayer::Detail ? 1 : 2;
+	// A quarter-turn piece starts from a whole quarter, so a 45 degree detail rotation never leaves it halfway.
+	const int32 Start = EighthsPerStep == 2 ? DesignPieceRotation / 2 * 2 : DesignPieceRotation;
+	DesignPieceRotation = ((Start + Steps * EighthsPerStep) % 8 + 8) % 8;
+}
+
+int32 UCombatSubsystem::GetDesignPieceSteps()
+{
+	const UCombatPieceCatalog* Catalog = GetPieceCatalog();
+	const FCombatPieceDefinition* Definition = Catalog ? Catalog->Find(DesignPieceId) : nullptr;
+	return Definition && Definition->Layer == ECombatPieceLayer::Detail ? DesignPieceRotation : DesignPieceRotation / 2;
+}
+
+int32 UCombatSubsystem::GetDesignPieceDegrees()
+{
+	const UCombatPieceCatalog* Catalog = GetPieceCatalog();
+	const FCombatPieceDefinition* Definition = Catalog ? Catalog->Find(DesignPieceId) : nullptr;
+	return GetDesignPieceSteps() * 360 / CombatPieces::GetRotationSteps(Definition ? Definition->Layer : ECombatPieceLayer::Cell);
+}
+
 bool UCombatSubsystem::GetDesignPiecePlacement(const FVector& WorldPoint, FCombatLevelPiece& OutPiece, const FCombatPieceDefinition*& OutDefinition)
 {
 	const UCombatPieceCatalog* Catalog = GetPieceCatalog();
@@ -1621,7 +1645,7 @@ bool UCombatSubsystem::GetDesignPiecePlacement(const FVector& WorldPoint, FComba
 	}
 	const ACombatGrid* Grid = ACombatGrid::Find(GetWorld());
 	const FVector Origin = Grid ? Grid->GetActorLocation() : FVector::ZeroVector;
-	OutPiece = CombatPieces::PlaceAt(*OutDefinition, FVector2D(WorldPoint - Origin), DesignPieceRotation, DesignLevel.CellSize);
+	OutPiece = CombatPieces::PlaceAt(*OutDefinition, FVector2D(WorldPoint - Origin), GetDesignPieceSteps(), DesignLevel.CellSize);
 	return true;
 }
 
@@ -1639,8 +1663,9 @@ void UCombatSubsystem::UpdateDesignPiecePreview(const FVector& WorldPoint, bool 
 		Grid->HidePiecePreview();
 		return;
 	}
+	const double BaseHeight = Piece.Layer == ECombatPieceLayer::Detail ? CombatPieces::FindDetailBaseHeight(DesignLevel, *GetPieceCatalog(), Piece) : 0.0;
 	const FTransform MeshTransform = CombatPieces::ComputeMeshTransform(Piece, DesignLevel.CellSize, Definition->Mesh->GetBoundingBox(),
-		Definition->MeshYaw, Definition->Offset, Definition->bScaleToFit);
+		Definition->MeshYaw, Definition->Offset, Definition->bScaleToFit, BaseHeight);
 	Grid->ShowPiecePreview(Piece, DesignLevel.CellSize, Definition->Mesh, MeshTransform, DesignLevel.IsPieceInBounds(Piece), bErase);
 }
 

@@ -51,7 +51,7 @@ enum class ECombatPieceLayer : uint8
 	Cell,
 	/** On the borders between cells: walls, windows (block walking and sight), door frames (visual only). */
 	Edge,
-	/** Small objects on the detail grid inside a cell (not placeable yet). */
+	/** Small objects on the detail grid inside a cell, one per position; they stand on the Cell piece under them. */
 	Detail,
 };
 
@@ -73,24 +73,28 @@ struct BATTLESYSTEM_API FCombatLevelPiece
 	 * a vertical one (odd rotation) along the border between columns Cell.X - 1 and Cell.X from row Cell.Y on.
 	 */
 	UPROPERTY() FIntPoint Cell = FIntPoint::ZeroValue;
-	/** Quarter turns, 0..3. */
+	/** Quarter turns, 0..3; Detail pieces: eighth turns (45 degrees), 0..7. */
 	UPROPERTY() int32 Rotation = 0;
 	/** Footprint in cells before rotation; Edge: X = the number of borders it covers. */
 	UPROPERTY() FIntPoint Size = FIntPoint(1, 1);
 	/** Cell pieces: their cells block walking / sight. Edge pieces block both when either is set. */
 	UPROPERTY() bool bBlocksWalking = false;
 	UPROPERTY() bool bBlocksSight = false;
-	/** Position on the detail grid of its cell (Detail layer, later); INDEX_NONE for the other layers. */
+	/** Detail layer: position on the detail grid of its cell, X + Y x DetailGrid; INDEX_NONE for the other layers. */
 	UPROPERTY() int32 Detail = INDEX_NONE;
+	/** Detail layer: positions per cell side (copied from the catalog, so Detail keeps its meaning); 0 for the other layers. */
+	UPROPERTY() int32 DetailGrid = 0;
 
 	/** Size after rotation (X and Y swap on odd rotations). */
 	FIntPoint GetRotatedSize() const;
 	bool IsHorizontalEdge() const { return Rotation % 2 == 0; }
-	/** Floor and Cell: the footprint cells; nothing for Edge. */
+	/** Detail layer: the center of its position on the detail grid, in grid-local cm. */
+	FVector2D GetDetailCenter(float CellSize) const;
+	/** Floor and Cell: the footprint cells; Detail: its cell; nothing for Edge. */
 	void GetCells(TArray<FIntPoint>& OutCells) const;
 	/** Edge: the cell pairs on both sides of each border it covers; nothing for the other layers. */
 	void GetEdges(TArray<TPair<FIntPoint, FIntPoint>>& OutEdges) const;
-	/** Whether it shares a cell (Floor, Cell) or a border (Edge) with another piece of the same layer. */
+	/** Whether it shares a cell (Floor, Cell), a border (Edge) or a detail position (Detail) with another piece of the same layer. */
 	bool Overlaps(const FCombatLevelPiece& Other) const;
 };
 

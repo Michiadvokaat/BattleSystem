@@ -7,6 +7,7 @@
 #include "Engine/DataAsset.h"
 #include "CombatPieces.generated.h"
 
+class UCombatPieceCatalog;
 class UStaticMesh;
 
 /** One placeable piece of the catalog: its mesh, layer, footprint and blocking. */
@@ -55,7 +56,11 @@ struct BATTLESYSTEM_API FCombatPieceDefinition
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Fit", meta = (Units = "cm"))
 	FVector Offset = FVector::ZeroVector;
 
-	/** Detail layer (later): positions per cell side, so DetailGrid x DetailGrid positions per cell. */
+	/** Cell pieces: height (cm) that details stand on, for example a seat; -1 = the top of the mesh, 0 = nothing on it. */
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Fit", meta = (ClampMin = -1, Units = "cm"))
+	float SurfaceHeight = -1.f;
+
+	/** Detail layer: positions per cell side, so DetailGrid x DetailGrid positions per cell. */
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Piece", meta = (ClampMin = 1, ClampMax = 8))
 	int32 DetailGrid = 3;
 
@@ -85,10 +90,23 @@ namespace CombatPieces
 	 * Where a piece's mesh goes, relative to the grid origin: centered on its footprint (Floor, Cell) or on its border
 	 * line (Edge), with the bottom of MeshBounds on the floor, turned by MeshYaw + 90 x Rotation, then moved by Offset
 	 * (in the mesh's axes). With bScaleToFit the mesh is scaled to the footprint's length (Edge) or X and Y (Floor,
-	 * Cell) first. MeshBounds is the mesh's local bounding box.
+	 * Cell) first. Detail pieces are centered on their detail position, turn in 45 degree steps, never scale, and
+	 * stand at BaseHeight. MeshBounds is the mesh's local bounding box.
 	 */
 	BATTLESYSTEM_API FTransform ComputeMeshTransform(const FCombatLevelPiece& Piece, float CellSize, const FBox& MeshBounds,
-		float MeshYaw, const FVector& Offset, bool bScaleToFit = false);
+		float MeshYaw, const FVector& Offset, bool bScaleToFit = false, double BaseHeight = 0.0);
+
+	/** Rotation steps per full turn of a layer: 8 for details (45 degrees), 4 for the others. */
+	BATTLESYSTEM_API int32 GetRotationSteps(ECombatPieceLayer Layer);
+
+	/**
+	 * Height a detail at Point stands on, given the bounds of the Cell piece in its cell (grid-local): SurfaceHeight
+	 * (-1 = the bounds' top, 0 = nothing on it) when Point lies inside the bounds seen from above, else the floor (0).
+	 */
+	BATTLESYSTEM_API double GetSurfaceHeight(const FBox& PieceBounds, float SurfaceHeight, const FVector2D& Point);
+
+	/** Height a detail piece stands on in a level: on the Cell piece in its cell (catalog meshes), else 0. */
+	BATTLESYSTEM_API double FindDetailBaseHeight(const FCombatLevel& Level, const UCombatPieceCatalog& Catalog, const FCombatLevelPiece& Detail);
 
 	/**
 	 * The piece a definition makes under a grid-local point (LevelDesigner): Floor and Cell pieces are centered on the

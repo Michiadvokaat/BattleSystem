@@ -186,11 +186,13 @@ public:
 	ECombatDesignTool GetDesignTool() const { return DesignTool; }
 	void SetDesignUnitType(const FString& Type) { DesignUnitType = Type; }
 	const FString& GetDesignUnitType() const { return DesignUnitType; }
-	/** Piece tool: the catalog piece to place (its Id) and its rotation in quarter turns (R, Shift+R, Rotate). */
+	/** Piece tool: the catalog piece to place (its Id) and its rotation (R, Shift+R, Rotate). */
 	void SetDesignPiece(const FString& Id) { DesignPieceId = Id; }
 	const FString& GetDesignPiece() const { return DesignPieceId; }
-	void RotateDesignPiece(int32 QuarterTurns) { DesignPieceRotation = ((DesignPieceRotation + QuarterTurns) % 4 + 4) % 4; }
-	int32 GetDesignPieceRotation() const { return DesignPieceRotation; }
+	/** Turns the selected piece by Steps of its layer: 45 degrees for details, 90 for the others. */
+	void RotateDesignPiece(int32 Steps);
+	/** The selected piece's rotation in degrees. */
+	int32 GetDesignPieceDegrees();
 	/** The settings' PieceCatalog, loaded on first use; null if none is set. */
 	const UCombatPieceCatalog* GetPieceCatalog();
 	/** Piece tool: shows where the selected piece goes under WorldPoint (green; red if it does not fit; orange when erasing). */
@@ -378,7 +380,10 @@ private:
 	/** (wave, spawn index) of the spawn the next arena click moves; (INDEX_NONE, unit index) for a start unit. */
 	TOptional<FIntPoint> DesignSpawnMove;
 	FString DesignPieceId;
+	/** In eighth turns (45 degrees); pieces that turn in quarters use half of it. */
 	int32 DesignPieceRotation = 0;
+	/** The selected piece's rotation in its layer's steps. */
+	int32 GetDesignPieceSteps();
 
 	UPROPERTY(Transient)
 	TObjectPtr<UCombatPieceCatalog> PieceCatalog;

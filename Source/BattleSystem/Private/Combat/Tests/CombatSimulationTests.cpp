@@ -2235,4 +2235,47 @@ bool FCombatPiecePlacementTest::RunTest(const FString& Parameters)
 	return true;
 }
 
+IMPLEMENT_SIMPLE_AUTOMATION_TEST(FCombatDetailPiecesTest, "BattleSystem.Combat.DetailPieces",
+	EAutomationTestFlags::EditorContext | EAutomationTestFlags::ProductFilter)
+
+bool FCombatDetailPiecesTest::RunTest(const FString& Parameters)
+{
+	FCombatPieceDefinition Toy;
+	Toy.Layer = ECombatPieceLayer::Detail;
+	Toy.bBlocksWalking = false;
+	Toy.DetailGrid = 3;
+
+	// Cell (2,1), third column and second row of its 3x3 grid.
+	FCombatLevelPiece Piece = CombatPieces::PlaceAt(Toy, FVector2D(290.0, 150.0), 9, 100.f);
+	TestEqual(TEXT("The cell under the point"), Piece.Cell, FIntPoint(2, 1));
+	TestEqual(TEXT("The detail position under the point"), Piece.Detail, 2 + 1 * 3);
+	TestEqual(TEXT("Details turn in eighths: 9 is 1"), Piece.Rotation, 1);
+	TestTrue(TEXT("Its center"), Piece.GetDetailCenter(100.f).Equals(FVector2D(283.333, 150.0), 0.01));
+
+	FTransform Transform = CombatPieces::ComputeMeshTransform(Piece, 100.f, FBox(FVector(-10.0), FVector(10.0)), 0.f, FVector::ZeroVector, true, 75.0);
+	TestTrue(TEXT("A detail stands on its base height, centered on its position"), Transform.GetLocation().Equals(FVector(283.333, 150.0, 85.0), 0.01));
+	TestTrue(TEXT("... turned 45 degrees, never scaled"), FMath::IsNearlyEqual(Transform.Rotator().Yaw, 45.0, 0.01) && Transform.GetScale3D().Equals(FVector::OneVector));
+
+	FCombatLevel Level = FCombatLevel::MakeEmpty(TEXT("Details"), 6, 5);
+	TestTrue(TEXT("Placed"), Level.PlacePiece(Piece));
+	FCombatLevelPiece Other = CombatPieces::PlaceAt(Toy, FVector2D(210.0, 110.0), 0, 100.f);
+	TestTrue(TEXT("Another position in the same cell"), Level.PlacePiece(Other) && Level.Pieces.Num() == 2);
+	TestTrue(TEXT("The same position replaces"), Level.PlacePiece(CombatPieces::PlaceAt(Toy, FVector2D(295.0, 160.0), 0, 100.f)) && Level.Pieces.Num() == 2);
+
+	FCombatGridData Grid;
+	Level.ToGridData(Grid);
+	TestTrue(TEXT("Open details keep the cell open"), Grid.IsWalkable(FIntPoint(2, 1)));
+	Toy.bBlocksWalking = true;
+	Level.PlacePiece(CombatPieces::PlaceAt(Toy, FVector2D(410.0, 410.0), 0, 100.f));
+	Level.ToGridData(Grid);
+	TestFalse(TEXT("A blocking detail blocks its whole cell"), Grid.IsWalkable(FIntPoint(4, 4)));
+
+	const FBox Table(FVector(200.0, 100.0, 0.0), FVector(260.0, 200.0, 80.0));
+	TestEqual(TEXT("Above the table: on its top"), CombatPieces::GetSurfaceHeight(Table, -1.f, FVector2D(230.0, 150.0)), 80.0);
+	TestEqual(TEXT("... or on its SurfaceHeight"), CombatPieces::GetSurfaceHeight(Table, 45.f, FVector2D(230.0, 150.0)), 45.0);
+	TestEqual(TEXT("Beside the table: the floor"), CombatPieces::GetSurfaceHeight(Table, -1.f, FVector2D(283.0, 150.0)), 0.0);
+	TestEqual(TEXT("SurfaceHeight 0: nothing on it"), CombatPieces::GetSurfaceHeight(Table, 0.f, FVector2D(230.0, 150.0)), 0.0);
+	return true;
+}
+
 #endif // WITH_DEV_AUTOMATION_TESTS

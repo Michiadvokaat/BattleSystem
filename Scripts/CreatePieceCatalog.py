@@ -5,6 +5,7 @@ Run headless with the editor closed:
 
 Every static mesh in CATALOG_PATH/<Category>/ becomes a piece with id "<Category>/<MeshName>". Pieces already in the
 catalog are kept as they are (tuned in the editor); new meshes are added with defaults from their bounds:
+- Details*: detail layer (small objects on a DETAIL_GRID x DETAIL_GRID grid per cell), never block by default.
 - Floors: floor layer, footprint = size in cells, never blocks.
 - Walls, Windows, Doors thinner than THIN_LIMIT: border pieces along the long side, length in cells; Doors do not block.
 - Everything else: cell pieces, footprint = size in cells (at least 1); Walls block walking and sight, others walking.
@@ -23,6 +24,8 @@ CELL_SIZE = 100.0
 THIN_LIMIT = 50.0
 BORDER_CATEGORIES = ("Walls", "Windows", "Doors")
 VISUAL_ONLY_CATEGORIES = ("Doors",)
+DETAIL_PREFIX = "Details"
+DETAIL_GRID = 3
 # Border piece id -> lengths in cells of its scaled-to-fit variants.
 VARIANTS = {"Walls/SM_Walls_008": (1, 2, 3)}
 
@@ -43,7 +46,10 @@ def make_definition(category, mesh):
     definition.set_editor_property("category", category)
     definition.set_editor_property("mesh", mesh)
 
-    if category == "Floors":
+    if category.startswith(DETAIL_PREFIX):
+        layer, footprint, walk, sight, yaw = unreal.CombatPieceLayer.DETAIL, (1, 1), False, False, 0.0
+        definition.set_editor_property("detail_grid", DETAIL_GRID)
+    elif category == "Floors":
         layer, footprint, walk, sight, yaw = unreal.CombatPieceLayer.FLOOR, (cells(size.x), cells(size.y)), False, False, 0.0
     elif category in BORDER_CATEGORIES and min(size.x, size.y) < THIN_LIMIT:
         # The length goes along X; a mesh long along Y is turned 90.

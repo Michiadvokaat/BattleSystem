@@ -1,6 +1,7 @@
 // Copyright Epic Games, Inc. All Rights Reserved.
 
 #include "Combat/CombatPieces.h"
+#include "Engine/StaticMesh.h"
 
 FCombatLevelPiece FCombatPieceDefinition::MakePiece(const FIntPoint& Cell, int32 Rotation) const
 {
@@ -8,8 +9,14 @@ FCombatLevelPiece FCombatPieceDefinition::MakePiece(const FIntPoint& Cell, int32
 	Piece.Id = Id;
 	Piece.Layer = Layer;
 	Piece.Cell = Cell;
-	Piece.Rotation = ((Rotation % 4) + 4) % 4;
-	Piece.Size = FIntPoint(FMath::Max(Size.X, 1), FMath::Max(Size.Y, 1));
+	const int32 Steps = CombatPieces::GetRotationSteps(Layer);
+	Piece.Rotation = ((Rotation % Steps) + Steps) % Steps;
+	Piece.Size = Layer == ECombatPieceLayer::Detail ? FIntPoint(1, 1) : FIntPoint(FMath::Max(Size.X, 1), FMath::Max(Size.Y, 1));
+	if (Layer == ECombatPieceLayer::Detail)
+	{
+		Piece.Detail = 0;
+		Piece.DetailGrid = FMath::Max(DetailGrid, 1);
+	}
 	// Floors never block.
 	Piece.bBlocksWalking = Layer != ECombatPieceLayer::Floor && bBlocksWalking;
 	Piece.bBlocksSight = Layer != ECombatPieceLayer::Floor && bBlocksSight;
@@ -23,11 +30,15 @@ const FCombatPieceDefinition* UCombatPieceCatalog::Find(const FString& Id) const
 
 namespace CombatPieces
 {
-	FTransform ComputeMeshTransform(const FCombatLevelPiece& Piece, float CellSize, const FBox& MeshBounds, float MeshYaw, const FVector& Offset, bool bScaleToFit)
+	FTransform ComputeMeshTransform(const FCombatLevelPiece& Piece, float CellSize, const FBox& MeshBounds, float MeshYaw, const FVector& Offset, bool bScaleToFit, double BaseHeight)
 	{
-		// Center of the footprint, or of the border line, in grid-local cm.
+		// Center of the footprint, of the border line or of the detail position, in grid-local cm.
 		FVector2D Center;
-		if (Piece.Layer == ECombatPieceLayer::Edge)
+		if (Piece.Layer == ECombatPieceLayer::Detail)
+		{
+			Center = Piece.GetDetailCenter(CellSize);
+		}
+		else if (Piece.Layer == ECombatPieceLayer::Edge)
 		{
 			const double HalfLength = FMath::Max(Piece.Size.X, 1) * 0.5;
 			Center = Piece.IsHorizontalEdge()
@@ -43,7 +54,7 @@ namespace CombatPieces
 		// Scale in the mesh's own axes. MeshYaw turns its length onto the piece's X: with a quarter turn the mesh's Y
 		// is the length. The height never scales.
 		FVector Scale = FVector::OneVector;
-		if (bScaleToFit)
+		if (bScaleToFit && Piece.Layer != ECombatPieceLayer::Detail)
 		{
 			const bool bSwapAxes = FMath::Abs(FMath::RoundToInt32(MeshYaw / 90.0)) % 2 == 1;
 			const FVector MeshSize = MeshBounds.GetSize();
@@ -56,20 +67,63 @@ namespace CombatPieces
 		}
 
 		// Yaw only, so the height of the bounds does not change: the bottom goes to Z = 0.
-		const FRotator Rotation(0.0, MeshYaw + 90.0 * Piece.Rotation, 0.0);
+		const FRotator Rotation(0.0, MeshYaw + 360.0 / GetRotationSteps(Piece.Layer) * Piece.Rotation, 0.0);
 		const FVector BoundsCenter = MeshBounds.GetCenter() * Scale;
 		const FVector Location = FVector(Center.X, Center.Y, 0.0)
 			- Rotation.RotateVector(FVector(BoundsCenter.X, BoundsCenter.Y, 0.0))
-			+ FVector(0.0, 0.0, -MeshBounds.Min.Z)
+			+ FVector(0.0, 0.0, BaseHeight - MeshBounds.Min.Z)
 			+ Rotation.RotateVector(Offset);
 		return FTransform(Rotation, Location, Scale);
+	}
+
+	int32 GetRotationSteps(ECombatPieceLayer Layer)
+	{
+		return Layer == ECombatPieceLayer::Detail ? 8 : 4;
+	}
+
+	double GetSurfaceHeight(const FBox& PieceBounds, float SurfaceHeight, const FVector2D& Point)
+	{
+		const bool bAbove = Point.X >= PieceBounds.Min.X && Point.X <= PieceBounds.Max.X && Point.Y >= PieceBounds.Min.Y && Point.Y <= PieceBounds.Max.Y;
+		if (!bAbove || SurfaceHeight == 0.f)
+		{
+			return 0.0;
+		}
+		return SurfaceHeight > 0.f ? SurfaceHeight : PieceBounds.Max.Z;
+	}
+
+	double FindDetailBaseHeight(const FCombatLevel& Level, const UCombatPieceCatalog& Catalog, const FCombatLevelPiece& Detail)
+	{
+		const int32 Index = Level.FindPieceAt(ECombatPieceLayer::Cell, Detail.Cell);
+		if (Index == INDEX_NONE)
+		{
+			return 0.0;
+		}
+		const FCombatLevelPiece& Below = Level.Pieces[Index];
+		const FCombatPieceDefinition* Definition = Catalog.Find(Below.Id);
+		const UStaticMesh* Mesh = Definition ? Definition->Mesh.Get() : nullptr;
+		if (!Mesh)
+		{
+			return 0.0;
+		}
+		const FBox MeshBounds = Mesh->GetBoundingBox();
+		const FTransform Transform = ComputeMeshTransform(Below, Level.CellSize, MeshBounds, Definition->MeshYaw, Definition->Offset, Definition->bScaleToFit);
+		return GetSurfaceHeight(MeshBounds.TransformBy(Transform), Definition->SurfaceHeight, Detail.GetDetailCenter(Level.CellSize));
 	}
 
 	FCombatLevelPiece PlaceAt(const FCombatPieceDefinition& Definition, const FVector2D& Local, int32 Rotation, float CellSize)
 	{
 		FCombatLevelPiece Piece = Definition.MakePiece(FIntPoint::ZeroValue, Rotation);
 		const FVector2D InCells = Local / FMath::Max(CellSize, 1.f);
-		if (Piece.Layer == ECombatPieceLayer::Edge)
+		if (Piece.Layer == ECombatPieceLayer::Detail)
+		{
+			// The cell under the point, and the detail position under it inside that cell.
+			Piece.Cell = FIntPoint(FMath::FloorToInt32(InCells.X), FMath::FloorToInt32(InCells.Y));
+			const int32 Grid = Piece.DetailGrid;
+			const int32 X = FMath::Clamp(FMath::FloorToInt32((InCells.X - Piece.Cell.X) * Grid), 0, Grid - 1);
+			const int32 Y = FMath::Clamp(FMath::FloorToInt32((InCells.Y - Piece.Cell.Y) * Grid), 0, Grid - 1);
+			Piece.Detail = X + Y * Grid;
+		}
+		else if (Piece.Layer == ECombatPieceLayer::Edge)
 		{
 			// The nearest border line across, and the start so that the piece's middle is at the point along it.
 			const double HalfLength = Piece.Size.X * 0.5;

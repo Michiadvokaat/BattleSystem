@@ -76,6 +76,14 @@ void ACombatGrid::ShowPiecePreview(const FCombatLevelPiece& Piece, float InCellS
 	const double Size = InCellSize;
 	TArray<FIntPoint> Cells;
 	Piece.GetCells(Cells);
+	if (Piece.Layer == ECombatPieceLayer::Detail)
+	{
+		// One small plate on its detail position instead of the whole cell.
+		const FVector2D Center = Piece.GetDetailCenter(InCellSize);
+		const double PlateSize = Size / FMath::Max(Piece.DetailGrid, 1) * 0.8;
+		PreviewMarks->AddInstance(FTransform(FRotator::ZeroRotator, FVector(Center.X, Center.Y, 3.0), FVector(PlateSize / 100.0, PlateSize / 100.0, 0.04)));
+		Cells.Reset();
+	}
 	for (const FIntPoint& Cell : Cells)
 	{
 		PreviewMarks->AddInstance(FTransform(FRotator::ZeroRotator, FVector((Cell.X + 0.5) * Size, (Cell.Y + 0.5) * Size, 3.0),
@@ -209,8 +217,10 @@ void ACombatGrid::ShowPieces(const FCombatLevel& Level)
 		Component->SetupAttachment(RootComponent);
 		Component->SetStaticMesh(Mesh);
 		Component->SetCollisionEnabled(ECollisionEnabled::NoCollision);
+		// Details stand on the Cell piece under them.
+		const double BaseHeight = Piece.Layer == ECombatPieceLayer::Detail ? CombatPieces::FindDetailBaseHeight(Level, *Catalog, Piece) : 0.0;
 		Component->SetRelativeTransform(CombatPieces::ComputeMeshTransform(Piece, Level.CellSize, Mesh->GetBoundingBox(),
-			Definition->MeshYaw, Definition->Offset, Definition->bScaleToFit));
+			Definition->MeshYaw, Definition->Offset, Definition->bScaleToFit, BaseHeight));
 		Component->RegisterComponent();
 		PieceComponents.Add(Component);
 	}
