@@ -223,6 +223,8 @@ private:
 	/** From SetLocomotionTuning. */
 	float DefinitionMoveSpeed = 0.f;
 	float LocomotionRate = 1.f;
+	/** The look's mesh scale, for the AnimBP's stride (1 without a look). */
+	FVector LookMeshScale = FVector::OneVector;
 	/** Seconds (animation time) standing still without a montage, and when the next idle break plays. */
 	float IdleTime = 0.f;
 	float NextIdleBreak = 0.f;

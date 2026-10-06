@@ -60,11 +60,12 @@ void UCombatAnimInstance::SetTuning(float InMoveSpeed, float InLocomotionRate)
 
 void UCombatAnimInstance::SetSpeed(float InSpeed)
 {
-	Speed = InSpeed;
-	LocomotionX = SpeedAxis == 0 ? InSpeed : 0.f;
-	LocomotionY = SpeedAxis == 1 ? InSpeed : 0.f;
-
 	const UCombatSettings* Settings = GetDefault<UCombatSettings>();
+	Speed = InSpeed;
+	StrideSpeed = ComputeStrideSpeed(InSpeed, MeshScale.Z, Settings->LocomotionScaleCompensation);
+	LocomotionX = SpeedAxis == 0 ? StrideSpeed : 0.f;
+	LocomotionY = SpeedAxis == 1 ? StrideSpeed : 0.f;
+
 	bIsMoving = InSpeed > Settings->LocomotionMovingThreshold;
 	SpeedRatio = MoveSpeed > 0.f ? InSpeed / MoveSpeed : 0.f;
 
@@ -78,8 +79,15 @@ void UCombatAnimInstance::SetSpeed(float InSpeed)
 		}
 	}
 	FindMovingSampleRange(SampleSpeeds, Settings->LocomotionMovingThreshold, SlowestSampleSpeed, FastestSampleSpeed);
-	LocomotionPlayRate = ComputeLocomotionPlayRate(InSpeed, Settings->LocomotionMovingThreshold, SlowestSampleSpeed, FastestSampleSpeed,
-		LocomotionRate, Settings->LocomotionMinPlayRate, Settings->LocomotionMaxPlayRate);
+	// Moving or not goes by the real speed; the stride by the speed at the standard size.
+	LocomotionPlayRate = bIsMoving ? ComputeLocomotionPlayRate(StrideSpeed, 0.f, SlowestSampleSpeed, FastestSampleSpeed,
+		LocomotionRate, Settings->LocomotionMinPlayRate, Settings->LocomotionMaxPlayRate) : 1.f;
+}
+
+float UCombatAnimInstance::ComputeStrideSpeed(float InSpeed, float HeightScale, float Compensation)
+{
+	const float Divisor = FMath::Lerp(1.f, HeightScale, FMath::Clamp(Compensation, 0.f, 1.f));
+	return Divisor > UE_KINDA_SMALL_NUMBER ? InSpeed / Divisor : InSpeed;
 }
 
 bool UCombatAnimInstance::FindMovingSampleRange(TConstArrayView<float> Speeds, float Threshold, float& OutSlowest, float& OutFastest)

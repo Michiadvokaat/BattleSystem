@@ -1998,6 +1998,14 @@ bool FCombatLocomotionPlayRateTest::RunTest(const FString& Parameters)
 	TestEqual(TEXT("Clamped to the maximum"), Rate(1000.f, 1.5f), 2.f);
 	TestEqual(TEXT("Clamped to the minimum"), Rate(20.f), 0.5f);
 	TestEqual(TEXT("Without moving samples only the unit rate counts"), Rate(300.f, 0.8f, 0.f, 0.f), 0.8f);
+
+	// A taller figure takes longer steps: at the standard size it walks slower.
+	TestEqual(TEXT("Standard size: the real speed"), UCombatAnimInstance::ComputeStrideSpeed(300.f, 1.f, 1.f), 300.f);
+	TestEqual(TEXT("120% tall: slower stride"), UCombatAnimInstance::ComputeStrideSpeed(300.f, 1.2f, 1.f), 250.f);
+	TestEqual(TEXT("80% tall: faster stride"), UCombatAnimInstance::ComputeStrideSpeed(300.f, 0.8f, 1.f), 375.f);
+	TestEqual(TEXT("No compensation: the real speed"), UCombatAnimInstance::ComputeStrideSpeed(300.f, 1.2f, 0.f), 300.f);
+	TestEqual(TEXT("Half compensation"), UCombatAnimInstance::ComputeStrideSpeed(330.f, 1.2f, 0.5f), 300.f);
+	TestEqual(TEXT("A zero scale is ignored"), UCombatAnimInstance::ComputeStrideSpeed(300.f, 0.f, 1.f), 300.f);
 	return true;
 }
 

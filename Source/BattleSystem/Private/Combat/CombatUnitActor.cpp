@@ -192,7 +192,8 @@ void ACombatUnitActor::InitAppearance(const UCombatAppearance* InAppearance, int
 		}
 	}
 	CharacterMesh->SetRelativeRotation(InAppearance->MeshRotation);
-	CharacterMesh->SetRelativeScale3D(InAppearance->GetMeshScale());
+	LookMeshScale = InAppearance->GetMeshScale();
+	CharacterMesh->SetRelativeScale3D(LookMeshScale);
 	AnimSet = InAppearance->AnimSet;
 	if (AnimSet && AnimSet->AnimClass)
 	{
@@ -412,6 +413,7 @@ void ACombatUnitActor::SetAnimationState(float MoveSpeed, float RateScale)
 		return;
 	}
 	AnimInstance->SetTuning(DefinitionMoveSpeed, LocomotionRate);
+	AnimInstance->SetMeshScale(LookMeshScale);
 	AnimInstance->SetSpeed(MoveSpeed);
 	// The parts follow the body's pose, so the body's rate is enough.
 	CharacterMesh->GlobalAnimRateScale = RateScale;

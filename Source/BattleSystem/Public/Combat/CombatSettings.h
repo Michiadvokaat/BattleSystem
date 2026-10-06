@@ -167,6 +167,13 @@ public:
 	float LocomotionMaxPlayRate = 2.f;
 
 	/**
+	 * How much a look's height scale changes the stride: locomotion uses Speed / Lerp(1, height scale, this), so a taller
+	 * figure takes longer steps. 0 = ignore the size, 1 = fully in proportion.
+	 */
+	UPROPERTY(Config, EditAnywhere, Category = "Animation", meta = (ClampMin = 0, ClampMax = 1))
+	float LocomotionScaleCompensation = 1.f;
+
+	/**
 	 * Tintable pieces (solid floors) get a dynamic instance of this material on every slot, with vector parameter
 	 * "Color" = the piece color. The engine's BasicShapeMaterial has it (the engine plane itself uses WorldGridMaterial).
 	 */

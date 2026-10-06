@@ -131,6 +131,17 @@ public:
 	UPROPERTY(BlueprintReadOnly, Category = "Combat")
 	float SpeedRatio = 0.f;
 
+	/** The look's mesh scale (UCombatAppearance::GetMeshScale); 1 without a look. */
+	UPROPERTY(BlueprintReadOnly, Category = "Combat")
+	FVector MeshScale = FVector::OneVector;
+
+	/**
+	 * Speed at the standard figure size (ComputeStrideSpeed): Speed / Lerp(1, MeshScale.Z, LocomotionScaleCompensation).
+	 * LocomotionX/Y and LocomotionPlayRate use it, so a taller figure walks with longer, slower steps.
+	 */
+	UPROPERTY(BlueprintReadOnly, Category = "Combat")
+	float StrideSpeed = 0.f;
+
 	/** The unit definition's LocomotionRate (tuning per unit type). */
 	UPROPERTY(BlueprintReadOnly, Category = "Combat")
 	float LocomotionRate = 1.f;
@@ -156,11 +167,16 @@ public:
 	/** Per unit type: the definition's MoveSpeed and LocomotionRate. */
 	void SetTuning(float InMoveSpeed, float InLocomotionRate);
 
-	/** Sets Speed, puts it on the speed axis (LocomotionX or LocomotionY) and updates the derived values. */
+	void SetMeshScale(const FVector& InMeshScale) { MeshScale = InMeshScale; }
+
+	/** Sets Speed and the derived values; StrideSpeed goes on the speed axis (LocomotionX or LocomotionY). */
 	void SetSpeed(float InSpeed);
 
 	/** Axis of a blend space named "Speed" (any case): 0 = X, 1 = Y; 0 if none or no blend space. */
 	static int32 FindSpeedAxis(const UBlendSpace* BlendSpace);
+
+	/** InSpeed / Lerp(1, HeightScale, Compensation); InSpeed if that divisor is not positive. */
+	static float ComputeStrideSpeed(float InSpeed, float HeightScale, float Compensation);
 
 	/** The slowest and fastest of Speeds above Threshold; false (both 0) if there is none. */
 	static bool FindMovingSampleRange(TConstArrayView<float> Speeds, float Threshold, float& OutSlowest, float& OutFastest);
