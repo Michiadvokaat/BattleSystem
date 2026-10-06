@@ -196,6 +196,8 @@ void ACombatUnitActor::InitAppearance(const UCombatAppearance* InAppearance, int
 	AnimSet = InAppearance->AnimSet;
 	if (AnimSet && AnimSet->AnimClass)
 	{
+		// In the editor world (ACombatAnimPreview) the pose only updates when asked to.
+		CharacterMesh->SetUpdateAnimationInEditor(!GetWorld()->IsGameWorld());
 		CharacterMesh->SetAnimInstanceClass(AnimSet->AnimClass);
 		AnimInstance = Cast<UCombatAnimInstance>(CharacterMesh->GetAnimInstance());
 		if (AnimInstance)
@@ -382,13 +384,34 @@ void ACombatUnitActor::SetStatusEffects(const TArray<FCombatStatusDisplay>& Icon
 	}
 }
 
+void ACombatUnitActor::SetLocomotionTuning(float InDefinitionMoveSpeed, float InLocomotionRate)
+{
+	DefinitionMoveSpeed = InDefinitionMoveSpeed;
+	LocomotionRate = InLocomotionRate;
+}
+
 void ACombatUnitActor::SetAnimationState(float MoveSpeed, float RateScale)
 {
 	AnimRateScale = RateScale;
+	if (!AnimSet)
+	{
+		return;
+	}
+	// A recompiled AnimBP (editor) replaces the anim instance, and the AnimSet's blend space can be swapped: pick both up again.
+	UCombatAnimInstance* Current = Cast<UCombatAnimInstance>(CharacterMesh->GetAnimInstance());
+	if (Current != AnimInstance || (Current && Current->Locomotion != AnimSet->Locomotion))
+	{
+		AnimInstance = Current;
+		if (AnimInstance)
+		{
+			AnimInstance->SetLocomotion(AnimSet->Locomotion);
+		}
+	}
 	if (!AnimInstance)
 	{
 		return;
 	}
+	AnimInstance->SetTuning(DefinitionMoveSpeed, LocomotionRate);
 	AnimInstance->SetSpeed(MoveSpeed);
 	// The parts follow the body's pose, so the body's rate is enough.
 	CharacterMesh->GlobalAnimRateScale = RateScale;

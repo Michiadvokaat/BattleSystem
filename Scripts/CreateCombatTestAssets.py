@@ -1,4 +1,4 @@
-"""Creates the combat test assets (units and setups) in /Game/Combat.
+"""Creates the combat assets: the unit definitions in /Game/Characters/Data and the cue table in /Game/Combat.
 
 Run headless with the editor closed:
     UnrealEditor-Cmd.exe BattleSystem.uproject -run=pythonscript -script="<abs path>/Scripts/CreateCombatTestAssets.py" -unattended -nullrhi
@@ -10,7 +10,8 @@ Set FORCE_UPDATE = True to overwrite existing assets with the values below.
 import unreal
 
 LOG_TAG = "[CombatAssets]"
-ASSET_PATH = "/Game/Combat"
+UNIT_PATH = "/Game/Characters/Data"
+CUE_PATH = "/Game/Combat"
 FORCE_UPDATE = False
 
 UNITS = {
@@ -71,17 +72,6 @@ PLAYER_ABILITIES = {
     ],
 }
 
-# Command scripts: (tick, unit ID, "MOVE", (x, y)) or (tick, unit ID, "ABILITY", ability index).
-# Unit IDs are the indices of the setup's entries (DA_Setup_Taunt: 0 tank, 1-2 archers, 3-5 Brutes).
-COMMAND_SCRIPTS = {
-    "DA_Script_TauntDemo": [
-        (20, 1, "MOVE", (10, 2)),
-        (20, 2, "MOVE", (10, 10)),
-        (40, 0, "ABILITY", 0),
-        (100, 0, "ABILITY", 0),
-    ],
-}
-
 # Cue tag -> debug color (R, G, B). VFX and sound can be set in the editor later.
 CUES = {
     "Cue.Fire": (1.0, 0.45, 0.0),
@@ -90,72 +80,20 @@ CUES = {
     "Cue.Taunt": (1.0, 0.0, 1.0),
 }
 
-# Setup asset -> [(unit asset, team, start cell)], on a 20x12 grid.
-SETUPS = {
-    "DA_Setup_Test": [
-        ("DA_Krijger", 0, (2, 3)),
-        ("DA_Krijger", 0, (2, 6)),
-        ("DA_Krijger", 0, (2, 9)),
-        ("DA_Brute", 1, (17, 4)),
-        ("DA_Brute", 1, (17, 8)),
-    ],
-    # Phase 2 check, with a wall at x = 6, y = 0..8 in Arena-01: the Krijger must go for B (3,10),
-    # which is farther as the crow flies but reachable sooner than A (9,2) behind the wall.
-    "DA_Setup_Wall": [
-        ("DA_Krijger", 0, (3, 2)),
-        ("DA_Brute", 1, (9, 2)),
-        ("DA_Brute", 1, (3, 10)),
-    ],
-    # Phase 3 check: the archer at (3,2) must walk around the wall before it can see and shoot the dummy.
-    "DA_Setup_Archer": [
-        ("DA_Boogschutter", 0, (3, 2)),
-        ("DA_Doelpop", 1, (9, 2)),
-    ],
-    # Phase 4 check: the outer Brutes go for the archers on the flanks until the tank taunts them.
-    "DA_Setup_Taunt": [
-        ("DA_Tank", 0, (10, 6)),
-        ("DA_Boogschutter", 0, (13, 1)),
-        ("DA_Boogschutter", 0, (13, 11)),
-        ("DA_Brute", 1, (17, 2)),
-        ("DA_Brute", 1, (17, 6)),
-        ("DA_Brute", 1, (17, 10)),
-    ],
-    # Phase 5 check: a mage's telegraphed fireball, a cleaving axeman and a rallying banner bearer.
-    "DA_Setup_AoE": [
-        ("DA_Krijger", 0, (11, 4)),
-        ("DA_Krijger", 0, (11, 6)),
-        ("DA_Krijger", 0, (11, 8)),
-        ("DA_Vaandeldrager", 0, (9, 6)),
-        ("DA_Boogschutter", 0, (8, 3)),
-        ("DA_Magier", 1, (18, 6)),
-        ("DA_Bijlman", 1, (16, 5)),
-        ("DA_Brute", 1, (16, 8)),
-    ],
-    "DA_Setup_Mixed": [
-        ("DA_Krijger", 0, (2, 3)),
-        ("DA_Krijger", 0, (2, 7)),
-        ("DA_Boogschutter", 0, (1, 5)),
-        ("DA_Boogschutter", 0, (1, 9)),
-        ("DA_Brute", 1, (17, 4)),
-        ("DA_Brute", 1, (17, 8)),
-    ],
-}
-
-
 def log(message):
     unreal.log(f"{LOG_TAG} {message}")
 
 
-def load_or_create(name, asset_class):
+def load_or_create(name, asset_class, path):
     """Returns (asset, should_fill)."""
-    full_path = f"{ASSET_PATH}/{name}"
+    full_path = f"{path}/{name}"
     if unreal.EditorAssetLibrary.does_asset_exist(full_path):
         log(f"{'Updating' if FORCE_UPDATE else 'Keeping'} {full_path}")
         return unreal.load_asset(full_path), FORCE_UPDATE
 
     factory = unreal.DataAssetFactory()
     factory.set_editor_property("data_asset_class", asset_class)
-    asset = unreal.AssetToolsHelpers.get_asset_tools().create_asset(name, ASSET_PATH, asset_class, factory)
+    asset = unreal.AssetToolsHelpers.get_asset_tools().create_asset(name, path, asset_class, factory)
     if not asset:
         raise RuntimeError(f"{LOG_TAG} Could not create {full_path}")
     log(f"Created {full_path}")
@@ -215,23 +153,11 @@ def make_attack(attack_values):
     return attack
 
 
-def make_command(tick, unit_id, kind, argument):
-    command = unreal.CombatCommand()
-    command.set_editor_property("tick", tick)
-    command.set_editor_property("unit_id", unit_id)
-    command.set_editor_property("type", getattr(unreal.CombatCommandType, kind))
-    if kind == "MOVE":
-        command.set_editor_property("target_cell", unreal.IntPoint(*argument))
-    else:
-        command.set_editor_property("ability_index", argument)
-    return command
-
-
 def main():
     definitions = {}
     to_save = []
     for asset_name, values in UNITS.items():
-        definition, should_fill = load_or_create(asset_name, unreal.CombatUnitDefinition)
+        definition, should_fill = load_or_create(asset_name, unreal.CombatUnitDefinition, UNIT_PATH)
         definitions[asset_name] = definition
         if not should_fill:
             continue
@@ -252,28 +178,7 @@ def main():
             if definition not in to_save:
                 to_save.append(definition)
 
-    for script_name, commands in COMMAND_SCRIPTS.items():
-        script, should_fill = load_or_create(script_name, unreal.CombatCommandScript)
-        if should_fill:
-            script.set_editor_property("commands", [make_command(*command) for command in commands])
-            to_save.append(script)
-
-    for setup_name, lineup in SETUPS.items():
-        setup, should_fill = load_or_create(setup_name, unreal.CombatSetup)
-        if not should_fill:
-            continue
-
-        entries = []
-        for asset_name, team, (x, y) in lineup:
-            entry = unreal.CombatSetupEntry()
-            entry.set_editor_property("definition", definitions[asset_name])
-            entry.set_editor_property("team", team)
-            entry.set_editor_property("start_cell", unreal.IntPoint(x, y))
-            entries.append(entry)
-        setup.set_editor_property("units", entries)
-        to_save.append(setup)
-
-    cue_table, should_fill = load_or_create("DA_CueTable", unreal.CombatCueTable)
+    cue_table, should_fill = load_or_create("DA_CueTable", unreal.CombatCueTable, CUE_PATH)
     make_cue_table(should_fill, cue_table)
     if should_fill:
         to_save.append(cue_table)

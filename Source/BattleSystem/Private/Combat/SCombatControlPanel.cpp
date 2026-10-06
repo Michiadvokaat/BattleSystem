@@ -524,7 +524,7 @@ FText SCombatControlPanel::GetStatusText() const
 	}
 
 	const FString Fight = FString::Printf(TEXT("%s%s, seed %d"), CombatSubsystem->IsPlayingReplay() ? TEXT("Replay: ") : TEXT(""),
-		*CombatSubsystem->GetCurrentSetupName(), CombatSubsystem->GetCurrentSeed());
+		*CombatSubsystem->GetCurrentSourceName(), CombatSubsystem->GetCurrentSeed());
 	if (!Simulation->IsFinished())
 	{
 		return FText::FromString(FString::Printf(TEXT("%s\nTick %d - %s"), *Fight, Simulation->GetTick(),

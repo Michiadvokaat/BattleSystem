@@ -1072,7 +1072,6 @@ bool FCombatReplayRoundTripTest::RunTest(const FString& Parameters)
 
 	FCombatReplay Replay;
 	Replay.Seed = 1234;
-	Replay.SetupPath = TEXT("/Game/Combat/DA_Setup_Test.DA_Setup_Test");
 	Replay.Settings = Settings;
 	Replay.FinalChecksum = CombatReplay::ChecksumToString(0xDEADBEEF);
 
@@ -1081,7 +1080,7 @@ bool FCombatReplayRoundTripTest::RunTest(const FString& Parameters)
 	FCombatReplay Loaded;
 	TestTrue(TEXT("Reads JSON"), CombatReplay::FromJson(Json, Loaded));
 	TestEqual(TEXT("Seed"), Loaded.Seed, 1234);
-	TestEqual(TEXT("Setup"), Loaded.SetupPath, Replay.SetupPath);
+	TestEqual(TEXT("At the current version"), Loaded.FormatVersion, FCombatReplay().FormatVersion);
 	TestEqual(TEXT("Checksum text"), Loaded.FinalChecksum, FString(TEXT("0xDEADBEEF")));
 	TestTrue(TEXT("Float settings are bit-exact"),
 		Loaded.Settings.ThreatDecayFactorPerTick == Settings.ThreatDecayFactorPerTick
@@ -1515,7 +1514,6 @@ bool FCombatLevelReplayTest::RunTest(const FString& Parameters)
 {
 	// The replay holds a full copy of the level, so the fight can be rebuilt from the replay alone.
 	FCombatReplay Replay;
-	Replay.bHasLevel = true;
 	Replay.Level = CombatTests::MakeTestLevel();
 	Replay.Seed = 9;
 
@@ -1523,7 +1521,7 @@ bool FCombatLevelReplayTest::RunTest(const FString& Parameters)
 	CombatReplay::ToJson(Replay, Json);
 	FCombatReplay Loaded;
 	TestTrue(TEXT("Reads JSON"), CombatReplay::FromJson(Json, Loaded));
-	TestTrue(TEXT("Has the level"), Loaded.bHasLevel);
+	TestEqual(TEXT("Has the level"), Loaded.Level.Name, Replay.Level.Name);
 	TestEqual(TEXT("Same pieces"), Loaded.Level.Pieces.Num(), Replay.Level.Pieces.Num());
 	TestEqual(TEXT("Same units"), Loaded.Level.Units.Num(), Replay.Level.Units.Num());
 
@@ -1970,6 +1968,36 @@ bool FCombatCameraMathTest::RunTest(const FString& Parameters)
 	TestTrue(TEXT("At the right point"), Hit.Equals(FVector(400.0, 0.0, 100.0), 0.01));
 	TestFalse(TEXT("A ray up misses"), CombatCamera::RayToPlane(FVector(0.0, 0.0, 500.0), FVector(0.0, 0.0, 1.0), 100.0, Hit));
 	TestFalse(TEXT("A level ray misses"), CombatCamera::RayToPlane(FVector(0.0, 0.0, 500.0), FVector(1.0, 0.0, 0.0), 100.0, Hit));
+	return true;
+}
+
+IMPLEMENT_SIMPLE_AUTOMATION_TEST(FCombatLocomotionPlayRateTest, "BattleSystem.Combat.LocomotionPlayRate",
+	EAutomationTestFlags::EditorContext | EAutomationTestFlags::ProductFilter)
+
+bool FCombatLocomotionPlayRateTest::RunTest(const FString& Parameters)
+{
+	// The samples of an idle (0), walk (150) and run (380) blend space on its speed axis.
+	float Slowest = -1.f;
+	float Fastest = -1.f;
+	const float Samples[] = { 0.f, 380.f, 150.f };
+	TestTrue(TEXT("Finds moving samples"), UCombatAnimInstance::FindMovingSampleRange(Samples, 5.f, Slowest, Fastest));
+	TestTrue(TEXT("Slowest and fastest moving sample"), Slowest == 150.f && Fastest == 380.f);
+	const float IdleOnly[] = { 0.f, 3.f };
+	TestFalse(TEXT("Only idle samples"), UCombatAnimInstance::FindMovingSampleRange(IdleOnly, 5.f, Slowest, Fastest));
+	TestTrue(TEXT("Without moving samples both are 0"), Slowest == 0.f && Fastest == 0.f);
+
+	auto Rate = [](float Speed, float UnitRate = 1.f, float Slow = 150.f, float Fast = 380.f)
+	{
+		return UCombatAnimInstance::ComputeLocomotionPlayRate(Speed, 5.f, Slow, Fast, UnitRate, 0.5f, 2.f);
+	};
+	TestEqual(TEXT("Standing still: 1, also with a unit rate"), Rate(0.f, 1.5f), 1.f);
+	TestEqual(TEXT("Between the samples the blend space blends the stride: 1"), Rate(300.f), 1.f);
+	TestEqual(TEXT("Faster than the run sample: speeds up"), Rate(475.f), 1.25f);
+	TestEqual(TEXT("Slower than the walk sample: slows down"), Rate(75.f), 0.5f);
+	TestEqual(TEXT("The unit rate multiplies"), Rate(300.f, 1.2f), 1.2f);
+	TestEqual(TEXT("Clamped to the maximum"), Rate(1000.f, 1.5f), 2.f);
+	TestEqual(TEXT("Clamped to the minimum"), Rate(20.f), 0.5f);
+	TestEqual(TEXT("Without moving samples only the unit rate counts"), Rate(300.f, 0.8f, 0.f, 0.f), 0.8f);
 	return true;
 }
 

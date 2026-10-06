@@ -1,7 +1,6 @@
 // Copyright Epic Games, Inc. All Rights Reserved.
 
 #include "Combat/CombatGrid.h"
-#include "Combat/CombatObstacle.h"
 #include "Combat/CombatPieces.h"
 #include "Combat/CombatSettings.h"
 #include "Combat/CombatSubsystem.h"
@@ -174,7 +173,6 @@ void ACombatGrid::ApplyLevel(const FCombatLevel& Level)
 {
 	bHasLevel = true;
 	Level.ToGridData(LevelGridData);
-	SetObstaclesHidden(true);
 	ShowGrid(LevelGridData);
 	// Floor pieces lie at Z = 0: the grid's floor goes just below them (cells without a floor piece still show it).
 	if (Level.Pieces.ContainsByPredicate([](const FCombatLevelPiece& Piece) { return Piece.Layer == ECombatPieceLayer::Floor; }))
@@ -568,7 +566,6 @@ void ACombatGrid::ClearLevel()
 	}
 	bHasLevel = false;
 	ClearPieces();
-	SetObstaclesHidden(false);
 	ShowGrid(GetGridData());
 }
 
@@ -583,14 +580,6 @@ void ACombatGrid::ShowGrid(const FCombatGridData& Data)
 	{
 		FlushPersistentDebugLines(GetWorld());
 		DrawDebugCells(Data);
-	}
-}
-
-void ACombatGrid::SetObstaclesHidden(bool bHideObstacles)
-{
-	for (TActorIterator<ACombatObstacle> It(GetWorld()); It; ++It)
-	{
-		It->SetActorHiddenInGame(bHideObstacles);
 	}
 }
 
@@ -635,30 +624,6 @@ ACombatGrid* ACombatGrid::Find(const UWorld* World)
 void ACombatGrid::BuildCells()
 {
 	GridData.Init(Width, Height, CellSize);
-
-	// Flags are OR-ed, so the iteration order of obstacles does not matter.
-	TArray<FIntPoint> Footprint;
-	for (TActorIterator<ACombatObstacle> It(GetWorld()); It; ++It)
-	{
-		const ACombatObstacle* Obstacle = *It;
-		ECombatCellFlags Flags = ECombatCellFlags::None;
-		if (Obstacle->bBlocksWalkability)
-		{
-			Flags |= ECombatCellFlags::Blocked;
-		}
-		if (Obstacle->bBlocksSight)
-		{
-			Flags |= ECombatCellFlags::BlocksSight;
-		}
-
-		Footprint.Reset();
-		Obstacle->GetFootprint(*this, Footprint);
-		for (const FIntPoint& Cell : Footprint)
-		{
-			GridData.AddFlags(Cell, Flags);
-		}
-	}
-
 	bCellsBuilt = true;
 }
 

@@ -29,7 +29,8 @@ TArray<USkeletalMesh*> UCombatAppearance::PickMeshes(int32 Seed) const
 
 bool UCombatMeshMergeCache::DoesSupportWorldType(const EWorldType::Type WorldType) const
 {
-	return WorldType == EWorldType::Game || WorldType == EWorldType::PIE;
+	// Editor: the figures of an ACombatAnimPreview.
+	return WorldType == EWorldType::Game || WorldType == EWorldType::PIE || WorldType == EWorldType::Editor;
 }
 
 USkeletalMesh* UCombatMeshMergeCache::GetMergedMesh(const TArray<USkeletalMesh*>& Parts)

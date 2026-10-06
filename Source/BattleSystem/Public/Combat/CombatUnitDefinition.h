@@ -181,6 +181,13 @@ public:
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Presentation")
 	TObjectPtr<UCombatAppearance> Appearance;
 
+	/**
+	 * Multiplies the locomotion play rate the AnimBP gets (UCombatAnimInstance::LocomotionPlayRate): above 1 the steps go
+	 * faster, below 1 slower. Presentation only, not part of the fight. See it live with an ACombatAnimPreview.
+	 */
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Presentation", meta = (ClampMin = 0.1, ClampMax = 4))
+	float LocomotionRate = 1.f;
+
 	/** Converts this definition to simulation stats, with times rounded to ticks of the given rate. */
 	FCombatUnitStats ToSimStats(int32 TickRate) const;
 };

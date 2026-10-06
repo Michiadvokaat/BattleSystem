@@ -1,4 +1,4 @@
-"""Creates the see-through material of the LevelDesigner's unit ghost (/Game/Combat/M_DesignGhost).
+"""Creates the see-through material of the LevelDesigner's unit ghost (/Game/Materials/M_DesignGhost).
 
 Run headless with the editor closed:
     UnrealEditor-Cmd.exe BattleSystem.uproject -run=pythonscript -script="<abs path>/Scripts/CreateDesignGhostMaterial.py" -unattended -nullrhi -nosplash
@@ -11,7 +11,7 @@ existing material is rebuilt. It is referenced by UCombatSettings::DesignGhostMa
 import unreal
 
 LOG_TAG = "[DesignGhost]"
-ASSET_PATH = "/Game/Combat"
+ASSET_PATH = "/Game/Materials"
 ASSET_NAME = "M_DesignGhost"
 EDGE_BOOST = 1.5
 

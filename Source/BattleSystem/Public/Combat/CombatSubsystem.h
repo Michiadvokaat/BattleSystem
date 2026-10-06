@@ -18,7 +18,6 @@ class ACombatProjectileActor;
 class UCombatCommandScript;
 class UCombatCueTable;
 class ACombatUnitActor;
-class UCombatSetup;
 class UCombatUnitDefinition;
 
 BATTLESYSTEM_API DECLARE_LOG_CATEGORY_EXTERN(LogCombat, Log, All);
@@ -34,20 +33,19 @@ enum class ECombatDesignTool : uint8
 	Spawn,
 };
 
-/** What a fight is built from: a setup asset on the arena's own grid, or a level from the LevelDesigner. */
+/** What a fight is built from: a level from the LevelDesigner (unset: no fight). */
 struct FCombatFightSource
 {
-	const UCombatSetup* Setup = nullptr;
 	TOptional<FCombatLevel> Level;
 
-	bool IsValid() const { return Setup != nullptr || Level.IsSet(); }
-	/** "DA_Setup_Test" or "Level: Name". */
+	bool IsValid() const { return Level.IsSet(); }
+	/** "Level: Name". */
 	FString GetName() const;
 };
 
 /**
- * Thin layer between the world and FCombatSimulation: builds a fight from the level's ACombatGrid and a
- * UCombatSetup, runs fixed steps from an accumulator, and drives the ACombatUnitActors.
+ * Thin layer between the world and FCombatSimulation: builds a fight from a LevelDesigner level (shown on the
+ * world's ACombatGrid), runs fixed steps from an accumulator, and drives the ACombatUnitActors.
  * Also saves and plays replays, runs batches, and registers the Combat.* console commands.
  */
 UCLASS()
@@ -60,11 +58,7 @@ public:
 	virtual TStatId GetStatId() const override;
 	virtual void Deinitialize() override;
 
-	/** Starts a fight with presentation, replacing any running fight. Uses the project settings and the taunt range override. */
-	bool StartFight(int32 Seed, const UCombatSetup* Setup);
-	bool StartFightWithSettings(int32 Seed, const UCombatSetup* Setup, const FCombatSimSettings& Settings,
-		TConstArrayView<FCombatCommand> Commands = {});
-	/** Starts a fight from a setup or a level. A level is shown in the arena (grid, blocks) and the camera fits it. */
+	/** Starts a fight with presentation from a level, replacing any running fight. The level is shown in the arena and the camera fits it. */
 	bool StartFightFromSource(int32 Seed, const FCombatFightSource& Source, const FCombatSimSettings& Settings,
 		TConstArrayView<FCombatCommand> Commands = {});
 
@@ -110,15 +104,15 @@ public:
 	float GetTimeScale() const { return TimeScale; }
 
 	/**
-	 * Range (cm, edge to edge) for every taunt in fights started with StartFight; 0 = the Range from the Data Asset.
+	 * Range (cm, edge to edge) for every taunt in fights started from the game; 0 = the Range from the Data Asset.
 	 * Applied at the next start, so a running fight never changes.
 	 */
 	void SetTauntRangeOverride(float InRange) { TauntRangeOverride = FMath::Max(InRange, 0.f); }
 	float GetTauntRangeOverride() const { return TauntRangeOverride; }
 
-	/** Seed and setup name of the current (or last) fight. */
+	/** Seed and source name ("Level: Name") of the current (or last) fight. */
 	int32 GetCurrentSeed() const { return CurrentSeed; }
-	const FString& GetCurrentSetupName() const { return CurrentSetupName; }
+	const FString& GetCurrentSourceName() const { return CurrentSourceName; }
 
 	/** Player selection and targeting: presentation state only; it reaches the fight through IssueCommand. */
 	int32 GetPlayerTeam() const;
@@ -315,31 +309,16 @@ public:
 	/** Asset names of all UCombatUnitDefinition assets, sorted. */
 	static TArray<FString> GetAllUnitDefinitionNames();
 
-	/** Asset names of all UCombatSetup assets, sorted. */
-	static TArray<FString> GetAllSetupNames();
-
-	/**
-	 * Builds a simulation config from a setup, using the world's ACombatGrid or, without one (or without
-	 * a world), the fallback grid from UCombatSettings. Entries without a definition or outside the grid
-	 * are skipped with a warning. OutDefinitions gets the definition per unit ID.
-	 */
-	static bool BuildSimConfig(UWorld* World, int32 Seed, const UCombatSetup& Setup, const FCombatSimSettings& Settings,
-		FCombatSimConfig& OutConfig, FVector& OutGridOrigin, TArray<const UCombatUnitDefinition*>* OutDefinitions = nullptr);
-
-	/** BuildSimConfig for a setup or a level (a level brings its own grid; the arena only gives the origin). */
+	/** Builds a simulation config from a level (it brings its own grid; the world's ACombatGrid only gives the origin). */
 	static bool BuildSimConfigFromSource(UWorld* World, int32 Seed, const FCombatFightSource& Source, const FCombatSimSettings& Settings,
 		FCombatSimConfig& OutConfig, FVector& OutGridOrigin, TArray<const UCombatUnitDefinition*>* OutDefinitions = nullptr,
 		TArray<int32>* OutRotations = nullptr);
 
-	/** Setup asset names, then "Level: <name>" for every saved level. */
-	static TArray<FString> GetAllSourceNames();
-	/** A name from GetAllSourceNames (or a setup name/path) to a fight source; levels are loaded from disk. */
+	/** A level name ("Name" or "Level: Name") to a fight source, loaded from Levels/; empty gives UCombatSettings::DefaultLevel. */
 	static bool ResolveSource(const FString& Name, FCombatFightSource& OutSource);
 	/** Finds a unit definition by asset name or object path. */
 	static const UCombatUnitDefinition* FindUnitDefinition(const FString& NameOrPath);
 
-	/** Finds a setup by asset name or object path. An empty string gives the default setup from UCombatSettings. */
-	static UCombatSetup* FindSetup(const FString& NameOrPath);
 	/** Finds a command script by asset name or object path. */
 	static UCombatCommandScript* FindCommandScript(const FString& NameOrPath);
 
@@ -368,7 +347,7 @@ private:
 	void ReportResult();
 	/** After each step: record a checkpoint, or compare it while a replay plays. */
 	void UpdateCheckpoints();
-	/** Shows the source's grid in the arena: a level (blocks, resized floor, fitted camera) or the arena's own. */
+	/** Shows the source's level in the arena (pieces, resized floor, fitted camera). */
 	void ShowSourceInArena(const FCombatFightSource& Source);
 	/** Moves the view camera straight above the shown grid, high enough to see all of it. */
 	/** The montage tag of a unit's attack: the definition's AnimationTag, else the attack type. */
@@ -433,9 +412,8 @@ private:
 	float TimeScale = 1.f;
 	float TauntRangeOverride = 0.f;
 	int32 CurrentSeed = 0;
-	FString CurrentSetupName;
-	FString CurrentSetupPath;
-	/** Set when the current fight comes from a level (copied into replays). */
+	FString CurrentSourceName;
+	/** The level of the current fight (copied into replays). */
 	TOptional<FCombatLevel> CurrentLevel;
 
 	/** The view camera and its transform as placed in the arena, remembered before it was first fitted or moved. */

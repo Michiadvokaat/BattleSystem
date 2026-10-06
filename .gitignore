@@ -26,9 +26,12 @@ Content/Collections/
 # Local Fab asset packs (kept out of the repo)
 Content/ZZ_FAB/
 
-# Local character assets (meshes, textures, materials; kept out of the repo)
-Content/Characters/
-Content/Materials/
+# Local character assets (meshes, textures, materials; kept out of the repo),
+# except the unit definitions (Characters/Data) and the LevelDesigner ghost material, which the game needs
+Content/Characters/*
+!Content/Characters/Data/
+Content/Materials/*
+!Content/Materials/M_DesignGhost.uasset
 Content/Textures/
 
 # Local environment assets (kept out of the repo)
@@ -42,3 +45,8 @@ Content/Meshes/
 
 # Screenshots for bug reports (local only)
 Docs/Screenshots/
+
+# Local files of the user, not in git
+/Content/Maps/School-01.umap
+/Content/Maps/School-Experiment.umap
+/Docs/Stappen.txt

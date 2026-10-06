@@ -11,7 +11,6 @@
 #include "Combat/CombatPieces.h"
 #include "Combat/CombatProjectileActor.h"
 #include "Combat/CombatSettings.h"
-#include "Combat/CombatSetup.h"
 #include "Combat/CombatTags.h"
 #include "Combat/CombatUnitActor.h"
 #include "Combat/CombatUnitDefinition.h"
@@ -111,26 +110,13 @@ bool UCombatSubsystem::DoesSupportWorldType(const EWorldType::Type WorldType) co
 	return WorldType == EWorldType::Game || WorldType == EWorldType::PIE;
 }
 
-bool UCombatSubsystem::StartFight(int32 Seed, const UCombatSetup* Setup)
-{
-	return StartFightWithSettings(Seed, Setup, GetCurrentSimSettings());
-}
-
 FString FCombatFightSource::GetName() const
 {
 	if (Level.IsSet())
 	{
 		return TEXT("Level: ") + Level->Name;
 	}
-	return Setup ? Setup->GetName() : FString();
-}
-
-bool UCombatSubsystem::StartFightWithSettings(int32 Seed, const UCombatSetup* Setup, const FCombatSimSettings& SimSettings,
-	TConstArrayView<FCombatCommand> Commands)
-{
-	FCombatFightSource Source;
-	Source.Setup = Setup;
-	return StartFightFromSource(Seed, Source, SimSettings, Commands);
+	return FString();
 }
 
 bool UCombatSubsystem::StartFightFromSource(int32 Seed, const FCombatFightSource& Source, const FCombatSimSettings& SimSettings,
@@ -146,7 +132,7 @@ bool UCombatSubsystem::StartFightFromSource(int32 Seed, const FCombatFightSource
 
 	if (!Source.IsValid())
 	{
-		UE_LOG(LogCombat, Error, TEXT("StartFight: no setup or level."));
+		UE_LOG(LogCombat, Error, TEXT("StartFight: no level."));
 		return false;
 	}
 	bDesignMode = false;
@@ -168,8 +154,7 @@ bool UCombatSubsystem::StartFightFromSource(int32 Seed, const FCombatFightSource
 	Accumulator = 0.0;
 	bPaused = false;
 	CurrentSeed = Seed;
-	CurrentSetupName = Source.GetName();
-	CurrentSetupPath = Source.Setup ? Source.Setup->GetPathName() : FString();
+	CurrentSourceName = Source.GetName();
 	CurrentLevel = Source.Level;
 	CurrentSettings = SimSettings;
 
@@ -198,14 +183,7 @@ bool UCombatSubsystem::SaveReplay(FString& OutMessage) const
 	FCombatReplay Replay;
 	Replay.SavedAt = FDateTime::Now().ToString();
 	Replay.BuildVersion = FApp::GetBuildVersion();
-	Replay.MapName = UWorld::RemovePIEPrefix(GetWorld()->GetMapName());
-	Replay.GridChecksum = CombatReplay::ChecksumToString(Simulation->GetGrid().ComputeChecksum());
-	Replay.SetupPath = CurrentSetupPath;
-	Replay.bHasLevel = CurrentLevel.IsSet();
-	if (CurrentLevel.IsSet())
-	{
-		Replay.Level = CurrentLevel.GetValue();
-	}
+	Replay.Level = CurrentLevel.GetValue();
 	Replay.Seed = CurrentSeed;
 	Replay.Settings = CurrentSettings;
 	Replay.Ticks = Simulation->GetTick();
@@ -217,7 +195,7 @@ bool UCombatSubsystem::SaveReplay(FString& OutMessage) const
 	Replay.CheckpointInterval = CheckpointInterval;
 	Replay.Checkpoints = Checkpoints;
 
-	const FString FileName = FString::Printf(TEXT("%s_%s_%d.json"), *FDateTime::Now().ToString(TEXT("%Y%m%d_%H%M%S")), *CurrentSetupName, CurrentSeed);
+	const FString FileName = FString::Printf(TEXT("%s_%s_%d.json"), *FDateTime::Now().ToString(TEXT("%Y%m%d_%H%M%S")), *CurrentSourceName, CurrentSeed);
 	const FString Path = CombatReplay::GetReplayDirectory() / FileName;
 	if (!CombatReplay::SaveToFile(Replay, Path))
 	{
@@ -241,19 +219,20 @@ bool UCombatSubsystem::PlayReplay(const FString& FileOrPath, FString& OutMessage
 		return false;
 	}
 
+	// Before version 4 replays could come from a setup asset instead of a level; those are gone.
+	if (Replay.FormatVersion < FCombatReplay().FormatVersion)
+	{
+		OutMessage = FString::Printf(TEXT("Replay %s is from an older format (version %d) and cannot be played."), *Path, Replay.FormatVersion);
+		UE_LOG(LogCombat, Error, TEXT("%s"), *OutMessage);
+		return false;
+	}
+
 	FCombatFightSource Source;
-	if (Replay.bHasLevel)
+	Source.Level = Replay.Level;
+	Source.Level->Normalize();
+	if (!StartFightFromSource(Replay.Seed, Source, Replay.Settings, Replay.Commands))
 	{
-		Source.Level = Replay.Level;
-		Source.Level->Normalize();
-	}
-	else
-	{
-		Source.Setup = LoadObject<UCombatSetup>(nullptr, *Replay.SetupPath);
-	}
-	if (!Source.IsValid() || !StartFightFromSource(Replay.Seed, Source, Replay.Settings, Replay.Commands))
-	{
-		OutMessage = FString::Printf(TEXT("Could not start the replay (%s)."), Replay.bHasLevel ? *(TEXT("level ") + Replay.Level.Name) : *Replay.SetupPath);
+		OutMessage = FString::Printf(TEXT("Could not start the replay (level %s)."), *Replay.Level.Name);
 		UE_LOG(LogCombat, Error, TEXT("%s"), *OutMessage);
 		return false;
 	}
@@ -270,14 +249,6 @@ bool UCombatSubsystem::PlayReplay(const FString& FileOrPath, FString& OutMessage
 	{
 		Warnings.Add(FString::Printf(TEXT("other build (%s)"), *Replay.BuildVersion));
 	}
-	if (Replay.MapName != UWorld::RemovePIEPrefix(GetWorld()->GetMapName()))
-	{
-		Warnings.Add(FString::Printf(TEXT("other map (%s)"), *Replay.MapName));
-	}
-	if (!Replay.bHasLevel && Replay.GridChecksum != CombatReplay::ChecksumToString(Simulation->GetGrid().ComputeChecksum()))
-	{
-		Warnings.Add(TEXT("the arena grid changed"));
-	}
 
 	OutMessage = FString::Printf(TEXT("Playing replay %s, seed %d, %d commands"), *Source.GetName(), Replay.Seed, Replay.Commands.Num());
 	if (!Warnings.IsEmpty())
@@ -292,7 +263,7 @@ bool UCombatSubsystem::RunBatch(const FCombatFightSource& Source, int32 Count, i
 {
 	if (!Source.IsValid())
 	{
-		OutSummary = TEXT("No setup or level for the batch.");
+		OutSummary = TEXT("No level for the batch.");
 		return false;
 	}
 	const bool bOk = RunBatchInWorld(GetWorld(), Source, Count, StartSeed, GetCurrentSimSettings(), bWriteCsv, OutSummary, {});
@@ -491,6 +462,10 @@ void UCombatSubsystem::SpawnUnitActor(const FCombatUnit& Unit)
 		{
 			// Same seed and unit ID, same look: a replay shows the same figures.
 			Actor->InitAppearance(Definition->Appearance, CombatSubsystemPrivate::GetLookSeed(CurrentSeed, Unit.Id));
+		}
+		if (Definition)
+		{
+			Actor->SetLocomotionTuning(Definition->MoveSpeed, Definition->LocomotionRate);
 		}
 	}
 	UnitActors.Add(Actor);
@@ -782,61 +757,6 @@ void UCombatSubsystem::ReportResult()
 	}
 }
 
-bool UCombatSubsystem::BuildSimConfig(UWorld* World, int32 Seed, const UCombatSetup& Setup, const FCombatSimSettings& SimSettings,
-	FCombatSimConfig& OutConfig, FVector& OutGridOrigin, TArray<const UCombatUnitDefinition*>* OutDefinitions)
-{
-	const UCombatSettings* Settings = GetDefault<UCombatSettings>();
-
-	if (ACombatGrid* Grid = ACombatGrid::Find(World))
-	{
-		OutConfig.Grid = Grid->GetGridData();
-		OutGridOrigin = Grid->GetActorLocation();
-	}
-	else
-	{
-		OutConfig.Grid.Init(Settings->FallbackGridSize.X, Settings->FallbackGridSize.Y, Settings->FallbackCellSize);
-		OutGridOrigin = FVector::ZeroVector;
-	}
-
-	OutConfig.Seed = Seed;
-	OutConfig.TickRate = SimSettings.TickRate;
-
-	OutConfig.Units.Reset();
-	for (int32 Index = 0; Index < Setup.Units.Num(); ++Index)
-	{
-		const FCombatSetupEntry& Entry = Setup.Units[Index];
-		if (!Entry.Definition)
-		{
-			UE_LOG(LogCombat, Warning, TEXT("%s: entry %d has no definition, skipped."), *Setup.GetName(), Index);
-			continue;
-		}
-		if (!OutConfig.Grid.IsWalkable(Entry.StartCell))
-		{
-			UE_LOG(LogCombat, Warning, TEXT("%s: entry %d starts in cell (%d,%d), which is outside the grid or blocked; skipped."),
-				*Setup.GetName(), Index, Entry.StartCell.X, Entry.StartCell.Y);
-			continue;
-		}
-
-		FCombatUnitSpawn& Spawn = OutConfig.Units.AddDefaulted_GetRef();
-		Spawn.Stats = Entry.Definition->ToSimStats(OutConfig.TickRate);
-		Spawn.Team = Entry.Team;
-		Spawn.StartCell = Entry.StartCell;
-		if (OutDefinitions)
-		{
-			OutDefinitions->Add(Entry.Definition);
-		}
-	}
-
-	if (OutConfig.Units.IsEmpty())
-	{
-		UE_LOG(LogCombat, Error, TEXT("%s: no valid units."), *Setup.GetName());
-		return false;
-	}
-
-	SimSettings.ApplyTo(OutConfig);
-	return true;
-}
-
 int32 UCombatSubsystem::GetPlayerTeam() const
 {
 	return GetDefault<UCombatSettings>()->PlayerTeam;
@@ -1101,7 +1021,7 @@ bool UCombatSubsystem::BuildSimConfigFromSource(UWorld* World, int32 Seed, const
 {
 	if (!Source.Level.IsSet())
 	{
-		return Source.Setup && BuildSimConfig(World, Seed, *Source.Setup, Settings, OutConfig, OutGridOrigin, OutDefinitions);
+		return false;
 	}
 
 	const ACombatGrid* Grid = ACombatGrid::Find(World);
@@ -1116,33 +1036,22 @@ bool UCombatSubsystem::BuildSimConfigFromSource(UWorld* World, int32 Seed, const
 	return true;
 }
 
-TArray<FString> UCombatSubsystem::GetAllSourceNames()
-{
-	TArray<FString> Names = GetAllSetupNames();
-	for (const FString& Level : CombatLevels::FindLevelNames())
-	{
-		Names.Add(TEXT("Level: ") + Level);
-	}
-	return Names;
-}
-
 bool UCombatSubsystem::ResolveSource(const FString& Name, FCombatFightSource& OutSource)
 {
 	OutSource = FCombatFightSource();
-	FString LevelName;
-	if (Name.Split(TEXT("Level: "), nullptr, &LevelName) && Name.StartsWith(TEXT("Level: ")))
+	FString LevelName = Name.StartsWith(TEXT("Level: ")) ? Name.RightChop(7) : Name;
+	if (LevelName.IsEmpty())
 	{
-		FCombatLevel Level;
-		if (!CombatLevels::Load(LevelName, Level))
-		{
-			UE_LOG(LogCombat, Error, TEXT("Level '%s' could not be loaded from %s."), *LevelName, *CombatLevels::GetDirectory());
-			return false;
-		}
-		OutSource.Level = Level;
-		return true;
+		LevelName = GetDefault<UCombatSettings>()->DefaultLevel;
 	}
-	OutSource.Setup = FindSetup(Name);
-	return OutSource.Setup != nullptr;
+	FCombatLevel Level;
+	if (LevelName.IsEmpty() || !CombatLevels::Load(LevelName, Level))
+	{
+		UE_LOG(LogCombat, Error, TEXT("Level '%s' could not be loaded from %s."), *LevelName, *CombatLevels::GetDirectory());
+		return false;
+	}
+	OutSource.Level = Level;
+	return true;
 }
 
 const UCombatUnitDefinition* UCombatSubsystem::FindUnitDefinition(const FString& NameOrPath)
@@ -2579,50 +2488,6 @@ UCombatCommandScript* UCombatSubsystem::FindCommandScript(const FString& NameOrP
 	return nullptr;
 }
 
-UCombatSetup* UCombatSubsystem::FindSetup(const FString& NameOrPath)
-{
-	if (NameOrPath.IsEmpty())
-	{
-		return GetDefault<UCombatSettings>()->DefaultSetup.LoadSynchronous();
-	}
-
-	if (NameOrPath.Contains(TEXT("/")))
-	{
-		return LoadObject<UCombatSetup>(nullptr, *NameOrPath);
-	}
-
-	IAssetRegistry& AssetRegistry = IAssetRegistry::GetChecked();
-	AssetRegistry.WaitForCompletion();
-
-	TArray<FAssetData> Assets;
-	AssetRegistry.GetAssetsByClass(UCombatSetup::StaticClass()->GetClassPathName(), Assets);
-	for (const FAssetData& Asset : Assets)
-	{
-		if (Asset.AssetName.ToString().Equals(NameOrPath, ESearchCase::IgnoreCase))
-		{
-			return Cast<UCombatSetup>(Asset.GetAsset());
-		}
-	}
-	return nullptr;
-}
-
-TArray<FString> UCombatSubsystem::GetAllSetupNames()
-{
-	IAssetRegistry& AssetRegistry = IAssetRegistry::GetChecked();
-	AssetRegistry.WaitForCompletion();
-
-	TArray<FAssetData> Assets;
-	AssetRegistry.GetAssetsByClass(UCombatSetup::StaticClass()->GetClassPathName(), Assets);
-
-	TArray<FString> Names;
-	for (const FAssetData& Asset : Assets)
-	{
-		Names.Add(Asset.AssetName.ToString());
-	}
-	Names.Sort();
-	return Names;
-}
-
 namespace CombatConsole
 {
 	/** Project settings, with the taunt range override of the world's subsystem if there is one. */
@@ -2654,31 +2519,29 @@ namespace CombatConsole
 		return true;
 	}
 
-	/** Removes a "level=<name>" argument and loads that level into OutSource. False if it is not found. */
+	/** Removes a "level=<name>" argument and loads that level (without one: the default level) into OutSource. False if it is not found. */
 	static bool ExtractLevel(TArray<FString>& Args, FCombatFightSource& OutSource)
 	{
+		FString Name;
 		for (int32 Index = 0; Index < Args.Num(); ++Index)
 		{
 			if (Args[Index].StartsWith(TEXT("level="), ESearchCase::IgnoreCase))
 			{
-				const FString Name = Args[Index].RightChop(6);
+				Name = Args[Index].RightChop(6);
 				Args.RemoveAt(Index);
-				return UCombatSubsystem::ResolveSource(TEXT("Level: ") + Name, OutSource);
+				break;
 			}
 		}
-		return true;
+		return UCombatSubsystem::ResolveSource(Name, OutSource);
 	}
 
-	/** Parses "<seed> [setup]". */
-	static bool ParseArgs(const TArray<FString>& Args, int32& OutSeed, UCombatSetup*& OutSetup)
+	/** Parses "[seed]"; anything after it (an old setup argument) is an error. */
+	static bool ParseSeed(const TArray<FString>& Args, const TCHAR* Command, int32& OutSeed)
 	{
 		OutSeed = Args.Num() > 0 ? FCString::Atoi(*Args[0]) : GetDefault<UCombatSettings>()->DefaultSeed;
-		const FString SetupArg = Args.Num() > 1 ? Args[1] : FString();
-
-		OutSetup = UCombatSubsystem::FindSetup(SetupArg);
-		if (!OutSetup)
+		if (Args.Num() > 1)
 		{
-			UE_LOG(LogCombat, Error, TEXT("Setup '%s' not found."), SetupArg.IsEmpty() ? TEXT("(default from Combat settings)") : *SetupArg);
+			UE_LOG(LogCombat, Error, TEXT("%s: unexpected argument '%s'. Fights come from levels: use level=<name>."), Command, *Args[1]);
 			return false;
 		}
 		return true;
@@ -2699,19 +2562,10 @@ namespace CombatConsole
 		{
 			return;
 		}
-		int32 Seed = GetDefault<UCombatSettings>()->DefaultSeed;
-		if (Source.Level.IsSet())
+		int32 Seed;
+		if (!ParseSeed(Args, TEXT("Combat.Start"), Seed))
 		{
-			Seed = Args.Num() > 0 ? FCString::Atoi(*Args[0]) : Seed;
-		}
-		else
-		{
-			UCombatSetup* Setup;
-			if (!ParseArgs(Args, Seed, Setup))
-			{
-				return;
-			}
-			Source.Setup = Setup;
+			return;
 		}
 		Subsystem->StartFightFromSource(Seed, Source, Subsystem->GetCurrentSimSettings());
 	}
@@ -2726,19 +2580,10 @@ namespace CombatConsole
 			return;
 		}
 
-		int32 Seed = GetDefault<UCombatSettings>()->DefaultSeed;
-		if (Source.Level.IsSet())
+		int32 Seed;
+		if (!ParseSeed(Args, TEXT("Combat.Simulate"), Seed))
 		{
-			Seed = Args.Num() > 0 ? FCString::Atoi(*Args[0]) : Seed;
-		}
-		else
-		{
-			UCombatSetup* Setup;
-			if (!ParseArgs(Args, Seed, Setup))
-			{
-				return;
-			}
-			Source.Setup = Setup;
+			return;
 		}
 
 		FCombatSimConfig Config;
@@ -2772,7 +2617,7 @@ namespace CombatConsole
 		}
 	}
 
-	/** Combat.Batch <count> [setup] [startseed] [csv] [script=<name>] */
+	/** Combat.Batch <count> [startseed] [csv] [level=<name>] [script=<name>] */
 	static void Batch(const TArray<FString>& InArgs, UWorld* World)
 	{
 		TArray<FString> Args = InArgs;
@@ -2797,17 +2642,11 @@ namespace CombatConsole
 			}
 		}
 
-		// With level=<name> there is no setup argument: <count> [startseed].
 		const int32 Count = Positional.Num() > 0 ? FCString::Atoi(*Positional[0]) : 100;
-		const int32 SeedArg = Source.Level.IsSet() ? 1 : 2;
-		const int32 StartSeed = Positional.Num() > SeedArg ? FCString::Atoi(*Positional[SeedArg]) : 1;
-		if (!Source.Level.IsSet())
+		const int32 StartSeed = Positional.Num() > 1 ? FCString::Atoi(*Positional[1]) : 1;
+		if (Positional.Num() > 2)
 		{
-			Source.Setup = UCombatSubsystem::FindSetup(Positional.Num() > 1 ? Positional[1] : FString());
-		}
-		if (!Source.IsValid())
-		{
-			UE_LOG(LogCombat, Error, TEXT("Combat.Batch: setup not found."));
+			UE_LOG(LogCombat, Error, TEXT("Combat.Batch: unexpected argument '%s'. Fights come from levels: use level=<name>."), *Positional[2]);
 			return;
 		}
 
@@ -2957,7 +2796,7 @@ namespace CombatConsole
 
 	static FAutoConsoleCommandWithWorldAndArgs BatchCommand(
 		TEXT("Combat.Batch"),
-		TEXT("Combat.Batch <count> [setup] [startseed] [csv] [level=<name>] [script=<name>]: runs fights headless (from a setup or a level, optionally all with the same command script) and reports win rates, durations and per unit type statistics. With level=, the start seed follows the count."),
+		TEXT("Combat.Batch <count> [startseed] [csv] [level=<name>] [script=<name>]: runs fights headless from a LevelDesigner level (default: DefaultLevel from the Combat settings), optionally all with the same command script, and reports win rates, durations and per unit type statistics."),
 		FConsoleCommandWithWorldAndArgsDelegate::CreateStatic(&Batch));
 
 	static FAutoConsoleCommandWithWorldAndArgs SaveReplayCommand(
@@ -2972,12 +2811,12 @@ namespace CombatConsole
 
 	static FAutoConsoleCommandWithWorldAndArgs StartCommand(
 		TEXT("Combat.Start"),
-		TEXT("Combat.Start <seed> [setup] [level=<name>]: starts a fight with presentation in the current level, from a setup or a LevelDesigner level."),
+		TEXT("Combat.Start [seed] [level=<name>]: starts a fight with presentation from a LevelDesigner level (default: DefaultLevel from the Combat settings)."),
 		FConsoleCommandWithWorldAndArgsDelegate::CreateStatic(&Start));
 
 	static FAutoConsoleCommandWithWorldAndArgs SimulateCommand(
 		TEXT("Combat.Simulate"),
-		TEXT("Combat.Simulate <seed> [setup] [level=<name>] [script=<name>]: runs a fight headless (from a setup or a level, optionally with a command script) and prints the outcome, duration and final checksum."),
+		TEXT("Combat.Simulate [seed] [level=<name>] [script=<name>]: runs a fight headless from a LevelDesigner level (default: DefaultLevel from the Combat settings), optionally with a command script, and prints the outcome, duration and final checksum."),
 		FConsoleCommandWithWorldAndArgsDelegate::CreateStatic(&Simulate));
 
 	static FAutoConsoleCommandWithWorldAndArgs StopCommand(

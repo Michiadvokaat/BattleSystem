@@ -4,7 +4,6 @@
 #include "Combat/CombatHUD.h"
 #include "Combat/CombatPlayerController.h"
 #include "Combat/CombatSettings.h"
-#include "Combat/CombatSetup.h"
 #include "Combat/CombatSubsystem.h"
 #include "Engine/World.h"
 
@@ -17,7 +16,7 @@ ACombatGameMode::ACombatGameMode()
 
 void ACombatGameMode::StartPlay()
 {
-	// All actors (including the grid and obstacles) have begun play after this.
+	// All actors (including the grid) have begun play after this.
 	Super::StartPlay();
 
 	const UCombatSettings* Settings = GetDefault<UCombatSettings>();
@@ -27,12 +26,12 @@ void ACombatGameMode::StartPlay()
 	}
 
 	UCombatSubsystem* Subsystem = GetWorld()->GetSubsystem<UCombatSubsystem>();
-	UCombatSetup* Setup = UCombatSubsystem::FindSetup(FString());
-	if (!Subsystem || !Setup)
+	if (!Subsystem)
 	{
-		UE_LOG(LogCombat, Warning, TEXT("Auto-start skipped: no default setup in Project Settings > Game > Combat."));
 		return;
 	}
 
-	Subsystem->StartFight(Settings->DefaultSeed, Setup);
+	// The default level, as the LevelDesigner and the control panel get it.
+	Subsystem->EnsureDesignLevel();
+	Subsystem->PlayDesignLevel(Settings->DefaultSeed);
 }

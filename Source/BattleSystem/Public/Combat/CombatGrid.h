@@ -30,7 +30,7 @@ class UStaticMeshComponent;
 /**
  * The arena grid, placed by hand (one per level). The actor location is the corner of cell (0,0);
  * the grid lies in the XY plane and ignores actor rotation and scale.
- * Cell flags come from the ACombatObstacles in the level and do not change during a fight.
+ * Without a level it shows its own empty Width x Height grid; fights always come from a level (ApplyLevel).
  */
 UCLASS()
 class BATTLESYSTEM_API ACombatGrid : public AActor
@@ -53,15 +53,15 @@ public:
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Grid|Debug")
 	bool bDrawDebugCells = true;
 
-	/** The arena's own grid with obstacle flags, built on first use (also while a level is shown). */
+	/** The arena's own empty grid, built on first use (also while a level is shown). */
 	const FCombatGridData& GetGridData();
 
 	/**
-	 * Shows a level (LevelDesigner) instead of the arena's own size and obstacles: the floor resizes, walls,
-	 * hedges and water get blocks, and the placed obstacles are hidden. Fights from a level use the level's grid.
+	 * Shows a level (LevelDesigner) instead of the arena's own size: the floor resizes and the level's pieces are shown.
+	 * Fights use the level's grid.
 	 */
 	void ApplyLevel(const FCombatLevel& Level);
-	/** Back to the arena's own size and obstacles. */
+	/** Back to the arena's own size. */
 	void ClearLevel();
 	bool HasLevel() const { return bHasLevel; }
 	/** Grid shown right now: the level's, or the arena's own. */
@@ -109,7 +109,6 @@ private:
 	/** Resizes the floor to a grid and redraws the debug cells for it. */
 	void ShowGrid(const FCombatGridData& Data);
 	void DrawDebugCells(const FCombatGridData& Data) const;
-	void SetObstaclesHidden(bool bHideObstacles);
 
 	UPROPERTY(VisibleAnywhere, Category = "Grid")
 	TObjectPtr<UStaticMeshComponent> FloorMesh;

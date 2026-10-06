@@ -1,6 +1,6 @@
 # Ontwerp: autobattle-gevechtssysteem
 
-Status: fase 1 t/m 5 klaar (2026-10-03). Fase 6 (navigatielaag) klaar (2026-10-05). Dit document is zelfstandig: het gaat uit van een **leeg Unreal Engine 5 C++-project** zonder bestaande gameplaycode. Werk het bij als besluiten veranderen of een fase klaar is (zet dan "Status" en de tabel "Besluiten" bij).
+Status: fase 1 t/m 5 klaar (2026-10-03). Fase 6 (navigatielaag) klaar (2026-10-05). Sinds 2026-10-06 komen gevechten alleen uit LevelDesigner-levels: `UCombatSetup`, de opstellingen en `ACombatObstacle` uit fase 1 en 2 zijn vervallen (zie Besluiten). Dit document is zelfstandig: het gaat uit van een **leeg Unreal Engine 5 C++-project** zonder bestaande gameplaycode. Werk het bij als besluiten veranderen of een fase klaar is (zet dan "Status" en de tabel "Besluiten" bij).
 
 In dit document staat `<Module>` voor de naam van de gamemodule van het project. Alle code komt in `Source/<Module>/Public|Private/Combat/`.
 
@@ -200,9 +200,9 @@ Elke fase levert iets op dat je kunt spelen en testen. Nieuwe C++-klassen vereis
 | AoE-vormen | Cirkel op doel, cirkel rond aanvaller, kegel; telegraph op vaste plek, geen ontwijken | Alleen cirkels; ontwijk-AI |
 | Friendly fire | Per aanval (bAffectsEnemies/bAffectsAllies) | Altijd alleen vijanden |
 | Modifiers | Snelheid, uitgedeelde en ontvangen schade (per stack) | Later |
-| Replay | JSON met setup-pad, seed, build, sim-instellingen en eind-checksum | USaveGame; volledig zelfstandige snapshot van unit-stats |
+| Replay | JSON met een kopie van het level, seed, build, sim-instellingen, commando-log en eind-checksum (tot 2026-10-06 ook met setup-pad) | USaveGame; volledig zelfstandige snapshot van unit-stats |
 | Spelersinvoer | Commando's per unit (verplaatsen naar cel, spelersvaardigheid) met vaste vertraging (3 ticks), in een commando-log dat in de replay staat | Directe ingrepen in de simulatie |
 | Verplaatsen vs. taunt | Het commando van de speler wint | Taunt wint |
 | Spelersvaardigheden | Per unit-type in de Data Asset, zonder cooldown | Vaste vaardigheid voor iedere unit |
-| Levels (LevelDesigner) | JSON in Levels/ (in git): grid, muur/heg/water, units; vervangt grid + opstelling van de arena | Data Assets |
+| Levels (LevelDesigner) | JSON in Levels/ (in git): grid, pieces, units, golven; de enige gevechtsbron (sinds 2026-10-06; `UCombatSetup` en `ACombatObstacle` vervallen), het Combat-venster speelt het level uit de LevelDesigner | Data Assets; setups naast levels |
 | Replay en level | Volledige kopie van het level in de replay | Verwijzing + checksum |

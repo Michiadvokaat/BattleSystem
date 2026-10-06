@@ -3,6 +3,7 @@
 #include "Combat/CombatAnimation.h"
 #include "Animation/AnimMontage.h"
 #include "Animation/BlendSpace.h"
+#include "Combat/CombatSettings.h"
 
 UAnimMontage* UCombatAnimSet::FindMontage(FGameplayTag Tag) const
 {
@@ -51,11 +52,69 @@ void UCombatAnimInstance::SetLocomotion(UBlendSpace* InLocomotion)
 	SetSpeed(Speed);
 }
 
+void UCombatAnimInstance::SetTuning(float InMoveSpeed, float InLocomotionRate)
+{
+	MoveSpeed = InMoveSpeed;
+	LocomotionRate = InLocomotionRate;
+}
+
 void UCombatAnimInstance::SetSpeed(float InSpeed)
 {
 	Speed = InSpeed;
 	LocomotionX = SpeedAxis == 0 ? InSpeed : 0.f;
 	LocomotionY = SpeedAxis == 1 ? InSpeed : 0.f;
+
+	const UCombatSettings* Settings = GetDefault<UCombatSettings>();
+	bIsMoving = InSpeed > Settings->LocomotionMovingThreshold;
+	SpeedRatio = MoveSpeed > 0.f ? InSpeed / MoveSpeed : 0.f;
+
+	// The samples are read every frame, so a blend space edited in the editor counts at once (a few samples).
+	TArray<float, TInlineAllocator<8>> SampleSpeeds;
+	if (Locomotion)
+	{
+		for (const FBlendSample& Sample : Locomotion->GetBlendSamples())
+		{
+			SampleSpeeds.Add(Sample.SampleValue[SpeedAxis]);
+		}
+	}
+	FindMovingSampleRange(SampleSpeeds, Settings->LocomotionMovingThreshold, SlowestSampleSpeed, FastestSampleSpeed);
+	LocomotionPlayRate = ComputeLocomotionPlayRate(InSpeed, Settings->LocomotionMovingThreshold, SlowestSampleSpeed, FastestSampleSpeed,
+		LocomotionRate, Settings->LocomotionMinPlayRate, Settings->LocomotionMaxPlayRate);
+}
+
+bool UCombatAnimInstance::FindMovingSampleRange(TConstArrayView<float> Speeds, float Threshold, float& OutSlowest, float& OutFastest)
+{
+	OutSlowest = 0.f;
+	OutFastest = 0.f;
+	bool bFound = false;
+	for (const float SampleSpeed : Speeds)
+	{
+		if (SampleSpeed > Threshold)
+		{
+			OutSlowest = bFound ? FMath::Min(OutSlowest, SampleSpeed) : SampleSpeed;
+			OutFastest = bFound ? FMath::Max(OutFastest, SampleSpeed) : SampleSpeed;
+			bFound = true;
+		}
+	}
+	return bFound;
+}
+
+float UCombatAnimInstance::ComputeLocomotionPlayRate(float InSpeed, float Threshold, float Slowest, float Fastest, float Rate, float MinRate, float MaxRate)
+{
+	if (InSpeed <= Threshold)
+	{
+		return 1.f;
+	}
+	float Base = 1.f;
+	if (Fastest > 0.f && InSpeed > Fastest)
+	{
+		Base = InSpeed / Fastest;
+	}
+	else if (Slowest > 0.f && InSpeed < Slowest)
+	{
+		Base = InSpeed / Slowest;
+	}
+	return FMath::Clamp(Base * Rate, MinRate, FMath::Max(MinRate, MaxRate));
 }
 
 int32 UCombatAnimInstance::FindSpeedAxis(const UBlendSpace* BlendSpace)

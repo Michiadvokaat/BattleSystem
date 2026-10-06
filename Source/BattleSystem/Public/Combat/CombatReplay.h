@@ -49,18 +49,12 @@ struct BATTLESYSTEM_API FCombatReplay
 {
 	GENERATED_BODY()
 
-	/** 1 = no commands; 2 = with the command log and checkpoints; 3 = can hold a level. */
-	UPROPERTY() int32 FormatVersion = 3;
+	/** 1 = no commands; 2 = with the command log and checkpoints; 3 = can hold a level; 4 = always a level (no setup assets). Older ones do not play. */
+	UPROPERTY() int32 FormatVersion = 4;
 	UPROPERTY() FString SavedAt;
 	/** Engine build; a replay is only guaranteed identical on the same build. */
 	UPROPERTY() FString BuildVersion;
-	UPROPERTY() FString MapName;
-	/** CRC32 (hex) of the arena grid; a different value means the arena changed. */
-	UPROPERTY() FString GridChecksum;
-	/** Object path of the UCombatSetup (fights from a setup asset). */
-	UPROPERTY() FString SetupPath;
-	/** Fights from a level: a full copy of the level, so the replay stays identical when the level file changes. */
-	UPROPERTY() bool bHasLevel = false;
+	/** A full copy of the fight's level, so the replay stays identical when the level file changes. */
 	UPROPERTY() FCombatLevel Level;
 	UPROPERTY() int32 Seed = 0;
 	UPROPERTY() FCombatSimSettings Settings;

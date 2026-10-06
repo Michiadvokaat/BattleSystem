@@ -10,7 +10,6 @@
 class UCombatCueTable;
 class UMaterialInterface;
 class UCombatPieceCatalog;
-class UCombatSetup;
 
 /** How an active effect is shown on a unit. */
 USTRUCT()
@@ -127,24 +126,16 @@ public:
 	UPROPERTY(Config, EditAnywhere, Category = "Arena")
 	bool bAutoStartFight = false;
 
-	/** Setup used by the auto-start and by Combat.Start/Combat.Simulate without a setup argument (the Combat panel plays the LevelDesigner level). */
-	UPROPERTY(Config, EditAnywhere, Category = "Arena")
-	TSoftObjectPtr<UCombatSetup> DefaultSetup;
-
-	/** LevelDesigner level (Levels/<name>.json, without .json) loaded when play starts; the Combat panel plays it. Empty or missing: a new empty level. */
+	/**
+	 * LevelDesigner level (Levels/<name>.json, without .json) loaded when play starts: the control panel and the auto-start
+	 * play it, and the Combat.* commands without level= use it. Empty or missing: a new empty level (the commands fail).
+	 */
 	UPROPERTY(Config, EditAnywhere, Category = "Arena")
 	FString DefaultLevel;
 
 	/** Seed used by the auto-start. */
 	UPROPERTY(Config, EditAnywhere, Category = "Arena")
 	int32 DefaultSeed = 42;
-
-	/** Grid used by Combat.Simulate when the current level has no ACombatGrid. */
-	UPROPERTY(Config, EditAnywhere, Category = "Arena")
-	FIntPoint FallbackGridSize = FIntPoint(20, 12);
-
-	UPROPERTY(Config, EditAnywhere, Category = "Arena", meta = (ClampMin = 10, Units = "cm"))
-	float FallbackCellSize = 100.f;
 
 	/** Maps cue tags to VFX, sound and debug colors. */
 	UPROPERTY(Config, EditAnywhere, Category = "Presentation")
@@ -159,10 +150,21 @@ public:
 	 * every material of the unit; vector parameter Color gets the team color, scalar Opacity DesignGhostOpacity.
 	 */
 	UPROPERTY(Config, EditAnywhere, Category = "Presentation")
-	TSoftObjectPtr<UMaterialInterface> DesignGhostMaterial = TSoftObjectPtr<UMaterialInterface>(FSoftObjectPath(TEXT("/Game/Combat/M_DesignGhost.M_DesignGhost")));
+	TSoftObjectPtr<UMaterialInterface> DesignGhostMaterial = TSoftObjectPtr<UMaterialInterface>(FSoftObjectPath(TEXT("/Game/Materials/M_DesignGhost.M_DesignGhost")));
 
 	UPROPERTY(Config, EditAnywhere, Category = "Presentation", meta = (ClampMin = 0, ClampMax = 1))
 	float DesignGhostOpacity = 0.45f;
+
+	/** Below this speed a unit counts as standing still for its AnimBP (UCombatAnimInstance::bIsMoving). */
+	UPROPERTY(Config, EditAnywhere, Category = "Animation", meta = (ClampMin = 0, Units = "cm/s"))
+	float LocomotionMovingThreshold = 5.f;
+
+	/** Limits on UCombatAnimInstance::LocomotionPlayRate (after the unit's LocomotionRate). */
+	UPROPERTY(Config, EditAnywhere, Category = "Animation", meta = (ClampMin = 0.01))
+	float LocomotionMinPlayRate = 0.5f;
+
+	UPROPERTY(Config, EditAnywhere, Category = "Animation", meta = (ClampMin = 0.01))
+	float LocomotionMaxPlayRate = 2.f;
 
 	/**
 	 * Tintable pieces (solid floors) get a dynamic instance of this material on every slot, with vector parameter

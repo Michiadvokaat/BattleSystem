@@ -8,7 +8,7 @@
 
 /**
  * Game mode for arena levels. Players start as spectators (the view comes from a camera placed in the
- * level), ACombatHUD shows the control panel, and a fight with the default setup starts automatically if
+ * level), ACombatHUD shows the control panel, and a fight with the default level starts automatically if
  * UCombatSettings::bAutoStartFight is set.
  */
 UCLASS()

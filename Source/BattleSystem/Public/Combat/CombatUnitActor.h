@@ -73,6 +73,9 @@ public:
 	 */
 	virtual void SetAnimationState(float MoveSpeed, float RateScale);
 
+	/** The unit definition's MoveSpeed and LocomotionRate, passed to the AnimBP with every SetAnimationState. */
+	void SetLocomotionTuning(float InDefinitionMoveSpeed, float InLocomotionRate);
+
 	/** Called every frame with the interpolated location and the direction to face (may be zero). */
 	virtual void UpdatePresentation(const FVector& InLocation, const FVector& FacingDirection);
 
@@ -217,6 +220,9 @@ private:
 
 	/** Animation rate from SetAnimationState; scales turning and idle breaks too. */
 	float AnimRateScale = 1.f;
+	/** From SetLocomotionTuning. */
+	float DefinitionMoveSpeed = 0.f;
+	float LocomotionRate = 1.f;
 	/** Seconds (animation time) standing still without a montage, and when the next idle break plays. */
 	float IdleTime = 0.f;
 	float NextIdleBreak = 0.f;

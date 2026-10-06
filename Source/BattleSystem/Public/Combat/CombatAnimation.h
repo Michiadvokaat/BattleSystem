@@ -88,8 +88,10 @@ public:
 };
 
 /**
- * Parent class for the units' Animation Blueprints. ACombatUnitActor fills the variables every frame; the AnimBP
- * only plays Locomotion at (LocomotionX, LocomotionY) and montages in its DefaultSlot. A death montage is held at its end.
+ * Parent class for the units' Animation Blueprints. ACombatUnitActor fills the variables every frame (inputs only);
+ * the AnimGraph decides what to play with them: for example a state machine Idle <-> Locomotion on bIsMoving, a Blend
+ * Space Player on Locomotion at (LocomotionX, LocomotionY) with Play Rate LocomotionPlayRate, then the DefaultSlot for
+ * the montages. A death montage is held at its end.
  */
 UCLASS()
 class BATTLESYSTEM_API UCombatAnimInstance : public UAnimInstance
@@ -117,14 +119,57 @@ public:
 	UPROPERTY(BlueprintReadOnly, Category = "Combat")
 	bool bDead = false;
 
+	/** Speed is above UCombatSettings::LocomotionMovingThreshold. */
+	UPROPERTY(BlueprintReadOnly, Category = "Combat")
+	bool bIsMoving = false;
+
+	/** The unit definition's MoveSpeed (cm/s): the speed it walks at without slows or hastes. */
+	UPROPERTY(BlueprintReadOnly, Category = "Combat")
+	float MoveSpeed = 0.f;
+
+	/** Speed / MoveSpeed (0 without a MoveSpeed). */
+	UPROPERTY(BlueprintReadOnly, Category = "Combat")
+	float SpeedRatio = 0.f;
+
+	/** The unit definition's LocomotionRate (tuning per unit type). */
+	UPROPERTY(BlueprintReadOnly, Category = "Combat")
+	float LocomotionRate = 1.f;
+
+	/**
+	 * Play rate that keeps the feet on the ground (ComputeLocomotionPlayRate): 1 between the slowest and fastest moving
+	 * sample of Locomotion on its speed axis (there the blend space blends the stride), Speed / that sample beyond them,
+	 * times LocomotionRate, clamped by the settings. 1 while standing still. Wire it to the Blend Space Player's Play Rate.
+	 */
+	UPROPERTY(BlueprintReadOnly, Category = "Combat")
+	float LocomotionPlayRate = 1.f;
+
+	/** Speeds of the slowest and fastest sample of Locomotion above the moving threshold (0 if none); read every frame. */
+	UPROPERTY(BlueprintReadOnly, Category = "Combat")
+	float SlowestSampleSpeed = 0.f;
+
+	UPROPERTY(BlueprintReadOnly, Category = "Combat")
+	float FastestSampleSpeed = 0.f;
+
 	/** Sets the blend space and finds its speed axis. */
 	void SetLocomotion(UBlendSpace* InLocomotion);
 
-	/** Sets Speed and puts it on the speed axis (LocomotionX or LocomotionY). */
+	/** Per unit type: the definition's MoveSpeed and LocomotionRate. */
+	void SetTuning(float InMoveSpeed, float InLocomotionRate);
+
+	/** Sets Speed, puts it on the speed axis (LocomotionX or LocomotionY) and updates the derived values. */
 	void SetSpeed(float InSpeed);
 
 	/** Axis of a blend space named "Speed" (any case): 0 = X, 1 = Y; 0 if none or no blend space. */
 	static int32 FindSpeedAxis(const UBlendSpace* BlendSpace);
+
+	/** The slowest and fastest of Speeds above Threshold; false (both 0) if there is none. */
+	static bool FindMovingSampleRange(TConstArrayView<float> Speeds, float Threshold, float& OutSlowest, float& OutFastest);
+
+	/**
+	 * 1 below Threshold (standing still); else Speed / Fastest above Fastest, Speed / Slowest below Slowest, 1 between them
+	 * (Fastest 0: 1), then times Rate and clamped to MinRate..MaxRate.
+	 */
+	static float ComputeLocomotionPlayRate(float InSpeed, float Threshold, float Slowest, float Fastest, float Rate, float MinRate, float MaxRate);
 
 	/** Plays the death montage (if any) and keeps its last pose. */
 	void PlayDeath(UAnimMontage* Montage);
