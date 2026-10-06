@@ -881,16 +881,71 @@ bool FCombatAoECircleTest::RunTest(const FString& Parameters)
 	return true;
 }
 
+IMPLEMENT_SIMPLE_AUTOMATION_TEST(FCombatRangeFromCenterTest, "BattleSystem.Combat.RangeFromCenter",
+	EAutomationTestFlags::EditorContext | EAutomationTestFlags::ProductFilter)
+
+bool FCombatRangeFromCenterTest::RunTest(const FString& Parameters)
+{
+	// Ranges reach from the attacker's center to the target's edge: the attacker's own size adds nothing.
+	FCombatUnit Attacker;
+	Attacker.Stats.Radius = 60.f;
+	FCombatUnit Target;
+	Target.Stats.Radius = 40.f;
+	Target.PreviousPosition = FVector2D(150.0, 0.0);
+	TestEqual(TEXT("Reach = center distance - target radius"), FCombatSimulation::GetReach(Attacker, Target), 110.0);
+
+	// Areas the same way, around the attacker (CircleAroundSelf, Cone) and around a target point.
+	FCombatArea Circle;
+	Circle.Shape = ECombatAreaShape::CircleAroundSelf;
+	Circle.Radius = 100.f;
+	TestTrue(TEXT("Edge just inside"), Circle.Contains(FVector2D(140.0, 0.0), 40.f));
+	TestFalse(TEXT("Edge just outside"), Circle.Contains(FVector2D(141.0, 0.0), 40.f));
+	FCombatArea Cone;
+	Cone.Shape = ECombatAreaShape::Cone;
+	Cone.Radius = 100.f;
+	Cone.ConeCosHalfAngle = 0.5f;
+	TestTrue(TEXT("Cone: edge just inside"), Cone.Contains(FVector2D(140.0, 0.0), 40.f));
+	TestFalse(TEXT("Cone: edge just outside"), Cone.Contains(FVector2D(141.0, 0.0), 40.f));
+
+	// A melee unit (radius 40, Range 60) starts its attack with the target's edge 60 cm from its center, not 100.
+	FCombatUnitStats Fighter = CombatTests::MakeStats(100.f, 10.f, 20, 5);
+	Fighter.Attacks[0].Range = 60.f;
+	Fighter.MoveSpeed = 0.f;
+	FCombatUnitStats Dummy = CombatTests::MakeDummyStats();
+	Dummy.Radius = 40.f;
+	auto AttacksAt = [&](int32 Cells)
+	{
+		FCombatSimConfig Config;
+		Config.Grid.Init(10, 3, 100.f);
+		Config.MaxFirstAttackDelayTicks = 0;
+		CombatTests::AddUnit(Config, Fighter, 0, FIntPoint(1, 1));
+		CombatTests::AddUnit(Config, Dummy, 1, FIntPoint(1 + Cells, 1));
+		FCombatSimulation Simulation(Config);
+		for (int32 Tick = 0; Tick < 5; ++Tick)
+		{
+			Simulation.Step();
+			if (Simulation.GetEvents().ContainsByPredicate([](const FCombatEvent& Event) { return Event.Type == ECombatEventType::Attack; }))
+			{
+				return true;
+			}
+		}
+		return false;
+	};
+	TestTrue(TEXT("Center distance 100, edge at 60: attacks"), AttacksAt(1));
+	TestFalse(TEXT("Center distance 200, edge at 160: out of range"), AttacksAt(2));
+	return true;
+}
+
 IMPLEMENT_SIMPLE_AUTOMATION_TEST(FCombatAoEConeTest, "BattleSystem.Combat.AoECone",
 	EAutomationTestFlags::EditorContext | EAutomationTestFlags::ProductFilter)
 
 bool FCombatAoEConeTest::RunTest(const FString& Parameters)
 {
-	// 90 degree cleave to the right (+X): hits in front, not behind or to the side.
+	// 90 degree cleave to the right (+X), reaching 190 cm from the attacker's center: hits in front, not behind or to the side.
 	FCombatSimConfig Config;
 	Config.Grid.Init(20, 12, 100.f);
 	Config.MaxFirstAttackDelayTicks = 0;
-	CombatTests::AddUnit(Config, CombatTests::MakeUnitWithAttack(CombatTests::MakeAreaAttack(ECombatAreaShape::Cone, 100.f, 150.f, 10.f)), 0, FIntPoint(5, 5));
+	CombatTests::AddUnit(Config, CombatTests::MakeUnitWithAttack(CombatTests::MakeAreaAttack(ECombatAreaShape::Cone, 140.f, 190.f, 10.f)), 0, FIntPoint(5, 5));
 	CombatTests::AddUnit(Config, CombatTests::MakeDummyStats(), 1, FIntPoint(6, 5));	// 1: target, in front
 	CombatTests::AddUnit(Config, CombatTests::MakeDummyStats(), 1, FIntPoint(7, 5));	// 2: further in front
 	CombatTests::AddUnit(Config, CombatTests::MakeDummyStats(), 1, FIntPoint(4, 5));	// 3: behind

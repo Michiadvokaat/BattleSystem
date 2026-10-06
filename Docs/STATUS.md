@@ -1,13 +1,13 @@
 # Status
 
-_Last updated: 2026-10-05_
+_Last updated: 2026-10-06_
 
 ## Current state
 
 - Combat phases 1–5 are done. The tests pass (44/44, `BattleSystem.Combat.*`). Phase 5 has two parts:
   - part A: AoE circle/cone with telegraphs, effect modifiers, cue tags and the cue table (checked by the user);
   - part B: JSON replays with a checksum verdict, and `Combat.Batch` with statistics and CSV (1000 fights ≈ 3.4 s before phase 6, ≈ 22 s with the navigation layer), checked by the user.
-- Reference checksum, seed 42: `Combat.Simulate 42 level=WallWindows` gives `0xDA0F325D` (2 waves, team 0 wins after 525 ticks; since `WavePauseSeconds=0.05` was set in Project Settings on 2026-10-06; before it `0x547627E3`, and before the user's `DA_Boogschutter` tuning `0xE3374FD9`). It is the user's test level, so update the checksum when the level or a unit definition in it changes. Replays saved before phase 6 no longer reproduce.
+- Reference checksum, seed 42: `Combat.Simulate 42 level=WallWindows` gives `0x726ECAAD` (2 waves, team 0 wins after 540 ticks; with ranges from the attacker's center and the user's tuning of `DA_Krijger`, `DA_Boogschutter` and `DA_Tank` on 2026-10-06; before those `0xDA0F325D`). It is the user's test level, so update the checksum when the level or a unit definition in it changes. Replays saved before phase 6 no longer reproduce.
 - Player commands are done: the command log in the simulation (Move, player abilities without cooldown), scripts, replay v2 with checkpoints, a unit list at the top right with action buttons, arena clicks, a selection ring, and a move disc and line. Checked by the user.
 - LevelDesigner is done: levels as JSON in `Levels/` (only `WallWindows` since 2026-10-06; the other levels were deleted, along with the code that converted old level versions; level files are always at the current format version), built in the bottom-left menu (edit mode, size, save/load, play), shown in the arena with a fitted camera, and copied into replays. Checked by the user.
 - LevelDesigner modes (checked by the user in PIE; merged to `main` from `leveldesigner-modes`, tag `before-leveldesigner-modes`): the cell kinds wall/hedge/water are gone (level format 4 without rows; `Demo` and `Klaslokaal01` deleted); Build Mode / Unit Mode / Spawn Mode each show only their own controls; the catalog is `Building`/`Furniture`/`Props` with subcategories (two button rows, pieces small to large with a size label). 60/60 tests.
@@ -30,11 +30,14 @@ _Last updated: 2026-10-05_
 
 - Unit positions (checked by the user in PIE; merged to `main` from `unit-positions`, tag `before-unit-positions`): units and spawns on one of 9 positions per cell, rotation per 11.25 degrees, Pos/Rot in the spawn list; level format 8. Then: Ctrl+click moves a unit or spawn, right click puts back / deselects / erases (checked in PIE).
 
-- Animation tuning (built and tested 63/63, to set up and check in the editor): `UCombatAnimInstance` only gives inputs (`bIsMoving`, `MoveSpeed`, `SpeedRatio`, `LocomotionPlayRate` from play-rate matching on the blend space's samples, ...), the AnimGraph decides; `LocomotionRate` per unit definition; `ACombatAnimPreview` shows units walking in the editor viewport. The user still builds the state machine in `ABP_Combat`, sets the blend space samples to their real speeds and makes a preview map.
+- Animation (checked by the user in the editor: idle/walk/run in the AnimPreview): `UCombatAnimInstance` only gives inputs (`bIsMoving`, `LocalVelocity`, `Direction`, `StrideSpeed` corrected for the look's height, `LocomotionPlayRate` from play-rate matching, ...), the AnimGraph of `ABP_Combat` decides (state machine Idle/Move, local content); a blend space with Forward/Right axes gets the local velocity, one with a Speed axis the speed. `LocomotionRate` per unit definition. Figures face their intent (target, else steer point), so pushes become side or back steps. `ACombatAnimPreview` (map `AnimPreview`) walks every unit in all four directions in the editor viewport. Skeleton: `/Game/Characters/Animations/Heroes/SKEL_Hero` (the Fab child skeleton, moved; backup in `D:/Unreal/Backups/BattleSystem_2026-10-06`). Mixamo animations come in through `Scripts/ImportMixamoAnimations.py` (Combat, Idle, Run, Strafe, Walk). Sideways/backwards steps not yet checked.
+- Ranges (built and tested 64/64, not yet checked in PIE): every `Range` reaches from the attacker's center to the target's edge, area shapes around the attacker too. The unit data was kept, so units reach their own radius less far than before: to be tuned.
 
 ## Open work
 
-
+- Check in PIE: the control panel with only the level (Start, Batch, Save/Play replay), the new ranges in a fight, and the sideways/backwards steps (needs `BS_Hero_Locomotion2D` in `DA_AnimSet_Child`).
+- Tune the unit definitions for the new range definition (`/Game/Characters/Data`; the old reach was Range + own radius; Krijger, Boogschutter and Tank were tuned on 2026-10-06), and record the `WallWindows` checksum after each change.
+- Considered for melee, not built: re-check the range when the hit lands (a miss), and units on the line blocking a melee attack.
 - Balance: to be measured again on levels (`Combat.Batch 1000 level=<name>`); the old setup numbers are gone with the setups.
 - Character looks, later: per-bone scaling (own AnimGraph node + editor module), parts from other skeletons (retarget first), and "Allow CPU Access" on the source meshes for cooked builds. Mutable remains the alternative if this falls short.
 - Optional: link VFX/sound in `DA_CueTable`.

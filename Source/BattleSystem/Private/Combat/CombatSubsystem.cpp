@@ -639,7 +639,7 @@ void UCombatSubsystem::DrawAreaRanges(float Alpha) const
 			if (Attack.AreaShape == ECombatAreaShape::CircleAroundSelf)
 			{
 				// Reach from the center: a unit is hit when its edge is inside this circle.
-				DrawDebugCircle(World, Center, Attack.AreaRadius + Unit.Stats.Radius, 64, RangeColor, false, -1.f, 0, 2.f,
+				DrawDebugCircle(World, Center, Attack.AreaRadius, 64, RangeColor, false, -1.f, 0, 2.f,
 					FVector(1.0, 0.0, 0.0), FVector(0.0, 1.0, 0.0), false);
 			}
 		}
@@ -677,7 +677,7 @@ void UCombatSubsystem::OnAreaFired(const FCombatEvent& Event)
 
 	if (ACombatUnitActor* Actor = UnitActors[Event.SourceId])
 	{
-		Actor->OnAreaAttack(Event.Area.Radius + (Event.Area.Shape == ECombatAreaShape::CircleAtTarget ? 0.f : Event.Area.SourceRadius));
+		Actor->OnAreaAttack(Event.Area.Radius);
 	}
 }
 
@@ -705,8 +705,8 @@ void UCombatSubsystem::DrawArea(const FCombatArea& Area, const FColor& Color, fl
 	const FVector XAxis(1.0, 0.0, 0.0);
 	const FVector YAxis(0.0, 1.0, 0.0);
 
-	// Edge-to-edge shapes reach from the attacker's edge, so draw them from its center with its radius added.
-	const float Reach = (Area.Radius + (Area.Shape == ECombatAreaShape::CircleAtTarget ? 0.f : Area.SourceRadius)) * Scale;
+	// Every shape reaches from its center.
+	const float Reach = Area.Radius * Scale;
 	if (Reach <= 1.f)
 	{
 		return;

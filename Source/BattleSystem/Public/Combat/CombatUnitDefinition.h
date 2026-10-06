@@ -67,7 +67,7 @@ struct FCombatAttackDefinition
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Attack")
 	FText DisplayName;
 
-	/** Edge-to-edge distance in cm at which the attack can start. */
+	/** Distance in cm from the attacker's center to the target's edge at which the attack can start. Area shapes reach the same way. */
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Attack", meta = (ClampMin = 0, Units = "cm"))
 	float Range = 150.f;
 
@@ -157,7 +157,7 @@ public:
 	/**
 	 * Attack.Melee and Attack.Ranged are aimed at the target: the unit picks the shortest-range one that can reach it.
 	 * Attack.AoE hits an area (AreaShape); with bRequiresLineOfSight it acts as ranged (needs sight), otherwise as melee.
-	 * Attack.Taunt is an area around the unit (Range = radius, edge to edge) that applies its effects to every enemy in it.
+	 * Attack.Taunt is an area around the unit (Range = radius, from its center to the enemy's edge) that applies its effects to every enemy in it.
 	 */
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Unit")
 	TArray<FCombatAttackDefinition> Attacks;

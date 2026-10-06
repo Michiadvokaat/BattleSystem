@@ -14,7 +14,7 @@
 struct FCombatAttackStats
 {
 	FGameplayTag Type;
-	/** Edge-to-edge distance in cm at which the attack can start. */
+	/** Distance in cm from the attacker's center to the target's edge at which the attack can start (GetReach). */
 	float Range = 150.f;
 	float Damage = 10.f;
 	/** Ticks between the starts of two uses of this attack. At least 1. */
@@ -65,8 +65,6 @@ struct FCombatArea
 	FVector2D Direction = FVector2D(1.0, 0.0);
 	float Radius = 0.f;
 	float ConeCosHalfAngle = 0.f;
-	/** Radius of the attacker, for the edge-to-edge shapes (CircleAroundSelf, Cone). */
-	float SourceRadius = 0.f;
 
 	/** Whether a unit of the given radius at Position is inside the area. */
 	bool Contains(const FVector2D& Position, float UnitRadius) const;
@@ -395,6 +393,9 @@ public:
 	int32 GetWaveTeam() const { return Config.WaveTeam; }
 
 	static const TCHAR* OutcomeToString(ECombatOutcome InOutcome);
+
+	/** What attack ranges are measured against: from Unit's center to Other's edge (cm). */
+	static double GetReach(const FCombatUnit& Unit, const FCombatUnit& Other);
 
 private:
 	struct FPendingHit

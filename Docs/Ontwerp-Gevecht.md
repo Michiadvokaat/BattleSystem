@@ -191,6 +191,7 @@ Elke fase levert iets op dat je kunt spelen en testen. Nieuwe C++-klassen vereis
 | Toeval in fase 1 | Willekeurige vertraging (0..`MaxFirstAttackDelay`) van de eerste aanval, pas zodra een unit binnen bereik is | Variatie in schade |
 | Doelwit ranged | Eerst de dichtstbijzijnde vijand in bereik met zicht, anders via looppaden | Altijd via looppaden |
 | Meerdere aanvallen | Kortste bereik dat het doel nu kan raken; elke aanval eigen cooldown | Alleen de eerste aanval |
+| Definitie van bereik | Van het centrum van de aanvaller tot de rand van het doelwit, ook voor gebieden rond de aanvaller (sinds 2026-10-06; daarvoor van rand tot rand) | Van rand tot rand; van centrum tot centrum |
 | Kiten | Nee, ranged stopt op bereik | Terugwijken bij melee dichtbij |
 | Taunt | Gebied rond de tank, effect met duur | Eén doelwit |
 | Doelwitprioriteit | Taunt > threat > zichtbaar (ranged) > dichtstbij, met hysterese | Zichtbaar vóór threat |

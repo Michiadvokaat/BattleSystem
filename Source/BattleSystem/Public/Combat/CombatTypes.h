@@ -15,7 +15,7 @@ enum class ECombatAreaShape : uint8
 	CircleAroundSelf,
 	/** A circle on the target's position; hits units whose edge is within AreaRadius of that point. */
 	CircleAtTarget,
-	/** A fan from the attacker towards the target: within AreaRadius (edge to edge) and ConeAngle. */
+	/** A fan from the attacker towards the target: within AreaRadius (from the attacker's center to the unit's edge) and ConeAngle. */
 	Cone,
 };
 

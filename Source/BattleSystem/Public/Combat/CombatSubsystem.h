@@ -104,7 +104,7 @@ public:
 	float GetTimeScale() const { return TimeScale; }
 
 	/**
-	 * Range (cm, edge to edge) for every taunt in fights started from the game; 0 = the Range from the Data Asset.
+	 * Range (cm, from the taunting unit's center to the enemy's edge) for every taunt in fights started from the game; 0 = the Range from the Data Asset.
 	 * Applied at the next start, so a running fight never changes.
 	 */
 	void SetTauntRangeOverride(float InRange) { TauntRangeOverride = FMath::Max(InRange, 0.f); }

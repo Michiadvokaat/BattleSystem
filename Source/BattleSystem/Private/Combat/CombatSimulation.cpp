@@ -12,12 +12,12 @@ bool FCombatArea::Contains(const FVector2D& Position, float UnitRadius) const
 	const double Distance = FVector2D::Distance(Center, Position);
 	switch (Shape)
 	{
+	// Every shape reaches from its center to the unit's edge.
 	case ECombatAreaShape::CircleAroundSelf:
-		return Distance - SourceRadius - UnitRadius <= Radius;
 	case ECombatAreaShape::CircleAtTarget:
 		return Distance - UnitRadius <= Radius;
 	case ECombatAreaShape::Cone:
-		if (Distance - SourceRadius - UnitRadius > Radius)
+		if (Distance - UnitRadius > Radius)
 		{
 			return false;
 		}
@@ -394,6 +394,11 @@ int32 FCombatSimulation::FindNearestByWalking(const FCombatUnit& Unit) const
 	return FindNearestEnemy(Unit);
 }
 
+double FCombatSimulation::GetReach(const FCombatUnit& Unit, const FCombatUnit& Other)
+{
+	return FVector2D::Distance(Unit.PreviousPosition, Other.PreviousPosition) - Other.Stats.Radius;
+}
+
 bool FCombatSimulation::CanShootNow(const FCombatUnit& Unit, const FCombatUnit& Other) const
 {
 	if (!Other.bAlive || Other.Team == Unit.Team)
@@ -414,8 +419,7 @@ bool FCombatSimulation::CanShootNow(const FCombatUnit& Unit, const FCombatUnit& 
 		return false;
 	}
 
-	const double Gap = FVector2D::Distance(Unit.PreviousPosition, Other.PreviousPosition) - Unit.Stats.Radius - Other.Stats.Radius;
-	return Gap <= Ranged->Range
+	return GetReach(Unit, Other) <= Ranged->Range
 		&& (!Ranged->bNeedsLineOfSight || Config.Grid.HasLineOfSight(Unit.PreviousPosition, Other.PreviousPosition));
 }
 
@@ -449,7 +453,6 @@ int32 FCombatSimulation::FindReadyAreaAttack(const FCombatUnit& Unit) const
 		Area.Shape = Attack.AreaShape;
 		Area.Center = Unit.PreviousPosition;
 		Area.Radius = Attack.AreaRadius;
-		Area.SourceRadius = Unit.Stats.Radius;
 
 		for (const FCombatUnit& Other : Units)
 		{
@@ -570,7 +573,7 @@ FVector2D FCombatSimulation::UpdateCombat(FCombatUnit& Unit)
 	const FCombatUnit& Target = Units[Unit.TargetId];
 	const FVector2D ToTarget = Target.PreviousPosition - Unit.PreviousPosition;
 	const double Distance = ToTarget.Size();
-	const double Gap = Distance - Unit.Stats.Radius - Target.Stats.Radius;
+	const double Gap = GetReach(Unit, Target);
 	const double MaxStep = Unit.Stats.MoveSpeed * Unit.Effects.GetMoveSpeedMultiplier() * FixedDt;
 	const bool bClearWalkingLine = Config.Grid.IsLineWalkable(Unit.PreviousPosition, Target.PreviousPosition);
 	const bool bLineOfSight = Config.Grid.HasLineOfSight(Unit.PreviousPosition, Target.PreviousPosition);
@@ -979,7 +982,6 @@ void FCombatSimulation::PlaceArea(const FCombatUnit& Unit, int32 AttackIndex, in
 	Area.Shape = Attack.AreaShape;
 	Area.Radius = Attack.AreaRadius;
 	Area.ConeCosHalfAngle = Attack.ConeCosHalfAngle;
-	Area.SourceRadius = Unit.Stats.Radius;
 	Area.Center = Unit.PreviousPosition;
 
 	const FVector2D TargetPosition = TargetId != INDEX_NONE ? Units[TargetId].PreviousPosition : Unit.PreviousPosition;
