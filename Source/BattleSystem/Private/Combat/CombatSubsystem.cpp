@@ -507,17 +507,26 @@ void UCombatSubsystem::UpdateActors(float Alpha)
 
 		const FVector2D Position = FMath::Lerp(Unit.PreviousPosition, Unit.Position, Alpha);
 
-		FVector2D Facing = Unit.Velocity;
-		if (Unit.TargetId != INDEX_NONE && Units[Unit.TargetId].bAlive)
+		// The figure faces what it means to do, not every push: its target while it stands or heads straight for it,
+		// else the point it steers to (its route or move order), else it keeps its facing. A push by separation then
+		// shows as a step sideways or backwards (LocalVelocity in the AnimBP).
+		FVector2D Facing = FVector2D::ZeroVector;
+		const bool bSteering = !Unit.SteerPoint.Equals(Unit.PreviousPosition, 1.0);
+		const bool bHasTarget = Unit.TargetId != INDEX_NONE && Units[Unit.TargetId].bAlive;
+		if (bHasTarget && (!bSteering || Unit.SteerPoint.Equals(Units[Unit.TargetId].PreviousPosition)))
 		{
 			const FCombatUnit& Target = Units[Unit.TargetId];
 			Facing = FMath::Lerp(Target.PreviousPosition, Target.Position, Alpha) - Position;
+		}
+		else if (bSteering)
+		{
+			Facing = Unit.SteerPoint - Position;
 		}
 
 		Actor->SetHealth(Unit.Stats.MaxHP > 0.f ? Unit.HP / Unit.Stats.MaxHP : 0.f);
 
 		Actor->SetStatusEffects(GetStatusDisplays(Unit));
-		Actor->SetAnimationState(Unit.Velocity.Size(), bPaused ? 0.f : TimeScale);
+		Actor->SetAnimationState(FVector(Unit.Velocity, 0.0), bPaused ? 0.f : TimeScale);
 		if (Actor->HasAppearanceOverrides())
 		{
 			FGameplayTagContainer Tags = Unit.Stats.Tags;

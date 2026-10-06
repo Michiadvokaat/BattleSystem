@@ -49,7 +49,9 @@ void UCombatAnimInstance::SetLocomotion(UBlendSpace* InLocomotion)
 {
 	Locomotion = InLocomotion;
 	SpeedAxis = FindSpeedAxis(InLocomotion);
-	SetSpeed(Speed);
+	ForwardAxis = FindAxis(InLocomotion, TEXT("Forward"));
+	RightAxis = FindAxis(InLocomotion, TEXT("Right"));
+	SetLocalVelocity(LocalVelocity);
 }
 
 void UCombatAnimInstance::SetTuning(float InMoveSpeed, float InLocomotionRate)
@@ -58,24 +60,31 @@ void UCombatAnimInstance::SetTuning(float InMoveSpeed, float InLocomotionRate)
 	LocomotionRate = InLocomotionRate;
 }
 
-void UCombatAnimInstance::SetSpeed(float InSpeed)
+void UCombatAnimInstance::SetLocalVelocity(const FVector2D& InLocalVelocity)
 {
 	const UCombatSettings* Settings = GetDefault<UCombatSettings>();
-	Speed = InSpeed;
-	StrideSpeed = ComputeStrideSpeed(InSpeed, MeshScale.Z, Settings->LocomotionScaleCompensation);
-	LocomotionX = SpeedAxis == 0 ? StrideSpeed : 0.f;
-	LocomotionY = SpeedAxis == 1 ? StrideSpeed : 0.f;
+	LocalVelocity = InLocalVelocity;
+	Speed = InLocalVelocity.Size();
+	Direction = Speed > UE_KINDA_SMALL_NUMBER ? FMath::RadiansToDegrees(FMath::Atan2(InLocalVelocity.Y, InLocalVelocity.X)) : 0.f;
+	StrideSpeed = ComputeStrideSpeed(Speed, MeshScale.Z, Settings->LocomotionScaleCompensation);
+	const FVector2D StrideVelocity = Speed > UE_KINDA_SMALL_NUMBER ? InLocalVelocity * (StrideSpeed / Speed) : FVector2D::ZeroVector;
+	const FVector2D Coordinates = GetBlendCoordinates(StrideVelocity, SpeedAxis, ForwardAxis, RightAxis);
+	LocomotionX = Coordinates.X;
+	LocomotionY = Coordinates.Y;
 
-	bIsMoving = InSpeed > Settings->LocomotionMovingThreshold;
-	SpeedRatio = MoveSpeed > 0.f ? InSpeed / MoveSpeed : 0.f;
+	bIsMoving = Speed > Settings->LocomotionMovingThreshold;
+	SpeedRatio = MoveSpeed > 0.f ? Speed / MoveSpeed : 0.f;
 
-	// The samples are read every frame, so a blend space edited in the editor counts at once (a few samples).
+	// The samples are read every frame, so a blend space edited in the editor counts at once (a few samples). In a
+	// velocity blend space a sample's speed is its distance from the middle.
+	const bool bVelocitySpace = ForwardAxis != INDEX_NONE && RightAxis != INDEX_NONE;
 	TArray<float, TInlineAllocator<8>> SampleSpeeds;
 	if (Locomotion)
 	{
 		for (const FBlendSample& Sample : Locomotion->GetBlendSamples())
 		{
-			SampleSpeeds.Add(Sample.SampleValue[SpeedAxis]);
+			SampleSpeeds.Add(bVelocitySpace ? FVector2D(Sample.SampleValue[ForwardAxis], Sample.SampleValue[RightAxis]).Size()
+				: Sample.SampleValue[SpeedAxis]);
 		}
 	}
 	FindMovingSampleRange(SampleSpeeds, Settings->LocomotionMovingThreshold, SlowestSampleSpeed, FastestSampleSpeed);
@@ -127,18 +136,48 @@ float UCombatAnimInstance::ComputeLocomotionPlayRate(float InSpeed, float Thresh
 
 int32 UCombatAnimInstance::FindSpeedAxis(const UBlendSpace* BlendSpace)
 {
+	const int32 Axis = FindAxis(BlendSpace, TEXT("Speed"));
+	return Axis == INDEX_NONE ? 0 : Axis;
+}
+
+int32 UCombatAnimInstance::FindAxis(const UBlendSpace* BlendSpace, const TCHAR* Name)
+{
 	if (BlendSpace)
 	{
 		// A 1D blend space only has X.
 		for (int32 Axis = 0; Axis < 2; ++Axis)
 		{
-			if (BlendSpace->GetBlendParameter(Axis).DisplayName.Equals(TEXT("Speed"), ESearchCase::IgnoreCase))
+			if (BlendSpace->GetBlendParameter(Axis).DisplayName.Equals(Name, ESearchCase::IgnoreCase))
 			{
 				return Axis;
 			}
 		}
 	}
-	return 0;
+	return INDEX_NONE;
+}
+
+FVector2D UCombatAnimInstance::ToLocalVelocity(const FVector2D& WorldVelocity, float YawDegrees)
+{
+	// UE yaw: 0 = +X, 90 = +Y, so the figure's right is its forward turned 90 degrees.
+	const float Yaw = FMath::DegreesToRadians(YawDegrees);
+	const FVector2D Forward(FMath::Cos(Yaw), FMath::Sin(Yaw));
+	const FVector2D Right(-Forward.Y, Forward.X);
+	return FVector2D(FVector2D::DotProduct(WorldVelocity, Forward), FVector2D::DotProduct(WorldVelocity, Right));
+}
+
+FVector2D UCombatAnimInstance::GetBlendCoordinates(const FVector2D& InLocalVelocity, int32 InSpeedAxis, int32 InForwardAxis, int32 InRightAxis)
+{
+	float Coordinates[2] = { 0.f, 0.f };
+	if (InForwardAxis != INDEX_NONE && InRightAxis != INDEX_NONE)
+	{
+		Coordinates[InForwardAxis] = InLocalVelocity.X;
+		Coordinates[InRightAxis] = InLocalVelocity.Y;
+	}
+	else
+	{
+		Coordinates[FMath::Clamp(InSpeedAxis, 0, 1)] = InLocalVelocity.Size();
+	}
+	return FVector2D(Coordinates[0], Coordinates[1]);
 }
 
 void UCombatAnimInstance::PlayDeath(UAnimMontage* Montage)

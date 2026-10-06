@@ -391,8 +391,9 @@ void ACombatUnitActor::SetLocomotionTuning(float InDefinitionMoveSpeed, float In
 	LocomotionRate = InLocomotionRate;
 }
 
-void ACombatUnitActor::SetAnimationState(float MoveSpeed, float RateScale)
+void ACombatUnitActor::SetAnimationState(const FVector& Velocity, float RateScale)
 {
+	const float MoveSpeed = Velocity.Size2D();
 	AnimRateScale = RateScale;
 	if (!AnimSet)
 	{
@@ -414,7 +415,7 @@ void ACombatUnitActor::SetAnimationState(float MoveSpeed, float RateScale)
 	}
 	AnimInstance->SetTuning(DefinitionMoveSpeed, LocomotionRate);
 	AnimInstance->SetMeshScale(LookMeshScale);
-	AnimInstance->SetSpeed(MoveSpeed);
+	AnimInstance->SetLocalVelocity(UCombatAnimInstance::ToLocalVelocity(FVector2D(Velocity), GetActorRotation().Yaw));
 	// The parts follow the body's pose, so the body's rate is enough.
 	CharacterMesh->GlobalAnimRateScale = RateScale;
 

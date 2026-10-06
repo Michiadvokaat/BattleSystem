@@ -127,6 +127,7 @@ void ACombatAnimPreview::Tick(float DeltaSeconds)
 		const UCombatUnitDefinition* Definition = Unit.Definition.Get();
 
 		const float WalkSpeed = SpeedOverride > 0.f ? SpeedOverride : Definition->MoveSpeed;
+		const FVector WalkDirection = Forward * Unit.Direction;
 		float Speed = 0.f;
 		if (Unit.StopLeft > 0.f)
 		{
@@ -147,9 +148,10 @@ void ACombatAnimPreview::Tick(float DeltaSeconds)
 
 		// Read every frame, so tuning in the definition shows at once.
 		Actor->SetLocomotionTuning(Definition->MoveSpeed, Definition->LocomotionRate);
-		Actor->SetAnimationState(Speed, Rate);
+		Actor->SetAnimationState(WalkDirection * Speed, Rate);
 		const FVector Location = GetActorLocation() + Right * (Index * Spacing) + Forward * Unit.Distance;
-		Actor->UpdatePresentation(Location, Forward * Unit.Direction);
+		// Facing turned the other way than FacingOffset, so the walk is FacingOffset off the figure's forward.
+		Actor->UpdatePresentation(Location, (Forward * Unit.Direction).RotateAngleAxis(-FacingOffset, FVector::UpVector));
 	}
 }
 

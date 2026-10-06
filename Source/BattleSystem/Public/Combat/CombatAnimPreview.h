@@ -47,6 +47,13 @@ public:
 	UPROPERTY(EditAnywhere, Category = "Preview", meta = (ClampMin = 0, Units = "cm/s"))
 	float SpeedOverride = 0.f;
 
+	/**
+	 * To tune sideways and backwards steps: the figures walk their path but face away from it, so that seen from the
+	 * figure the walk goes this way: 0 = forward, 90 = to its right, -90 = to its left, 180 = backwards.
+	 */
+	UPROPERTY(EditAnywhere, Category = "Preview", meta = (ClampMin = -180, ClampMax = 180, Units = "deg"))
+	float FacingOffset = 0.f;
+
 	/** Slow motion, like the control panel's speed buttons: scales the walking and the animation. */
 	UPROPERTY(EditAnywhere, Category = "Preview", meta = (ClampMin = 0, ClampMax = 4))
 	float TimeScale = 1.f;

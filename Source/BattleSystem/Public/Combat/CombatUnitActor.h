@@ -68,10 +68,10 @@ public:
 	bool SetSlotMesh(FGameplayTag SlotTag, USkeletalMesh* Mesh);
 
 	/**
-	 * Called every frame: the simulation speed (cm/s) for locomotion, and the animation rate (the fight's time scale,
-	 * 0 while paused). Only does something for a look with an AnimSet.
+	 * Called every frame: the velocity (world cm/s; the AnimBP gets it relative to the figure's facing) for locomotion,
+	 * and the animation rate (the fight's time scale, 0 while paused). Only does something for a look with an AnimSet.
 	 */
-	virtual void SetAnimationState(float MoveSpeed, float RateScale);
+	virtual void SetAnimationState(const FVector& Velocity, float RateScale);
 
 	/** The unit definition's MoveSpeed and LocomotionRate, passed to the AnimBP with every SetAnimationState. */
 	void SetLocomotionTuning(float InDefinitionMoveSpeed, float InLocomotionRate);

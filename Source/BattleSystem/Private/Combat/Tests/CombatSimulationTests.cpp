@@ -2006,6 +2006,19 @@ bool FCombatLocomotionPlayRateTest::RunTest(const FString& Parameters)
 	TestEqual(TEXT("No compensation: the real speed"), UCombatAnimInstance::ComputeStrideSpeed(300.f, 1.2f, 0.f), 300.f);
 	TestEqual(TEXT("Half compensation"), UCombatAnimInstance::ComputeStrideSpeed(330.f, 1.2f, 0.5f), 300.f);
 	TestEqual(TEXT("A zero scale is ignored"), UCombatAnimInstance::ComputeStrideSpeed(300.f, 0.f, 1.f), 300.f);
+
+	// Velocity seen from the figure: X forward, Y to its right (UE: facing +X, right is +Y).
+	TestTrue(TEXT("Facing +X, moving +X: forward"), UCombatAnimInstance::ToLocalVelocity(FVector2D(100.0, 0.0), 0.f).Equals(FVector2D(100.0, 0.0), 0.01));
+	TestTrue(TEXT("Facing +X, moving +Y: to the right"), UCombatAnimInstance::ToLocalVelocity(FVector2D(0.0, 100.0), 0.f).Equals(FVector2D(0.0, 100.0), 0.01));
+	TestTrue(TEXT("Facing +Y, moving +X: to the left"), UCombatAnimInstance::ToLocalVelocity(FVector2D(100.0, 0.0), 90.f).Equals(FVector2D(0.0, -100.0), 0.01));
+	TestTrue(TEXT("Facing +Y, moving -Y: backwards"), UCombatAnimInstance::ToLocalVelocity(FVector2D(0.0, -100.0), 90.f).Equals(FVector2D(-100.0, 0.0), 0.01));
+
+	// Blend space coordinates: a Forward/Right blend space gets the local velocity, a Speed one its length.
+	TestTrue(TEXT("Forward on X, Right on Y"), UCombatAnimInstance::GetBlendCoordinates(FVector2D(30.0, -40.0), 0, 0, 1).Equals(FVector2D(30.0, -40.0)));
+	TestTrue(TEXT("Forward on Y, Right on X"), UCombatAnimInstance::GetBlendCoordinates(FVector2D(30.0, -40.0), 0, 1, 0).Equals(FVector2D(-40.0, 30.0)));
+	TestTrue(TEXT("Speed on Y: the length"), UCombatAnimInstance::GetBlendCoordinates(FVector2D(30.0, -40.0), 1, INDEX_NONE, INDEX_NONE).Equals(FVector2D(0.0, 50.0)));
+	TestTrue(TEXT("Only a Forward axis: the speed axis"), UCombatAnimInstance::GetBlendCoordinates(FVector2D(30.0, -40.0), 0, 1, INDEX_NONE).Equals(FVector2D(50.0, 0.0)));
+	TestEqual(TEXT("No blend space: no axis found"), UCombatAnimInstance::FindAxis(nullptr, TEXT("Forward")), (int32)INDEX_NONE);
 	return true;
 }
 
@@ -2043,8 +2056,9 @@ bool FCombatAnimSetTest::RunTest(const FString& Parameters)
 	UCombatAnimInstance* Instance = NewObject<UCombatAnimInstance>(NewObject<USkeletalMeshComponent>(GetTransientPackage()));
 	TestEqual(TEXT("No blend space: speed axis X"), UCombatAnimInstance::FindSpeedAxis(nullptr), 0);
 	Instance->SetLocomotion(nullptr);
-	Instance->SetSpeed(220.f);
+	Instance->SetLocalVelocity(FVector2D(0.0, 220.0));
 	TestTrue(TEXT("Speed on X, Y stays 0"), Instance->Speed == 220.f && Instance->LocomotionX == 220.f && Instance->LocomotionY == 0.f);
+	TestEqual(TEXT("Moving to its right: direction 90"), Instance->Direction, 90.f);
 	return true;
 }
 
