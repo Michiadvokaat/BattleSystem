@@ -484,38 +484,8 @@ bool CombatLevels::FromJson(const FString& Json, FCombatLevel& OutLevel)
 		return false;
 	}
 	OutLevel.Normalize();
-	// Before version 5 units faced the other side: team 0 +X, the rest and spawns -X. Versions 5..7 kept rotations
-	// in eighth turns (now 1/32). Positions in the cell came with version 8; older units stand in the middle (the default).
-	if (OutLevel.FormatVersion < 5)
-	{
-		for (FCombatLevelUnit& Unit : OutLevel.Units)
-		{
-			Unit.Rotation = Unit.Team == 0 ? 0 : UnitRotationSteps / 2;
-		}
-		for (FCombatLevelWave& Wave : OutLevel.Waves)
-		{
-			for (FCombatLevelSpawn& Spawn : Wave.Spawns)
-			{
-				Spawn.Rotation = UnitRotationSteps / 2;
-			}
-		}
-	}
-	else if (OutLevel.FormatVersion < 8)
-	{
-		const int32 PerEighth = UnitRotationSteps / 8;
-		for (FCombatLevelUnit& Unit : OutLevel.Units)
-		{
-			Unit.Rotation *= PerEighth;
-		}
-		for (FCombatLevelWave& Wave : OutLevel.Waves)
-		{
-			for (FCombatLevelSpawn& Spawn : Wave.Spawns)
-			{
-				Spawn.Rotation *= PerEighth;
-			}
-		}
-	}
-	// Older files have no waves, pieces or rotations (and rows, which are ignored); saved again they get the current version.
+	// Files in Levels/ are always at the current version (a format change converts them in the same commit);
+	// missing fields load as their defaults.
 	OutLevel.FormatVersion = FCombatLevel().FormatVersion;
 	return true;
 }

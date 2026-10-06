@@ -1450,32 +1450,15 @@ bool FCombatLevelFormatTest::RunTest(const FString& Parameters)
 	Level.Resize(5, 8);
 	TestEqual(TEXT("Shrinking removes pieces outside"), Level.Pieces.Num(), 0);
 
-	// A version 3 file with cell rows loads with its rows ignored: every cell is open.
-	FCombatLevel Old;
-	TestTrue(TEXT("Reads a version 3 level"), CombatLevels::FromJson(TEXT("{\"formatVersion\":3,\"name\":\"Old\",\"width\":6,\"height\":5,\"rows\":[\"######\"],\"units\":[]}"), Old));
-	FCombatGridData OldGrid;
-	Old.ToGridData(OldGrid);
-	TestTrue(TEXT("Its wall row is ignored"), OldGrid.IsWalkable(FIntPoint(0, 0)) && !OldGrid.BlocksSight(FIntPoint(0, 0)));
-	TestTrue(TEXT("A version 5 piece without a color is white"), CombatLevels::FromJson(TEXT("{\"formatVersion\":5,\"name\":\"Old\",\"width\":6,\"height\":5,")
-		TEXT("\"pieces\":[{\"id\":\"A/B\",\"layer\":\"Floor\",\"cell\":{\"x\":0,\"y\":0}}]}"), Old) && Old.Pieces.Num() == 1 && Old.Pieces[0].Color == FColor::White);
-
-	// Before version 5 units faced the other side: team 0 +X, the rest and spawns -X.
-	FCombatLevel Unturned;
-	TestTrue(TEXT("Reads a version 4 level"), CombatLevels::FromJson(TEXT("{\"formatVersion\":4,\"name\":\"Old\",\"width\":6,\"height\":5,")
-		TEXT("\"units\":[{\"type\":\"A\",\"team\":0,\"cell\":{\"x\":0,\"y\":0}},{\"type\":\"A\",\"team\":1,\"cell\":{\"x\":5,\"y\":0}}],")
-		TEXT("\"waves\":[{\"spawns\":[{\"type\":\"A\",\"cell\":{\"x\":5,\"y\":4},\"time\":0}]}]}"), Unturned));
-	TestTrue(TEXT("Old team 0 faces +X, team 1 and spawns -X"), Unturned.Units.Num() == 2 && Unturned.Units[0].Rotation == 0
-		&& Unturned.Units[1].Rotation == 16 && Unturned.Waves.Num() == 1 && Unturned.Waves[0].Spawns.Num() == 1 && Unturned.Waves[0].Spawns[0].Rotation == 16);
-
-	// Versions 5..7 kept rotations in eighth turns, and had no positions in the cell (the middle).
-	FCombatLevel Eighths;
-	TestTrue(TEXT("Reads a version 7 level"), CombatLevels::FromJson(TEXT("{\"formatVersion\":7,\"name\":\"Old\",\"width\":6,\"height\":5,")
-		TEXT("\"units\":[{\"type\":\"A\",\"team\":0,\"cell\":{\"x\":0,\"y\":0},\"rotation\":2}],")
-		TEXT("\"waves\":[{\"spawns\":[{\"type\":\"A\",\"cell\":{\"x\":5,\"y\":4},\"time\":0,\"rotation\":5}]}]}"), Eighths));
-	TestTrue(TEXT("Eighth turns become 1/32 turns (90 and 225 degrees stay)"), Eighths.Units.Num() == 1 && Eighths.Units[0].Rotation == 8
-		&& Eighths.Waves.Num() == 1 && Eighths.Waves[0].Spawns.Num() == 1 && Eighths.Waves[0].Spawns[0].Rotation == 20);
-	TestTrue(TEXT("Older units stand in the middle of their cell"), Eighths.Units.Num() == 1 && Eighths.Units[0].Position == CombatLevels::MiddlePosition
-		&& Eighths.Waves[0].Spawns[0].Position == CombatLevels::MiddlePosition);
+	// Missing fields load as their defaults: no waves or pieces, units in the middle of their cell facing +X, white pieces.
+	FCombatLevel Minimal;
+	TestTrue(TEXT("Reads a minimal level"), CombatLevels::FromJson(TEXT("{\"name\":\"Min\",\"width\":6,\"height\":5,")
+		TEXT("\"units\":[{\"type\":\"A\",\"team\":1,\"cell\":{\"x\":5,\"y\":0}}],")
+		TEXT("\"pieces\":[{\"id\":\"A/B\",\"layer\":\"Floor\",\"cell\":{\"x\":0,\"y\":0}}]}"), Minimal));
+	TestTrue(TEXT("Without waves, at the current version"), Minimal.Waves.IsEmpty() && Minimal.FormatVersion == FCombatLevel().FormatVersion);
+	TestTrue(TEXT("A unit without position or rotation stands in the middle, facing +X"), Minimal.Units.Num() == 1
+		&& Minimal.Units[0].Position == CombatLevels::MiddlePosition && Minimal.Units[0].Rotation == 0);
+	TestTrue(TEXT("A piece without a color is white"), Minimal.Pieces.Num() == 1 && Minimal.Pieces[0].Color == FColor::White);
 	Level.Resize(2, 100);
 	TestTrue(TEXT("Size is clamped"), Level.Width == FCombatLevel::MinSize && Level.Height == FCombatLevel::MaxSize);
 	return true;
@@ -1799,11 +1782,6 @@ bool FCombatWaveLevelTest::RunTest(const FString& Parameters)
 	TestEqual(TEXT("Waves survive"), Loaded.Waves.Num(), 3);
 	TestTrue(TEXT("A spawn survives"), Loaded.Waves.Num() == 3 && Loaded.Waves[0].Spawns.Num() == 3
 		&& Loaded.Waves[0].Spawns[0].Cell == FIntPoint(9, 1) && Loaded.Waves[0].Spawns[0].Time == 1.5f);
-
-	// A version 1 file (no waves) still loads.
-	FCombatLevel Old;
-	TestTrue(TEXT("Reads a version 1 level"), CombatLevels::FromJson(TEXT("{\"formatVersion\":1,\"name\":\"Old\",\"width\":6,\"height\":5,\"rows\":[],\"units\":[]}"), Old));
-	TestTrue(TEXT("Without waves, at the current version"), Old.Waves.IsEmpty() && Old.FormatVersion == FCombatLevel().FormatVersion);
 
 	const UCombatUnitDefinition* Fighter = CombatTests::MakeTestDefinition();
 	auto Resolve = [Fighter](const FString& Type) { return Type == TEXT("Fighter") ? Fighter : nullptr; };
