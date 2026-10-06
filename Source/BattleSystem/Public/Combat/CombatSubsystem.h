@@ -170,6 +170,8 @@ public:
 	void ExitDesignMode();
 	bool IsDesignMode() const { return bDesignMode; }
 	const FCombatLevel& GetDesignLevel() const { return DesignLevel; }
+	/** The first time: loads UCombatSettings::DefaultLevel as the design level, or starts a new empty one. */
+	void EnsureDesignLevel();
 	void NewDesignLevel();
 	/** Loads Levels/<Name>.json for editing. */
 	bool LoadDesignLevel(const FString& Name, FString& OutMessage);

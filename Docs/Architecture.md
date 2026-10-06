@@ -153,7 +153,7 @@ Code: `Source/BattleSystem/{Public,Private}/Combat/`. Layers: grid ← simulatio
     - Spin boxes apply on commit (Enter, focus loss, end of a drag) through `SetDesignSpawn` / `MoveDesignSpawnToWave`. A position that is not free for the spawn's type (`IsDesignSpotFree`) or already holds a spawn of that wave is refused; the list then rebuilds with the old values. Every edit selects the spawn's wave.
     - **Move** (orange while active) makes the next left click in the arena the spawn's new cell; a right click on the grid (on release) or Move again cancels. That click paints nothing.
     - The list rebuilds when `GetDesignRevision()` changes (every `RefreshDesignView` and every refused edit). A spawn is addressed by (wave, index), so a pending Move is cancelled by any other change.
-  - **Play** (or Start in the control panel while editing) starts a fight from the edited level as it is, saved or not, with the default seed (Play) or the seed field (Start).
+  - **Play** (or Start in the control panel, in or out of edit mode) starts a fight from the edited level as it is, saved or not, with the default seed (Play) or the seed field (Start).
   - Mouse (`ACombatPlayerController` in edit mode):
     - Left click places in the mode; holding makes a stroke while the cursor moves (`PlayerTick`), which only erases. Units, spawns and pieces are only placed on a press, not while dragging.
     - Build Mode: every tick the selected piece under the cursor is shown on the grid (`UpdateDesignPiecePreview` -> `ACombatGrid::ShowPiecePreview`): its mesh where it would go, and a flat plate per footprint cell or a bar per border, green, red when it does not fit (`IsPieceInBounds`), orange (mesh hidden) while Shift is held. `CombatPieces::PlaceAt` puts Floor and Cell pieces centered on the cell under the cursor (rounded down for even sizes), Edge pieces on the nearest border of their direction, centered along it, and details on the detail position under the cursor (the preview plate is that position; the mesh stands at its base height). R / Shift+R turn the piece (`RotateDesignPiece`) by its layer's step: 45 degrees for details, 90 for the others (the rotation is kept in eighths; a quarter-turn piece starts from a whole quarter). A click places it with `PlacePiece` (replacing what it overlaps in its layer; a piece that blocks walking removes units and spawns on its cells); Shift + click (or a stroke) removes the pieces of its layer that it covers. Units and spawns are refused on cells with a piece that blocks walking (`IsDesignCellWalkable`).
@@ -257,14 +257,15 @@ Code: `Source/BattleSystem/{Public,Private}/Combat/`. Layers: grid ← simulatio
 
 - `ACombatGameMode` uses `ACombatHUD`. At BeginPlay the HUD adds four Slate panels (control panel top left, unit list top right, LevelDesigner bottom left, spawn list bottom right). The control panel is at the top left of the game viewport, inside a full-screen box that lets clicks elsewhere through. It shows the mouse cursor and sets input to Game+UI, so the console still works.
 - Panel controls (built in code, English labels):
-  - Setup dropdown (`UCombatSubsystem::GetAllSetupNames`, default selection from settings), seed field, and a Random seed button.
-  - Start / Restart (`StartFight`), Stop, Pause/Resume, Walls (Up / Cutaway / Down, V) and Reset camera (F).
+  - Level: the name of the LevelDesigner level (`GetDesignLevel`), read only; it is chosen in the LevelDesigner. When play starts it is `UCombatSettings::DefaultLevel` (`EnsureDesignLevel`, a new empty level if that file is missing). There is no setup choice: `UCombatSetup` fights only come from the console (`Combat.Start/Simulate/Batch <setup>`) and the auto-start.
+  - Seed field and a Random seed button.
+  - Start / Restart (`PlayDesignLevel`: the LevelDesigner level as it is, saved or not), Stop, Pause/Resume, Walls (Up / Cutaway / Down, V) and Reset camera (F).
   - Waves (only for a fight with waves): `GetWaveText()` and a **Call wave** button (disabled when `CanCallWave()` is false).
   - Speed 0.05× / 0.1× / 0.25× / 0.5× / 1× / 2× / 4×.
   - Debug Off / Targets / + Distance map, which sets the `Combat.Debug` console variable.
   - Show "Taunt range", which toggles `Combat.ShowRanges`.
   - Replay: Save, a dropdown of the replay files (refreshed when opened, newest first), and Play. The status line shows "Replay: ..." and the verdict.
-  - Batch: 100 / 1000 (seeds start at the seed field; the screen freezes during the run) and a CSV toggle. The summary appears below the status line.
+  - Batch: 100 / 1000 on the LevelDesigner level (seeds start at the seed field; the screen freezes during the run) and a CSV toggle. The summary appears below the status line.
   - Taunt: "Asset" or a slider of 1–10 m in steps of 0.5 m. It sets `UCombatSubsystem::SetTauntRangeOverride`, which `StartFight` applies to every `Attack.Taunt` before the simulation is created, so it takes effect at the next Start and a running fight never changes. `Combat.Simulate` does not use the override; it always uses the asset.
   - A status line with setup, seed, tick and running/paused, or after the fight the outcome and checksum.
 - The active speed and debug level are tinted green. Nothing is saved: the panel starts from the defaults each time.

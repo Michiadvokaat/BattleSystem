@@ -1305,7 +1305,7 @@ void UCombatSubsystem::EnterDesignMode()
 		return;
 	}
 
-	// Start from the level of the fight on screen, if it had one; else from what was edited before, else empty.
+	// Start from the level of the fight on screen, if it had one; else from what was edited before, else the default level.
 	const TOptional<FCombatLevel> LastLevel = Simulation ? CurrentLevel : TOptional<FCombatLevel>();
 	StopFight();
 	bDesignMode = true;
@@ -1314,14 +1314,9 @@ void UCombatSubsystem::EnterDesignMode()
 	if (LastLevel.IsSet())
 	{
 		DesignLevel = LastLevel.GetValue();
-	}
-	else if (!bHasDesignLevel)
-	{
 		bHasDesignLevel = true;
-		NewDesignLevel();
-		return;
 	}
-	bHasDesignLevel = true;
+	EnsureDesignLevel();
 	if (DesignUnitType.IsEmpty())
 	{
 		const TArray<FString> Types = GetAllUnitDefinitionNames();
@@ -1347,6 +1342,21 @@ void UCombatSubsystem::ExitDesignMode()
 	}
 	ShowOverviewIfChanged(false);
 	++FightSerial;
+}
+
+void UCombatSubsystem::EnsureDesignLevel()
+{
+	if (bHasDesignLevel)
+	{
+		return;
+	}
+	bHasDesignLevel = true;
+	const FString& Name = GetDefault<UCombatSettings>()->DefaultLevel;
+	FString Message;
+	if (Name.IsEmpty() || !LoadDesignLevel(Name, Message))
+	{
+		NewDesignLevel();
+	}
 }
 
 void UCombatSubsystem::NewDesignLevel()

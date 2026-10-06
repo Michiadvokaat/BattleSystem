@@ -2,7 +2,6 @@
 
 #include "SCombatControlPanel.h"
 #include "Combat/CombatSettings.h"
-#include "Combat/CombatSetup.h"
 #include "Combat/CombatSubsystem.h"
 #include "HAL/IConsoleManager.h"
 #include "Styling/CoreStyle.h"
@@ -30,15 +29,11 @@ void SCombatControlPanel::Construct(const FArguments& InArgs)
 	Subsystem = InArgs._Subsystem;
 
 	const UCombatSettings* Settings = GetDefault<UCombatSettings>();
-	const FString DefaultSetupName = Settings->DefaultSetup.ToSoftObjectPath().GetAssetName();
-	for (const FString& Name : UCombatSubsystem::GetAllSourceNames())
+	if (UCombatSubsystem* CombatSubsystem = Subsystem.Get())
 	{
-		SetupOptions.Add(MakeShared<FString>(Name));
-		if (Name == DefaultSetupName || !SelectedSetup)
-		{
-			SelectedSetup = SetupOptions.Last();
-		}
+		CombatSubsystem->EnsureDesignLevel();
 	}
+
 	SeedText = FText::AsNumber(Settings->DefaultSeed, &FNumberFormattingOptions::DefaultNoGrouping());
 	RefreshReplayOptions();
 
@@ -83,27 +78,15 @@ void SCombatControlPanel::Construct(const FArguments& InArgs)
 			+ SVerticalBox::Slot().AutoHeight().Padding(0.f, 2.f)
 			[
 				SNew(SHorizontalBox)
-				+ SHorizontalBox::Slot().AutoWidth().VAlign(VAlign_Center)[ MakeLabel(INVTEXT("Setup")) ]
-				+ SHorizontalBox::Slot().FillWidth(1.f)
+				+ SHorizontalBox::Slot().AutoWidth().VAlign(VAlign_Center)[ MakeLabel(INVTEXT("Level")) ]
+				+ SHorizontalBox::Slot().FillWidth(1.f).VAlign(VAlign_Center)
 				[
-					SAssignNew(SetupCombo, SComboBox<TSharedPtr<FString>>)
-					.OptionsSource(&SetupOptions)
-					.InitiallySelectedItem(SelectedSetup)
-					.OnComboBoxOpening_Lambda([this]() { RefreshSetupOptions(); })
-					.OnGenerateWidget_Lambda([](TSharedPtr<FString> Item)
+					// Chosen in the LevelDesigner; Start, Batch and so on play it as it is (saved or not).
+					SNew(STextBlock).Text_Lambda([this]()
 					{
-						return SNew(STextBlock).Text(FText::FromString(*Item));
+						const UCombatSubsystem* CombatSubsystem = Subsystem.Get();
+						return CombatSubsystem ? FText::FromString(CombatSubsystem->GetDesignLevel().Name) : FText::GetEmpty();
 					})
-					.OnSelectionChanged_Lambda([this](TSharedPtr<FString> Item, ESelectInfo::Type)
-					{
-						SelectedSetup = Item;
-					})
-					[
-						SNew(STextBlock).Text_Lambda([this]()
-						{
-							return SelectedSetup ? FText::FromString(*SelectedSetup) : INVTEXT("(no setups)");
-						})
-					]
 				]
 			]
 
@@ -364,39 +347,11 @@ TSharedRef<SWidget> SCombatControlPanel::MakeLabel(const FText& Label)
 FReply SCombatControlPanel::OnStartClicked()
 {
 	UCombatSubsystem* CombatSubsystem = Subsystem.Get();
-	if (CombatSubsystem && CombatSubsystem->IsDesignMode())
+	if (CombatSubsystem)
 	{
-		// In LevelDesigner edit mode, Start plays the level being edited.
 		CombatSubsystem->PlayDesignLevel(FCString::Atoi(*SeedText.ToString()));
-		return FReply::Handled();
-	}
-
-	FCombatFightSource Source;
-	if (CombatSubsystem && SelectedSetup && UCombatSubsystem::ResolveSource(*SelectedSetup, Source))
-	{
-		CombatSubsystem->StartFightFromSource(FCString::Atoi(*SeedText.ToString()), Source, CombatSubsystem->GetCurrentSimSettings());
 	}
 	return FReply::Handled();
-}
-
-void SCombatControlPanel::RefreshSetupOptions()
-{
-	const FString Previous = SelectedSetup ? *SelectedSetup : FString();
-	SetupOptions.Reset();
-	SelectedSetup.Reset();
-	for (const FString& Name : UCombatSubsystem::GetAllSourceNames())
-	{
-		SetupOptions.Add(MakeShared<FString>(Name));
-		if (Name == Previous || !SelectedSetup)
-		{
-			SelectedSetup = SetupOptions.Last();
-		}
-	}
-	if (SetupCombo)
-	{
-		SetupCombo->RefreshOptions();
-		SetupCombo->SetSelectedItem(SelectedSetup);
-	}
 }
 
 FReply SCombatControlPanel::OnStopClicked()
@@ -494,9 +449,10 @@ FReply SCombatControlPanel::OnPlayReplayClicked()
 FReply SCombatControlPanel::OnBatchClicked(int32 Count)
 {
 	UCombatSubsystem* CombatSubsystem = Subsystem.Get();
-	FCombatFightSource Source;
-	if (CombatSubsystem && SelectedSetup && UCombatSubsystem::ResolveSource(*SelectedSetup, Source))
+	if (CombatSubsystem)
 	{
+		FCombatFightSource Source;
+		Source.Level = CombatSubsystem->GetDesignLevel();
 		// Seeds start at the seed field; the screen freezes while the batch runs.
 		CombatSubsystem->RunBatch(Source, Count, FCString::Atoi(*SeedText.ToString()), bBatchCsv, Message);
 	}

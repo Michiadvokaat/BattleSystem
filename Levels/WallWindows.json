@@ -127,7 +127,93 @@
 			"rotation": 18
 		}
 	],
-	"waves": [],
+	"waves": [
+		{
+			"spawns": [
+				{
+					"type": "DA_Bijlman",
+					"cell":
+					{
+						"x": 29,
+						"y": 4
+					},
+					"time": 5,
+					"position": 4,
+					"rotation": 2
+				},
+				{
+					"type": "DA_Boogschutter",
+					"cell":
+					{
+						"x": 30,
+						"y": 6
+					},
+					"time": 10,
+					"position": 1,
+					"rotation": 0
+				},
+				{
+					"type": "DA_Boogschutter",
+					"cell":
+					{
+						"x": 29,
+						"y": 8
+					},
+					"time": 0,
+					"position": 7,
+					"rotation": 11
+				}
+			]
+		},
+		{
+			"spawns": [
+				{
+					"type": "DA_Tank",
+					"cell":
+					{
+						"x": 26,
+						"y": 5
+					},
+					"time": 0,
+					"position": 4,
+					"rotation": 0
+				},
+				{
+					"type": "DA_Doelpop",
+					"cell":
+					{
+						"x": 26,
+						"y": 4
+					},
+					"time": 10,
+					"position": 5,
+					"rotation": 0
+				},
+				{
+					"type": "DA_Vaandeldrager",
+					"cell":
+					{
+						"x": 28,
+						"y": 7
+					},
+					"time": 0,
+					"position": 3,
+					"rotation": 0
+				},
+				{
+					"type": "DA_Brute",
+					"cell":
+					{
+						"x": 24,
+						"y": 3
+					},
+					"time": 6,
+					"position": 5,
+					"rotation": 0
+				}
+			]
+		}
+	],
 	"pieces": [
 		{
 			"id": "Building/Walls/SM_Walls_007_300cm",

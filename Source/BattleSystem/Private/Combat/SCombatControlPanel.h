@@ -35,8 +35,6 @@ private:
 	FReply OnBatchClicked(int32 Count);
 	FReply OnBatchCsvClicked();
 	void RefreshReplayOptions();
-	/** Setup assets and saved levels (levels can be added while playing). */
-	void RefreshSetupOptions();
 	void OnTauntRangeChanged(float Value);
 
 	FText GetStatusText() const;
@@ -57,10 +55,6 @@ private:
 	TSharedRef<SWidget> MakeLabel(const FText& Label);
 
 	TWeakObjectPtr<UCombatSubsystem> Subsystem;
-
-	TArray<TSharedPtr<FString>> SetupOptions;
-	TSharedPtr<FString> SelectedSetup;
-	TSharedPtr<SComboBox<TSharedPtr<FString>>> SetupCombo;
 
 	TArray<TSharedPtr<FString>> ReplayOptions;
 	TSharedPtr<FString> SelectedReplay;

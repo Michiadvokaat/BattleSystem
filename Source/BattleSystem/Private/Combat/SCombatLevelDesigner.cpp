@@ -908,7 +908,9 @@ bool SCombatLevelDesigner::IsConfirmingDelete() const
 
 void SCombatLevelDesigner::RefreshLevelOptions()
 {
-	const FString Previous = SelectedLevel ? *SelectedLevel : FString();
+	// The first time: the level being edited (the default level at the start of play).
+	const UCombatSubsystem* CombatSubsystem = Subsystem.Get();
+	const FString Previous = SelectedLevel ? *SelectedLevel : CombatSubsystem ? CombatSubsystem->GetDesignLevel().Name : FString();
 	LevelOptions.Reset();
 	SelectedLevel.Reset();
 	for (const FString& Name : CombatLevels::FindLevelNames())

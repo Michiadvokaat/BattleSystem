@@ -127,9 +127,13 @@ public:
 	UPROPERTY(Config, EditAnywhere, Category = "Arena")
 	bool bAutoStartFight = false;
 
-	/** Setup used by the auto-start and by Combat.Start/Combat.Simulate without a setup argument. */
+	/** Setup used by the auto-start and by Combat.Start/Combat.Simulate without a setup argument (the Combat panel plays the LevelDesigner level). */
 	UPROPERTY(Config, EditAnywhere, Category = "Arena")
 	TSoftObjectPtr<UCombatSetup> DefaultSetup;
+
+	/** LevelDesigner level (Levels/<name>.json, without .json) loaded when play starts; the Combat panel plays it. Empty or missing: a new empty level. */
+	UPROPERTY(Config, EditAnywhere, Category = "Arena")
+	FString DefaultLevel;
 
 	/** Seed used by the auto-start. */
 	UPROPERTY(Config, EditAnywhere, Category = "Arena")
