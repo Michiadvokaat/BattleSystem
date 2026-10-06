@@ -139,9 +139,10 @@ void ACombatAnimPreview::Tick(float DeltaSeconds)
 			Unit.Distance += Unit.Direction * WalkSpeed * Delta;
 			if (Unit.Distance >= PathLength || Unit.Distance <= 0.f)
 			{
-				// At the end: stand still, already facing back, so it turns while standing.
+				// At the end: stand still, already in the facing of the next leg, so it turns while standing.
 				Unit.Distance = FMath::Clamp(Unit.Distance, 0.f, PathLength);
 				Unit.Direction = -Unit.Direction;
+				++Unit.Leg;
 				Unit.StopLeft = StopTime;
 			}
 		}
@@ -150,9 +151,16 @@ void ACombatAnimPreview::Tick(float DeltaSeconds)
 		Actor->SetLocomotionTuning(Definition->MoveSpeed, Definition->LocomotionRate);
 		Actor->SetAnimationState(WalkDirection * Speed, Rate);
 		const FVector Location = GetActorLocation() + Right * (Index * Spacing) + Forward * Unit.Distance;
-		// Facing turned the other way than FacingOffset, so the walk is FacingOffset off the figure's forward.
-		Actor->UpdatePresentation(Location, (Forward * Unit.Direction).RotateAngleAxis(-FacingOffset, FVector::UpVector));
+		// Facing turned the other way than the offset, so the walk is the offset off the figure's forward.
+		Actor->UpdatePresentation(Location, (Forward * Unit.Direction).RotateAngleAxis(-GetFacingOffset(Unit), FVector::UpVector));
 	}
+}
+
+float ACombatAnimPreview::GetFacingOffset(const FPreviewUnit& Unit) const
+{
+	// Out forward, back facing the same way (backwards), out to the right, back facing the same way (to the left).
+	static const float Cycle[] = { 0.f, 180.f, 90.f, -90.f };
+	return bCycleDirections ? Cycle[Unit.Leg % UE_ARRAY_COUNT(Cycle)] : FacingOffset;
 }
 
 void ACombatAnimPreview::Destroyed()

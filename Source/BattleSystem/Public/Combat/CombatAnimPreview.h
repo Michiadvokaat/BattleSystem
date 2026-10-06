@@ -51,8 +51,15 @@ public:
 	 * To tune sideways and backwards steps: the figures walk their path but face away from it, so that seen from the
 	 * figure the walk goes this way: 0 = forward, 90 = to its right, -90 = to its left, 180 = backwards.
 	 */
-	UPROPERTY(EditAnywhere, Category = "Preview", meta = (ClampMin = -180, ClampMax = 180, Units = "deg"))
+	UPROPERTY(EditAnywhere, Category = "Preview", meta = (ClampMin = -180, ClampMax = 180, Units = "deg", EditCondition = "!bCycleDirections"))
 	float FacingOffset = 0.f;
+
+	/**
+	 * Every leg in the next direction, keeping the facing between a leg and the way back: out forward, back backwards,
+	 * out to the right, back to the left, and again. Off: always FacingOffset.
+	 */
+	UPROPERTY(EditAnywhere, Category = "Preview")
+	bool bCycleDirections = true;
 
 	/** Slow motion, like the control panel's speed buttons: scales the walking and the animation. */
 	UPROPERTY(EditAnywhere, Category = "Preview", meta = (ClampMin = 0, ClampMax = 4))
@@ -82,7 +89,12 @@ private:
 		/** +1 out, -1 back. */
 		float Direction = 1.f;
 		float StopLeft = 0.f;
+		/** Legs walked, for bCycleDirections. */
+		int32 Leg = 0;
 	};
+
+	/** FacingOffset of a unit's current leg. */
+	float GetFacingOffset(const FPreviewUnit& Unit) const;
 
 	void ClearUnits();
 	TArray<const UCombatUnitDefinition*> GetShownDefinitions() const;
