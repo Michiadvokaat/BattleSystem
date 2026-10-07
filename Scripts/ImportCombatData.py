@@ -1,4 +1,4 @@
-"""Fills the unit and skill tables (/Game/Combat/DT_Units, DT_Skills) from Data/Units.json and Data/Skills.json.
+"""Fills the unit and skill tables (/Game/Data/DT_Units, DT_Skills) from Data/Units.json and Data/Skills.json.
 The JSON files are the source; the tables are made from them.
 
 Run headless with the editor closed:
@@ -17,7 +17,7 @@ import sys
 import unreal
 
 LOG_TAG = "[CombatData]"
-TABLE_PATH = "/Game/Combat"
+TABLE_PATH = "/Game/Data"
 DATA_DIR = os.path.join(unreal.Paths.convert_relative_path_to_full(unreal.Paths.project_dir()), "Data")
 TABLES = [
     ("DT_Skills", unreal.CombatSkillRow, "Skills.json"),

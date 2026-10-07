@@ -147,11 +147,11 @@ public:
 
 	/** Unit types (FCombatUnitRow), heroes and enemies; levels name them by row name. Filled from Data/Units.json (Scripts/ImportCombatData.py). */
 	UPROPERTY(Config, EditAnywhere, Category = "Units", meta = (RequiredAssetDataTags = "RowStructure=/Script/BattleSystem.CombatUnitRow"))
-	TSoftObjectPtr<UDataTable> UnitTable = TSoftObjectPtr<UDataTable>(FSoftObjectPath(TEXT("/Game/Combat/DT_Units.DT_Units")));
+	TSoftObjectPtr<UDataTable> UnitTable = TSoftObjectPtr<UDataTable>(FSoftObjectPath(TEXT("/Game/Data/DT_Units.DT_Units")));
 
 	/** Skills (FCombatSkillRow) that units own by row name. Filled from Data/Skills.json (Scripts/ImportCombatData.py). */
 	UPROPERTY(Config, EditAnywhere, Category = "Units", meta = (RequiredAssetDataTags = "RowStructure=/Script/BattleSystem.CombatSkillRow"))
-	TSoftObjectPtr<UDataTable> SkillTable = TSoftObjectPtr<UDataTable>(FSoftObjectPath(TEXT("/Game/Combat/DT_Skills.DT_Skills")));
+	TSoftObjectPtr<UDataTable> SkillTable = TSoftObjectPtr<UDataTable>(FSoftObjectPath(TEXT("/Game/Data/DT_Skills.DT_Skills")));
 
 	/** Row names of the skill table, sorted (the dropdown of FCombatUnitRow::Skills). */
 	UFUNCTION()

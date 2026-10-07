@@ -1,4 +1,4 @@
-"""Creates the cue table /Game/Combat/DA_CueTable (debug colors per cue tag; VFX and sound are set in the editor).
+"""Creates the cue table /Game/Data/DA_CueTable (debug colors per cue tag; VFX and sound are set in the editor).
 
 Run headless with the editor closed:
     UnrealEditor-Cmd.exe BattleSystem.uproject -run=pythonscript -script="<abs path>/Scripts/CreateCueTable.py" -unattended -nullrhi
@@ -9,7 +9,7 @@ An existing table is kept, so cues edited in the editor stay. Set FORCE_UPDATE =
 import unreal
 
 LOG_TAG = "[CombatCues]"
-CUE_PATH = "/Game/Combat"
+CUE_PATH = "/Game/Data"
 FORCE_UPDATE = False
 
 # Cue tag -> debug color (R, G, B).
