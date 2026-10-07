@@ -5,6 +5,7 @@
 #include "CoreMinimal.h"
 #include "Combat/CombatLevel.h"
 #include "Combat/CombatTypes.h"
+#include "Combat/CombatUnitData.h"
 #include "CombatReplay.generated.h"
 
 struct FCombatSimConfig;
@@ -31,7 +32,7 @@ struct BATTLESYSTEM_API FCombatSimSettings
 	UPROPERTY() float ThreatThreshold = 5.f;
 	UPROPERTY() float ThreatSwitchRatio = 1.2f;
 	UPROPERTY() float RetargetDistanceMargin = 150.f;
-	/** cm for every Attack.Taunt; 0 = the Range from the Data Asset. */
+	/** cm for every Attack.Taunt; 0 = the skill's Range. */
 	UPROPERTY() float TauntRangeOverride = 0.f;
 	/** Pause before the first wave and after each cleared wave. */
 	UPROPERTY() int32 WavePauseTicks = 100;
@@ -49,13 +50,18 @@ struct BATTLESYSTEM_API FCombatReplay
 {
 	GENERATED_BODY()
 
-	/** 1 = no commands; 2 = with the command log and checkpoints; 3 = can hold a level; 4 = always a level (no setup assets). Older ones do not play. */
-	UPROPERTY() int32 FormatVersion = 4;
+	/**
+	 * 1 = no commands; 2 = with the command log and checkpoints; 3 = can hold a level; 4 = always a level (no setup assets);
+	 * 5 = holds the unit and skill rows (no unit definition assets). Older ones do not play.
+	 */
+	UPROPERTY() int32 FormatVersion = 5;
 	UPROPERTY() FString SavedAt;
 	/** Engine build; a replay is only guaranteed identical on the same build. */
 	UPROPERTY() FString BuildVersion;
 	/** A full copy of the fight's level, so the replay stays identical when the level file changes. */
 	UPROPERTY() FCombatLevel Level;
+	/** The rows of the fight's units and their skills, so the replay stays identical when the tables are tuned. */
+	UPROPERTY() FCombatUnitCatalog Units;
 	UPROPERTY() int32 Seed = 0;
 	UPROPERTY() FCombatSimSettings Settings;
 

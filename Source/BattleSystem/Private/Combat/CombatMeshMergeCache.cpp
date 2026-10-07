@@ -1,31 +1,9 @@
 // Copyright Epic Games, Inc. All Rights Reserved.
 
-#include "Combat/CombatAppearance.h"
+#include "Combat/CombatMeshMergeCache.h"
 #include "Combat/CombatSubsystem.h"
 #include "Engine/SkeletalMesh.h"
 #include "SkeletalMergingLibrary.h"
-
-FVector UCombatAppearance::GetMeshScale() const
-{
-	return FVector(UniformScale * WidthScale, UniformScale * WidthScale, UniformScale * HeightScale);
-}
-
-TArray<USkeletalMesh*> UCombatAppearance::PickMeshes(int32 Seed) const
-{
-	// One draw for the empty chance and one for the option per slot, in slot order, so adding options to one slot
-	// does not change the picks of the slots before it.
-	FRandomStream Stream(Seed);
-	TArray<USkeletalMesh*> Picks;
-	Picks.Reserve(Slots.Num());
-	for (const FCombatAppearanceSlot& Slot : Slots)
-	{
-		const float EmptyRoll = Stream.GetFraction();
-		const int32 OptionRoll = Stream.RandHelper(FMath::Max(Slot.Options.Num(), 1));
-		const bool bEmpty = Slot.Options.IsEmpty() || EmptyRoll < Slot.EmptyChance;
-		Picks.Add(bEmpty ? nullptr : Slot.Options[OptionRoll].Get());
-	}
-	return Picks;
-}
 
 bool UCombatMeshMergeCache::DoesSupportWorldType(const EWorldType::Type WorldType) const
 {

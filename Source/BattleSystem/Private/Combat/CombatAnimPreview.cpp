@@ -5,7 +5,7 @@
 #include "Combat/CombatSubsystem.h"
 #include "Combat/CombatTags.h"
 #include "Combat/CombatUnitActor.h"
-#include "Combat/CombatUnitDefinition.h"
+#include "Combat/CombatUnitData.h"
 #include "Components/ArrowComponent.h"
 #include "Engine/World.h"
 
@@ -24,27 +24,30 @@ ACombatAnimPreview::ACombatAnimPreview()
 #endif
 }
 
-TArray<const UCombatUnitDefinition*> ACombatAnimPreview::GetShownDefinitions() const
+TArray<FName> ACombatAnimPreview::GetShownTypes() const
 {
-	TArray<const UCombatUnitDefinition*> Shown;
-	for (const UCombatUnitDefinition* Definition : Definitions)
+	TArray<FName> Shown;
+	for (const FName& Type : UnitTypes)
 	{
-		if (Definition)
+		if (FindRow(Type))
 		{
-			Shown.Add(Definition);
+			Shown.Add(Type);
 		}
 	}
-	if (Definitions.IsEmpty())
+	if (UnitTypes.IsEmpty())
 	{
-		for (const FString& Name : UCombatSubsystem::GetAllUnitDefinitionNames())
+		for (const FString& Name : CombatUnits::GetAllTypeNames())
 		{
-			if (const UCombatUnitDefinition* Definition = UCombatSubsystem::FindUnitDefinition(Name))
-			{
-				Shown.Add(Definition);
-			}
+			Shown.Add(FName(*Name));
 		}
 	}
 	return Shown;
+}
+
+const FCombatUnitRow* ACombatAnimPreview::FindRow(FName Type)
+{
+	const UDataTable* Table = CombatUnits::GetUnitTable();
+	return Table ? Table->FindRow<FCombatUnitRow>(Type, TEXT("ACombatAnimPreview"), false) : nullptr;
 }
 
 void ACombatAnimPreview::Rebuild()
@@ -57,11 +60,15 @@ void ACombatAnimPreview::Rebuild()
 		return;
 	}
 
-	const TArray<const UCombatUnitDefinition*> Shown = GetShownDefinitions();
+	const TArray<FName> Shown = GetShownTypes();
 	for (int32 Index = 0; Index < Shown.Num(); ++Index)
 	{
-		const UCombatUnitDefinition* Definition = Shown[Index];
-		UClass* ActorClass = Definition->ActorClass ? Definition->ActorClass.Get() : ACombatUnitActor::StaticClass();
+		const TSharedPtr<const FCombatUnitType> Type = CombatUnits::FindType(Shown[Index].ToString());
+		if (!Type)
+		{
+			continue;
+		}
+		UClass* ActorClass = Type->Unit.LoadActorClass();
 
 		FActorSpawnParameters SpawnParams;
 		SpawnParams.Owner = this;
@@ -78,19 +85,16 @@ void ACombatAnimPreview::Rebuild()
 			continue;
 		}
 
-		const bool bRanged = Definition->Attacks.ContainsByPredicate([](const FCombatAttackDefinition& Attack)
+		const bool bRanged = Type->Attacks.ContainsByPredicate([](const FCombatSkillRow& Skill)
 		{
-			return Attack.Type.MatchesTagExact(CombatTags::Attack_Ranged);
+			return Skill.Type.MatchesTagExact(CombatTags::Attack_Ranged);
 		});
-		Actor->InitUnit(Index, 0, Definition->Radius, GetDefault<UCombatSettings>()->GetTeamColor(0), bRanged);
-		if (Definition->Appearance)
-		{
-			Actor->InitAppearance(Definition->Appearance, Seed + Index);
-		}
+		Actor->InitUnit(Index, 0, Type->Unit.Radius, GetDefault<UCombatSettings>()->GetTeamColor(0), bRanged);
+		Actor->InitLook(Type->Unit.Look, Seed + Index);
 
 		FPreviewUnit& Unit = Units.AddDefaulted_GetRef();
 		Unit.Actor = Actor;
-		Unit.Definition = Definition;
+		Unit.Type = Type->Name;
 	}
 }
 
@@ -111,7 +115,7 @@ void ACombatAnimPreview::Tick(float DeltaSeconds)
 	Super::Tick(DeltaSeconds);
 
 	// The figures are transient: after loading the map (or an undo) they are gone and come back here.
-	if (!bBuilt || Units.ContainsByPredicate([](const FPreviewUnit& Unit) { return !Unit.Actor.IsValid() || !Unit.Definition.IsValid(); }))
+	if (!bBuilt || Units.ContainsByPredicate([](const FPreviewUnit& Unit) { return !Unit.Actor.IsValid() || !FindRow(Unit.Type); }))
 	{
 		Rebuild();
 	}
@@ -124,9 +128,9 @@ void ACombatAnimPreview::Tick(float DeltaSeconds)
 	{
 		FPreviewUnit& Unit = Units[Index];
 		ACombatUnitActor* Actor = Unit.Actor.Get();
-		const UCombatUnitDefinition* Definition = Unit.Definition.Get();
+		const FCombatUnitRow* Row = FindRow(Unit.Type);
 
-		const float WalkSpeed = SpeedOverride > 0.f ? SpeedOverride : Definition->MoveSpeed;
+		const float WalkSpeed = SpeedOverride > 0.f ? SpeedOverride : Row->MoveSpeed;
 		const FVector WalkDirection = Forward * Unit.Direction;
 		float Speed = 0.f;
 		if (Unit.StopLeft > 0.f)
@@ -147,8 +151,8 @@ void ACombatAnimPreview::Tick(float DeltaSeconds)
 			}
 		}
 
-		// Read every frame, so tuning in the definition shows at once.
-		Actor->SetLocomotionTuning(Definition->MoveSpeed, Definition->LocomotionRate);
+		// Read every frame, so tuning in the unit table shows at once.
+		Actor->SetLocomotionTuning(Row->MoveSpeed, Row->LocomotionRate);
 		Actor->SetAnimationState(WalkDirection * Speed, Rate);
 		const FVector Location = GetActorLocation() + Right * (Index * Spacing) + Forward * Unit.Distance;
 		// Facing turned the other way than the offset, so the walk is the offset off the figure's forward.
@@ -175,7 +179,7 @@ void ACombatAnimPreview::PostEditChangeProperty(FPropertyChangedEvent& PropertyC
 	Super::PostEditChangeProperty(PropertyChangedEvent);
 
 	const FName Name = PropertyChangedEvent.GetMemberPropertyName();
-	if (Name == GET_MEMBER_NAME_CHECKED(ACombatAnimPreview, Definitions) || Name == GET_MEMBER_NAME_CHECKED(ACombatAnimPreview, Seed))
+	if (Name == GET_MEMBER_NAME_CHECKED(ACombatAnimPreview, UnitTypes) || Name == GET_MEMBER_NAME_CHECKED(ACombatAnimPreview, Seed))
 	{
 		Rebuild();
 	}

@@ -1,0 +1,678 @@
+[
+	{
+		"Name": "Bijlman",
+		"DisplayName": "Bijlman",
+		"MaxHP": 180,
+		"MoveSpeed": 240,
+		"Radius": 50,
+		"Tags":
+		{
+			"GameplayTags": [],
+			"ParentTags": []
+		},
+		"Skills": [
+			"Bijlman_AoE"
+		],
+		"SkillDamageMultiplier": 1,
+		"SkillRangeMultiplier": 1,
+		"SkillCooldownMultiplier": 1,
+		"EffectDurationMultiplier": 1,
+		"ActorClass": "None",
+		"Look":
+		{
+			"Slots": [],
+			"Props": [],
+			"Overrides": [],
+			"AnimSet": "None",
+			"UniformScale": 1,
+			"WidthScale": 1,
+			"HeightScale": 1,
+			"MeshRotation":
+			{
+				"Pitch": 0,
+				"Yaw": -90,
+				"Roll": 0
+			}
+		},
+		"LocomotionRate": 1
+	},
+	{
+		"Name": "Boogschutter",
+		"DisplayName": "Boogschutter",
+		"MaxHP": 70,
+		"MoveSpeed": 100,
+		"Radius": 20,
+		"Tags":
+		{
+			"GameplayTags": [],
+			"ParentTags": []
+		},
+		"Skills": [
+			"Boogschutter_Ranged",
+			"Boogschutter_Melee"
+		],
+		"SkillDamageMultiplier": 1,
+		"SkillRangeMultiplier": 1,
+		"SkillCooldownMultiplier": 1,
+		"EffectDurationMultiplier": 1,
+		"ActorClass": "None",
+		"Look":
+		{
+			"Slots": [
+				{
+					"SlotTag":
+					{
+						"TagName": "Slot.Body"
+					},
+					"Options": [
+						"/Game/Characters/Heroes/Meshes/SKM_Hero.SKM_Hero"
+					],
+					"EmptyChance": 0,
+					"bSwappable": false
+				},
+				{
+					"SlotTag":
+					{
+						"TagName": "Slot.Face"
+					},
+					"Options": [
+						"/Game/Characters/Heroes/Ranger/SKM_Ranger_Face.SKM_Ranger_Face"
+					],
+					"EmptyChance": 0,
+					"bSwappable": false
+				},
+				{
+					"SlotTag":
+					{
+						"TagName": "Slot.Hair"
+					},
+					"Options": [
+						"/Game/Characters/Heroes/Ranger/SKM_Ranger_Hair.SKM_Ranger_Hair"
+					],
+					"EmptyChance": 0,
+					"bSwappable": false
+				},
+				{
+					"SlotTag":
+					{
+						"TagName": "Slot.Shirt"
+					},
+					"Options": [
+						"/Game/Characters/Heroes/Ranger/SKM_Ranger_Shirt.SKM_Ranger_Shirt"
+					],
+					"EmptyChance": 0,
+					"bSwappable": false
+				},
+				{
+					"SlotTag":
+					{
+						"TagName": "Slot.Pants"
+					},
+					"Options": [
+						"/Game/Characters/Heroes/Ranger/SKM_Ranger_Pants.SKM_Ranger_Pants"
+					],
+					"EmptyChance": 0,
+					"bSwappable": false
+				},
+				{
+					"SlotTag":
+					{
+						"TagName": "Slot.Shoes"
+					},
+					"Options": [
+						"/Game/Characters/Heroes/Ranger/SKM_Ranger_Shoes.SKM_Ranger_Shoes"
+					],
+					"EmptyChance": 0,
+					"bSwappable": false
+				},
+				{
+					"SlotTag":
+					{
+						"TagName": "Slot.Hat"
+					},
+					"Options": [
+						"/Game/Characters/Heroes/Ranger/SKM_Ranger_Hat.SKM_Ranger_Hat"
+					],
+					"EmptyChance": 0,
+					"bSwappable": true
+				}
+			],
+			"Props": [],
+			"Overrides": [],
+			"AnimSet": "/Game/Characters/Animations/DA_AnimSet_Child.DA_AnimSet_Child",
+			"UniformScale": 1,
+			"WidthScale": 1,
+			"HeightScale": 1,
+			"MeshRotation":
+			{
+				"Pitch": 0,
+				"Yaw": -90,
+				"Roll": 0
+			}
+		},
+		"LocomotionRate": 1
+	},
+	{
+		"Name": "Brute",
+		"DisplayName": "Brute",
+		"MaxHP": 220,
+		"MoveSpeed": 220,
+		"Radius": 60,
+		"Tags":
+		{
+			"GameplayTags": [],
+			"ParentTags": []
+		},
+		"Skills": [
+			"Brute_Melee"
+		],
+		"SkillDamageMultiplier": 1,
+		"SkillRangeMultiplier": 1,
+		"SkillCooldownMultiplier": 1,
+		"EffectDurationMultiplier": 1,
+		"ActorClass": "None",
+		"Look":
+		{
+			"Slots": [
+				{
+					"SlotTag":
+					{
+						"TagName": "Slot.Body"
+					},
+					"Options": [
+						"/Game/Characters/Heroes/Meshes/Child/Male/SKM_Child_Male_Body_01.SKM_Child_Male_Body_01",
+						"/Game/Characters/Heroes/Meshes/Child/Male/SKM_Child_Male_Body_02.SKM_Child_Male_Body_02",
+						"/Game/Characters/Heroes/Meshes/Child/Male/SKM_Child_Male_Body_03.SKM_Child_Male_Body_03",
+						"/Game/Characters/Heroes/Meshes/Child/Male/SKM_Child_Male_Body_04.SKM_Child_Male_Body_04"
+					],
+					"EmptyChance": 0,
+					"bSwappable": false
+				},
+				{
+					"SlotTag":
+					{
+						"TagName": "Slot.Face"
+					},
+					"Options": [
+						"/Game/Characters/Heroes/Meshes/Child/Male/SKM_Child_Male_Face_Usual.SKM_Child_Male_Face_Usual",
+						"/Game/Characters/Heroes/Meshes/Child/Male/SKM_Child_Male_Face_Neutral.SKM_Child_Male_Face_Neutral",
+						"/Game/Characters/Heroes/Meshes/Child/Male/SKM_Child_Male_Face_Happy.SKM_Child_Male_Face_Happy",
+						"/Game/Characters/Heroes/Meshes/Child/Male/SKM_Child_Male_Face_Angry.SKM_Child_Male_Face_Angry",
+						"/Game/Characters/Heroes/Meshes/Child/Male/SKM_Child_Male_Face_Evil.SKM_Child_Male_Face_Evil"
+					],
+					"EmptyChance": 0,
+					"bSwappable": false
+				},
+				{
+					"SlotTag":
+					{
+						"TagName": "Slot.Hair"
+					},
+					"Options": [
+						"/Game/Characters/Heroes/Meshes/Child/Male/SKM_Child_Male_Hairstyle_01.SKM_Child_Male_Hairstyle_01",
+						"/Game/Characters/Heroes/Meshes/Child/Male/SKM_Child_Male_Hairstyle_02.SKM_Child_Male_Hairstyle_02",
+						"/Game/Characters/Heroes/Meshes/Child/Male/SKM_Child_Male_Hairstyle_03.SKM_Child_Male_Hairstyle_03",
+						"/Game/Characters/Heroes/Meshes/Child/Male/SKM_Child_Male_Hairstyle_04.SKM_Child_Male_Hairstyle_04",
+						"/Game/Characters/Heroes/Meshes/Child/Male/SKM_Child_Male_Hairstyle_05.SKM_Child_Male_Hairstyle_05",
+						"/Game/Characters/Heroes/Meshes/Child/Male/SKM_Child_Male_Hairstyle_06.SKM_Child_Male_Hairstyle_06",
+						"/Game/Characters/Heroes/Meshes/Child/Male/SKM_Child_Male_Hairstyle_07.SKM_Child_Male_Hairstyle_07",
+						"/Game/Characters/Heroes/Meshes/Child/Male/SKM_Child_Male_Hairstyle_08.SKM_Child_Male_Hairstyle_08",
+						"/Game/Characters/Heroes/Meshes/Child/Male/SKM_Child_Male_Hairstyle_09.SKM_Child_Male_Hairstyle_09"
+					],
+					"EmptyChance": 0.1,
+					"bSwappable": false
+				},
+				{
+					"SlotTag":
+					{
+						"TagName": "Slot.Shirt"
+					},
+					"Options": [
+						"/Game/Characters/Heroes/Meshes/Child/Male/SKM_Child_Male_Shirt_01.SKM_Child_Male_Shirt_01",
+						"/Game/Characters/Heroes/Meshes/Child/Male/SKM_Child_Male_Shirt_02.SKM_Child_Male_Shirt_02",
+						"/Game/Characters/Heroes/Meshes/Child/Male/SKM_Child_Male_Shirt_03.SKM_Child_Male_Shirt_03",
+						"/Game/Characters/Heroes/Meshes/Child/Male/SKM_Child_Male_Shirt_04.SKM_Child_Male_Shirt_04",
+						"/Game/Characters/Heroes/Meshes/Child/Male/SKM_Child_Male_Shirt_05.SKM_Child_Male_Shirt_05"
+					],
+					"EmptyChance": 0,
+					"bSwappable": false
+				},
+				{
+					"SlotTag":
+					{
+						"TagName": "Slot.Outwear"
+					},
+					"Options": [
+						"/Game/Characters/Heroes/Meshes/Child/Male/SKM_Child_Male_Outwear_01.SKM_Child_Male_Outwear_01",
+						"/Game/Characters/Heroes/Meshes/Child/Male/SKM_Child_Male_Outwear_02.SKM_Child_Male_Outwear_02",
+						"/Game/Characters/Heroes/Meshes/Child/Male/SKM_Child_Male_Outwear_03.SKM_Child_Male_Outwear_03",
+						"/Game/Characters/Heroes/Meshes/Child/Male/SKM_Child_Male_Outwear_04.SKM_Child_Male_Outwear_04",
+						"/Game/Characters/Heroes/Meshes/Child/Male/SKM_Child_Male_Outwear_05.SKM_Child_Male_Outwear_05"
+					],
+					"EmptyChance": 0.6,
+					"bSwappable": false
+				},
+				{
+					"SlotTag":
+					{
+						"TagName": "Slot.Pants"
+					},
+					"Options": [
+						"/Game/Characters/Heroes/Meshes/Child/Male/SKM_Child_Male_Pants_01.SKM_Child_Male_Pants_01",
+						"/Game/Characters/Heroes/Meshes/Child/Male/SKM_Child_Male_Pants_02.SKM_Child_Male_Pants_02",
+						"/Game/Characters/Heroes/Meshes/Child/Male/SKM_Child_Male_Pants_03.SKM_Child_Male_Pants_03",
+						"/Game/Characters/Heroes/Meshes/Child/Male/SKM_Child_Male_Pants_04.SKM_Child_Male_Pants_04",
+						"/Game/Characters/Heroes/Meshes/Child/Male/SKM_Child_Male_Pants_05.SKM_Child_Male_Pants_05",
+						"/Game/Characters/Heroes/Meshes/Child/Male/SKM_Child_Male_Shorts_01.SKM_Child_Male_Shorts_01",
+						"/Game/Characters/Heroes/Meshes/Child/Male/SKM_Child_Male_Shorts_02.SKM_Child_Male_Shorts_02"
+					],
+					"EmptyChance": 0,
+					"bSwappable": false
+				},
+				{
+					"SlotTag":
+					{
+						"TagName": "Slot.Shoes"
+					},
+					"Options": [
+						"/Game/Characters/Heroes/Meshes/Child/Male/SKM_Child_Male_Shoes_01.SKM_Child_Male_Shoes_01",
+						"/Game/Characters/Heroes/Meshes/Child/Male/SKM_Child_Male_Shoes_02.SKM_Child_Male_Shoes_02",
+						"/Game/Characters/Heroes/Meshes/Child/Male/SKM_Child_Male_Shoes_03.SKM_Child_Male_Shoes_03",
+						"/Game/Characters/Heroes/Meshes/Child/Male/SKM_Child_Male_Shoes_04.SKM_Child_Male_Shoes_04",
+						"/Game/Characters/Heroes/Meshes/Child/Male/SKM_Child_Male_Shoes_05.SKM_Child_Male_Shoes_05",
+						"/Game/Characters/Heroes/Meshes/Child/Male/SKM_Child_Male_Shoes_06.SKM_Child_Male_Shoes_06",
+						"/Game/Characters/Heroes/Meshes/Child/Male/SKM_Child_Male_Shoes_07.SKM_Child_Male_Shoes_07",
+						"/Game/Characters/Heroes/Meshes/Child/Male/SKM_Child_Male_Shoes_08.SKM_Child_Male_Shoes_08"
+					],
+					"EmptyChance": 0,
+					"bSwappable": false
+				},
+				{
+					"SlotTag":
+					{
+						"TagName": "Slot.Hat"
+					},
+					"Options": [
+						"/Game/Characters/Heroes/Meshes/Child/Male/SKM_Child_Male_Hat_01.SKM_Child_Male_Hat_01",
+						"/Game/Characters/Heroes/Meshes/Child/Male/SKM_Child_Male_Hat_02.SKM_Child_Male_Hat_02",
+						"/Game/Characters/Heroes/Meshes/Child/Male/SKM_Child_Male_Hat_03.SKM_Child_Male_Hat_03",
+						"/Game/Characters/Heroes/Meshes/Child/Male/SKM_Child_Male_Hat_04.SKM_Child_Male_Hat_04",
+						"/Game/Characters/Heroes/Meshes/Child/Male/SKM_Child_Male_Hat_05.SKM_Child_Male_Hat_05"
+					],
+					"EmptyChance": 0.6,
+					"bSwappable": true
+				},
+				{
+					"SlotTag":
+					{
+						"TagName": "Slot.Glasses"
+					},
+					"Options": [
+						"/Game/Characters/Heroes/Meshes/Child/Male/SKM_Child_Male_Glasses_01.SKM_Child_Male_Glasses_01",
+						"/Game/Characters/Heroes/Meshes/Child/Male/SKM_Child_Male_Glasses_02.SKM_Child_Male_Glasses_02"
+					],
+					"EmptyChance": 0.8,
+					"bSwappable": true
+				},
+				{
+					"SlotTag":
+					{
+						"TagName": "Slot.Backpack"
+					},
+					"Options": [
+						"/Game/Characters/Heroes/Meshes/Child/Male/SKM_Child_Male_Backpack_01.SKM_Child_Male_Backpack_01"
+					],
+					"EmptyChance": 0.7,
+					"bSwappable": true
+				}
+			],
+			"Props": [],
+			"Overrides": [
+				{
+					"WhileTag":
+					{
+						"TagName": "Status.Taunted"
+					},
+					"SlotTag":
+					{
+						"TagName": "Slot.Hat"
+					},
+					"Mesh": "/Game/Characters/Heroes/Meshes/Child/Male/SKM_Child_Male_Bicyclist_Hat.SKM_Child_Male_Bicyclist_Hat"
+				}
+			],
+			"AnimSet": "/Game/Characters/Animations/DA_AnimSet_Child.DA_AnimSet_Child",
+			"UniformScale": 1,
+			"WidthScale": 1,
+			"HeightScale": 1,
+			"MeshRotation":
+			{
+				"Pitch": 0,
+				"Yaw": -90,
+				"Roll": 0
+			}
+		},
+		"LocomotionRate": 1
+	},
+	{
+		"Name": "Doelpop",
+		"DisplayName": "Doelpop",
+		"MaxHP": 300,
+		"MoveSpeed": 0,
+		"Radius": 40,
+		"Tags":
+		{
+			"GameplayTags": [],
+			"ParentTags": []
+		},
+		"Skills": [],
+		"SkillDamageMultiplier": 1,
+		"SkillRangeMultiplier": 1,
+		"SkillCooldownMultiplier": 1,
+		"EffectDurationMultiplier": 1,
+		"ActorClass": "None",
+		"Look":
+		{
+			"Slots": [],
+			"Props": [],
+			"Overrides": [],
+			"AnimSet": "None",
+			"UniformScale": 1,
+			"WidthScale": 1,
+			"HeightScale": 1,
+			"MeshRotation":
+			{
+				"Pitch": 0,
+				"Yaw": -90,
+				"Roll": 0
+			}
+		},
+		"LocomotionRate": 1
+	},
+	{
+		"Name": "Krijger",
+		"DisplayName": "Krijger",
+		"MaxHP": 100,
+		"MoveSpeed": 200,
+		"Radius": 20,
+		"Tags":
+		{
+			"GameplayTags": [],
+			"ParentTags": []
+		},
+		"Skills": [
+			"Krijger_Melee",
+			"Krijger_PlayerTaunt"
+		],
+		"SkillDamageMultiplier": 1,
+		"SkillRangeMultiplier": 1,
+		"SkillCooldownMultiplier": 1,
+		"EffectDurationMultiplier": 1,
+		"ActorClass": "None",
+		"Look":
+		{
+			"Slots": [
+				{
+					"SlotTag":
+					{
+						"TagName": "Slot.Body"
+					},
+					"Options": [
+						"/Game/Characters/Heroes/Meshes/Child/Male/SKM_Child_Male_Body_02.SKM_Child_Male_Body_02"
+					],
+					"EmptyChance": 0,
+					"bSwappable": false
+				},
+				{
+					"SlotTag":
+					{
+						"TagName": "Slot.Shirt"
+					},
+					"Options": [
+						"/Game/Characters/Heroes/Meshes/Child/Male/SKM_Child_Male_Shirt_02.SKM_Child_Male_Shirt_02"
+					],
+					"EmptyChance": 0,
+					"bSwappable": false
+				},
+				{
+					"SlotTag":
+					{
+						"TagName": "Slot.Pants"
+					},
+					"Options": [
+						"/Game/Characters/Heroes/Meshes/Child/Male/SKM_Child_Male_Shorts_02.SKM_Child_Male_Shorts_02"
+					],
+					"EmptyChance": 0,
+					"bSwappable": false
+				},
+				{
+					"SlotTag":
+					{
+						"TagName": "Slot.Shoes"
+					},
+					"Options": [
+						"/Game/Characters/Heroes/Meshes/Child/Male/SKM_Child_Male_Shoes_06.SKM_Child_Male_Shoes_06"
+					],
+					"EmptyChance": 0,
+					"bSwappable": false
+				}
+			],
+			"Props": [],
+			"Overrides": [],
+			"AnimSet": "/Game/Characters/Animations/DA_AnimSet_Child.DA_AnimSet_Child",
+			"UniformScale": 1,
+			"WidthScale": 1,
+			"HeightScale": 1,
+			"MeshRotation":
+			{
+				"Pitch": 0,
+				"Yaw": -90,
+				"Roll": 0
+			}
+		},
+		"LocomotionRate": 1
+	},
+	{
+		"Name": "Magier",
+		"DisplayName": "Magier",
+		"MaxHP": 80,
+		"MoveSpeed": 280,
+		"Radius": 35,
+		"Tags":
+		{
+			"GameplayTags": [],
+			"ParentTags": []
+		},
+		"Skills": [
+			"Magier_AoE",
+			"Magier_Melee"
+		],
+		"SkillDamageMultiplier": 1,
+		"SkillRangeMultiplier": 1,
+		"SkillCooldownMultiplier": 1,
+		"EffectDurationMultiplier": 1,
+		"ActorClass": "None",
+		"Look":
+		{
+			"Slots": [],
+			"Props": [],
+			"Overrides": [],
+			"AnimSet": "None",
+			"UniformScale": 1,
+			"WidthScale": 1,
+			"HeightScale": 1,
+			"MeshRotation":
+			{
+				"Pitch": 0,
+				"Yaw": -90,
+				"Roll": 0
+			}
+		},
+		"LocomotionRate": 1
+	},
+	{
+		"Name": "Tank",
+		"DisplayName": "Tank",
+		"MaxHP": 400,
+		"MoveSpeed": 250,
+		"Radius": 25,
+		"Tags":
+		{
+			"GameplayTags": [],
+			"ParentTags": []
+		},
+		"Skills": [
+			"Tank_Melee",
+			"Tank_Taunt",
+			"Tank_PlayerTaunt"
+		],
+		"SkillDamageMultiplier": 1,
+		"SkillRangeMultiplier": 1,
+		"SkillCooldownMultiplier": 1,
+		"EffectDurationMultiplier": 1,
+		"ActorClass": "None",
+		"Look":
+		{
+			"Slots": [
+				{
+					"SlotTag":
+					{
+						"TagName": "Slot.Body"
+					},
+					"Options": [
+						"/Game/Characters/Heroes/Meshes/Child/Female/SKM_Child_Female_Body_04.SKM_Child_Female_Body_04"
+					],
+					"EmptyChance": 0,
+					"bSwappable": false
+				},
+				{
+					"SlotTag":
+					{
+						"TagName": "Slot.Face"
+					},
+					"Options": [
+						"/Game/Characters/Heroes/Barbarian/SKM_Tank_Face.SKM_Tank_Face"
+					],
+					"EmptyChance": 0,
+					"bSwappable": false
+				},
+				{
+					"SlotTag":
+					{
+						"TagName": "Slot.Hair"
+					},
+					"Options": [
+						"/Game/Characters/Heroes/Barbarian/SKM_Tank_Hair.SKM_Tank_Hair"
+					],
+					"EmptyChance": 0,
+					"bSwappable": false
+				},
+				{
+					"SlotTag":
+					{
+						"TagName": "Slot.Outwear"
+					},
+					"Options": [
+						"/Game/Characters/Heroes/Barbarian/SKM_Tank_Jacket.SKM_Tank_Jacket"
+					],
+					"EmptyChance": 0,
+					"bSwappable": false
+				},
+				{
+					"SlotTag":
+					{
+						"TagName": "Slot.Pants"
+					},
+					"Options": [
+						"/Game/Characters/Heroes/Barbarian/SKM_Tank_Pants.SKM_Tank_Pants"
+					],
+					"EmptyChance": 0,
+					"bSwappable": false
+				},
+				{
+					"SlotTag":
+					{
+						"TagName": "Slot.Shoes"
+					},
+					"Options": [
+						"/Game/Characters/Heroes/Barbarian/SKM_Tank_Shoes.SKM_Tank_Shoes"
+					],
+					"EmptyChance": 0,
+					"bSwappable": false
+				},
+				{
+					"SlotTag":
+					{
+						"TagName": "Slot.Hat"
+					},
+					"Options": [
+						"/Game/Characters/Heroes/Barbarian/SKM_Tank_Hat.SKM_Tank_Hat"
+					],
+					"EmptyChance": 0,
+					"bSwappable": true
+				},
+				{
+					"SlotTag":
+					{
+						"TagName": "Slot.Glasses"
+					},
+					"Options": [
+						"/Game/Characters/Heroes/Barbarian/SKM_Tank_Glasses.SKM_Tank_Glasses"
+					],
+					"EmptyChance": 0,
+					"bSwappable": true
+				}
+			],
+			"Props": [],
+			"Overrides": [],
+			"AnimSet": "/Game/Characters/Animations/DA_AnimSet_Child.DA_AnimSet_Child",
+			"UniformScale": 1,
+			"WidthScale": 1.3,
+			"HeightScale": 1.2,
+			"MeshRotation":
+			{
+				"Pitch": 0,
+				"Yaw": -90,
+				"Roll": 0
+			}
+		},
+		"LocomotionRate": 1
+	},
+	{
+		"Name": "Vaandeldrager",
+		"DisplayName": "Vaandeldrager",
+		"MaxHP": 120,
+		"MoveSpeed": 280,
+		"Radius": 40,
+		"Tags":
+		{
+			"GameplayTags": [],
+			"ParentTags": []
+		},
+		"Skills": [
+			"Vaandeldrager_AoE",
+			"Vaandeldrager_Melee"
+		],
+		"SkillDamageMultiplier": 1,
+		"SkillRangeMultiplier": 1,
+		"SkillCooldownMultiplier": 1,
+		"EffectDurationMultiplier": 1,
+		"ActorClass": "None",
+		"Look":
+		{
+			"Slots": [],
+			"Props": [],
+			"Overrides": [],
+			"AnimSet": "None",
+			"UniformScale": 1,
+			"WidthScale": 1,
+			"HeightScale": 1,
+			"MeshRotation":
+			{
+				"Pitch": 0,
+				"Yaw": -90,
+				"Roll": 0
+			}
+		},
+		"LocomotionRate": 1
+	}
+]

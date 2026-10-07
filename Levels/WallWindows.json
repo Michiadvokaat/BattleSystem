@@ -1,12 +1,12 @@
 {
-	"formatVersion": 8,
+	"formatVersion": 9,
 	"name": "WallWindows",
 	"width": 40,
 	"height": 12,
 	"cellSize": 100,
 	"units": [
 		{
-			"type": "DA_Tank",
+			"type": "Tank",
 			"team": 0,
 			"cell":
 			{
@@ -17,7 +17,7 @@
 			"rotation": 8
 		},
 		{
-			"type": "DA_Boogschutter",
+			"type": "Boogschutter",
 			"team": 0,
 			"cell":
 			{
@@ -28,7 +28,7 @@
 			"rotation": 16
 		},
 		{
-			"type": "DA_Krijger",
+			"type": "Krijger",
 			"team": 0,
 			"cell":
 			{
@@ -39,7 +39,7 @@
 			"rotation": 20
 		},
 		{
-			"type": "DA_Boogschutter",
+			"type": "Boogschutter",
 			"team": 0,
 			"cell":
 			{
@@ -50,7 +50,7 @@
 			"rotation": 18
 		},
 		{
-			"type": "DA_Boogschutter",
+			"type": "Boogschutter",
 			"team": 0,
 			"cell":
 			{
@@ -61,7 +61,7 @@
 			"rotation": 18
 		},
 		{
-			"type": "DA_Krijger",
+			"type": "Krijger",
 			"team": 0,
 			"cell":
 			{
@@ -72,7 +72,7 @@
 			"rotation": 18
 		},
 		{
-			"type": "DA_Krijger",
+			"type": "Krijger",
 			"team": 0,
 			"cell":
 			{
@@ -83,7 +83,7 @@
 			"rotation": 18
 		},
 		{
-			"type": "DA_Krijger",
+			"type": "Krijger",
 			"team": 0,
 			"cell":
 			{
@@ -94,7 +94,7 @@
 			"rotation": 18
 		},
 		{
-			"type": "DA_Tank",
+			"type": "Tank",
 			"team": 0,
 			"cell":
 			{
@@ -105,7 +105,7 @@
 			"rotation": 18
 		},
 		{
-			"type": "DA_Tank",
+			"type": "Tank",
 			"team": 0,
 			"cell":
 			{
@@ -116,7 +116,7 @@
 			"rotation": 18
 		},
 		{
-			"type": "DA_Tank",
+			"type": "Tank",
 			"team": 0,
 			"cell":
 			{
@@ -131,7 +131,7 @@
 		{
 			"spawns": [
 				{
-					"type": "DA_Bijlman",
+					"type": "Bijlman",
 					"cell":
 					{
 						"x": 29,
@@ -142,7 +142,7 @@
 					"rotation": 2
 				},
 				{
-					"type": "DA_Boogschutter",
+					"type": "Boogschutter",
 					"cell":
 					{
 						"x": 30,
@@ -153,7 +153,7 @@
 					"rotation": 0
 				},
 				{
-					"type": "DA_Boogschutter",
+					"type": "Boogschutter",
 					"cell":
 					{
 						"x": 29,
@@ -168,7 +168,7 @@
 		{
 			"spawns": [
 				{
-					"type": "DA_Tank",
+					"type": "Tank",
 					"cell":
 					{
 						"x": 26,
@@ -179,7 +179,7 @@
 					"rotation": 0
 				},
 				{
-					"type": "DA_Doelpop",
+					"type": "Doelpop",
 					"cell":
 					{
 						"x": 26,
@@ -190,7 +190,7 @@
 					"rotation": 0
 				},
 				{
-					"type": "DA_Vaandeldrager",
+					"type": "Vaandeldrager",
 					"cell":
 					{
 						"x": 28,
@@ -201,7 +201,7 @@
 					"rotation": 0
 				},
 				{
-					"type": "DA_Brute",
+					"type": "Brute",
 					"cell":
 					{
 						"x": 24,

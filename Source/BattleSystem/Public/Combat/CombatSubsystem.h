@@ -18,7 +18,6 @@ class ACombatProjectileActor;
 class UCombatCommandScript;
 class UCombatCueTable;
 class ACombatUnitActor;
-class UCombatUnitDefinition;
 
 BATTLESYSTEM_API DECLARE_LOG_CATEGORY_EXTERN(LogCombat, Log, All);
 
@@ -37,6 +36,8 @@ enum class ECombatDesignTool : uint8
 struct FCombatFightSource
 {
 	TOptional<FCombatLevel> Level;
+	/** The unit and skill rows of a replay; unset = taken from the project's tables. */
+	TOptional<FCombatUnitCatalog> Units;
 
 	bool IsValid() const { return Level.IsSet(); }
 	/** "Level: Name". */
@@ -146,7 +147,8 @@ public:
 
 	/** Changes on every start and stop, so UI can rebuild per fight. */
 	int32 GetFightSerial() const { return FightSerial; }
-	const UCombatUnitDefinition* GetUnitDefinition(int32 UnitId) const;
+	/** The type of a unit in the current fight (its row and skills), or nullptr (no fight, unknown ID). */
+	const FCombatUnitType* GetUnitType(int32 UnitId) const;
 	/** The actor that shows a unit, or nullptr (no fight, unknown ID). Presentation only. */
 	ACombatUnitActor* GetUnitActor(int32 UnitId) const;
 	/** UI name of a player ability: its DisplayName, else the last part of its type ("Taunt"). */
@@ -306,19 +308,17 @@ public:
 	 */
 	void DesignPaint(const FVector& WorldPoint, bool bErase, bool bStroke);
 
-	/** Asset names of all UCombatUnitDefinition assets, sorted. */
-	static TArray<FString> GetAllUnitDefinitionNames();
-
-	/** Builds a simulation config from a level (it brings its own grid; the world's ACombatGrid only gives the origin). */
+	/**
+	 * Builds a simulation config from a level (it brings its own grid; the world's ACombatGrid only gives the origin).
+	 * The unit types come from Source.Units, else from the project's tables; OutUnits gets the rows used (for replays).
+	 * Fails if a unit of the level names a skill that is not there.
+	 */
 	static bool BuildSimConfigFromSource(UWorld* World, int32 Seed, const FCombatFightSource& Source, const FCombatSimSettings& Settings,
-		FCombatSimConfig& OutConfig, FVector& OutGridOrigin, TArray<const UCombatUnitDefinition*>* OutDefinitions = nullptr,
-		TArray<int32>* OutRotations = nullptr);
+		FCombatSimConfig& OutConfig, FVector& OutGridOrigin, TArray<TSharedPtr<const FCombatUnitType>>* OutTypes = nullptr,
+		TArray<int32>* OutRotations = nullptr, FCombatUnitCatalog* OutUnits = nullptr);
 
 	/** A level name ("Name" or "Level: Name") to a fight source, loaded from Levels/; empty gives UCombatSettings::DefaultLevel. */
 	static bool ResolveSource(const FString& Name, FCombatFightSource& OutSource);
-	/** Finds a unit definition by asset name or object path. */
-	static const UCombatUnitDefinition* FindUnitDefinition(const FString& NameOrPath);
-
 	/** Finds a command script by asset name or object path. */
 	static UCombatCommandScript* FindCommandScript(const FString& NameOrPath);
 
@@ -386,15 +386,13 @@ private:
 	UPROPERTY(Transient)
 	TArray<TObjectPtr<ACombatUnitActor>> UnitActors;
 
-	/** Indexed by unit ID; kept for per-attack presentation settings such as the projectile actor class. */
-	UPROPERTY(Transient)
-	TArray<TObjectPtr<UCombatUnitDefinition>> UnitDefinitions;
+	/** Indexed by unit ID; kept for per-skill presentation settings such as the projectile actor class. */
+	TArray<TSharedPtr<const FCombatUnitType>> UnitTypes;
 
-	/** Indexed by FCombatUnit::SourceIndex: the definition of every unit the fight can have, wave spawns included. */
-	UPROPERTY(Transient)
-	TArray<TObjectPtr<UCombatUnitDefinition>> SourceDefinitions;
+	/** Indexed by FCombatUnit::SourceIndex: the type of every unit the fight can have, wave spawns included. */
+	TArray<TSharedPtr<const FCombatUnitType>> SourceTypes;
 
-	/** Indexed like SourceDefinitions: the start rotation (eighth turns) of each unit of a level; empty for setups. */
+	/** Indexed like SourceTypes: the start rotation (1/32 turns) of each unit of the level. */
 	TArray<int32> SourceRotations;
 
 	/** Projectiles in flight, by projectile ID. */
@@ -415,6 +413,8 @@ private:
 	FString CurrentSourceName;
 	/** The level of the current fight (copied into replays). */
 	TOptional<FCombatLevel> CurrentLevel;
+	/** The unit and skill rows of the current fight (copied into replays). */
+	FCombatUnitCatalog CurrentUnits;
 
 	/** The view camera and its transform as placed in the arena, remembered before it was first fitted or moved. */
 	TWeakObjectPtr<AActor> ArenaCamera;

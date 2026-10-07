@@ -2,7 +2,6 @@
 
 #include "Combat/CombatSubsystem.h"
 #include "AssetRegistry/IAssetRegistry.h"
-#include "Combat/CombatAppearance.h"
 #include "Combat/CombatBatch.h"
 #include "Combat/CombatCommandScript.h"
 #include "Combat/CombatCueTable.h"
@@ -13,7 +12,7 @@
 #include "Combat/CombatSettings.h"
 #include "Combat/CombatTags.h"
 #include "Combat/CombatUnitActor.h"
-#include "Combat/CombatUnitDefinition.h"
+#include "Combat/CombatUnitData.h"
 #include "DrawDebugHelpers.h"
 #include "Engine/Engine.h"
 #include "Engine/SkeletalMesh.h"
@@ -139,9 +138,10 @@ bool UCombatSubsystem::StartFightFromSource(int32 Seed, const FCombatFightSource
 	DestroyDesignPreviews();
 
 	FCombatSimConfig Config;
-	TArray<const UCombatUnitDefinition*> Definitions;
+	TArray<TSharedPtr<const FCombatUnitType>> Types;
 	TArray<int32> Rotations;
-	if (!BuildSimConfigFromSource(GetWorld(), Seed, Source, SimSettings, Config, GridOrigin, &Definitions, &Rotations))
+	FCombatUnitCatalog Units;
+	if (!BuildSimConfigFromSource(GetWorld(), Seed, Source, SimSettings, Config, GridOrigin, &Types, &Rotations, &Units))
 	{
 		return false;
 	}
@@ -156,12 +156,10 @@ bool UCombatSubsystem::StartFightFromSource(int32 Seed, const FCombatFightSource
 	CurrentSeed = Seed;
 	CurrentSourceName = Source.GetName();
 	CurrentLevel = Source.Level;
+	CurrentUnits = MoveTemp(Units);
 	CurrentSettings = SimSettings;
 
-	for (const UCombatUnitDefinition* Definition : Definitions)
-	{
-		SourceDefinitions.Add(const_cast<UCombatUnitDefinition*>(Definition));
-	}
+	SourceTypes = MoveTemp(Types);
 	SourceRotations = MoveTemp(Rotations);
 	for (const FCombatUnit& Unit : Simulation->GetUnits())
 	{
@@ -184,6 +182,7 @@ bool UCombatSubsystem::SaveReplay(FString& OutMessage) const
 	Replay.SavedAt = FDateTime::Now().ToString();
 	Replay.BuildVersion = FApp::GetBuildVersion();
 	Replay.Level = CurrentLevel.GetValue();
+	Replay.Units = CurrentUnits;
 	Replay.Seed = CurrentSeed;
 	Replay.Settings = CurrentSettings;
 	Replay.Ticks = Simulation->GetTick();
@@ -219,7 +218,8 @@ bool UCombatSubsystem::PlayReplay(const FString& FileOrPath, FString& OutMessage
 		return false;
 	}
 
-	// Before version 4 replays could come from a setup asset instead of a level; those are gone.
+	// Before version 4 replays could come from a setup asset instead of a level, before 5 they named unit definition
+	// assets; those are gone.
 	if (Replay.FormatVersion < FCombatReplay().FormatVersion)
 	{
 		OutMessage = FString::Printf(TEXT("Replay %s is from an older format (version %d) and cannot be played."), *Path, Replay.FormatVersion);
@@ -230,6 +230,7 @@ bool UCombatSubsystem::PlayReplay(const FString& FileOrPath, FString& OutMessage
 	FCombatFightSource Source;
 	Source.Level = Replay.Level;
 	Source.Level->Normalize();
+	Source.Units = Replay.Units;
 	if (!StartFightFromSource(Replay.Seed, Source, Replay.Settings, Replay.Commands))
 	{
 		OutMessage = FString::Printf(TEXT("Could not start the replay (level %s)."), *Replay.Level.Name);
@@ -276,8 +277,8 @@ bool UCombatSubsystem::RunBatchInWorld(UWorld* World, const FCombatFightSource& 
 {
 	FCombatSimConfig Config;
 	FVector GridOrigin;
-	TArray<const UCombatUnitDefinition*> Definitions;
-	if (!BuildSimConfigFromSource(World, StartSeed, Source, Settings, Config, GridOrigin, &Definitions))
+	TArray<TSharedPtr<const FCombatUnitType>> Types;
+	if (!BuildSimConfigFromSource(World, StartSeed, Source, Settings, Config, GridOrigin, &Types))
 	{
 		OutSummary = FString::Printf(TEXT("Could not build %s."), *Source.GetName());
 		return false;
@@ -287,9 +288,9 @@ bool UCombatSubsystem::RunBatchInWorld(UWorld* World, const FCombatFightSource& 
 	Config.Commands = Commands;
 
 	TArray<FString> UnitTypeNames;
-	for (const UCombatUnitDefinition* Definition : Definitions)
+	for (const TSharedPtr<const FCombatUnitType>& Type : Types)
 	{
-		UnitTypeNames.Add(Definition->GetName());
+		UnitTypeNames.Add(Type->Name.ToString());
 	}
 
 	const FCombatBatchResult Result = CombatBatch::Run(Config, UnitTypeNames, FMath::Max(Count, 1), StartSeed);
@@ -327,8 +328,8 @@ void UCombatSubsystem::StopFight()
 		}
 	}
 	UnitActors.Reset();
-	UnitDefinitions.Reset();
-	SourceDefinitions.Reset();
+	UnitTypes.Reset();
+	SourceTypes.Reset();
 	SourceRotations.Reset();
 
 	for (const TPair<int32, TObjectPtr<ACombatProjectileActor>>& Pair : ProjectileActors)
@@ -446,8 +447,8 @@ void UCombatSubsystem::SpawnUnitActor(const FCombatUnit& Unit)
 {
 	// Unit IDs grow by one with every spawn, so the actor arrays stay indexed by unit ID.
 	check(UnitActors.Num() == Unit.Id);
-	UCombatUnitDefinition* Definition = SourceDefinitions.IsValidIndex(Unit.SourceIndex) ? SourceDefinitions[Unit.SourceIndex].Get() : nullptr;
-	UClass* ActorClass = Definition && Definition->ActorClass ? Definition->ActorClass.Get() : ACombatUnitActor::StaticClass();
+	const TSharedPtr<const FCombatUnitType> Type = SourceTypes.IsValidIndex(Unit.SourceIndex) ? SourceTypes[Unit.SourceIndex] : nullptr;
+	UClass* ActorClass = Type ? Type->Unit.LoadActorClass() : ACombatUnitActor::StaticClass();
 
 	FActorSpawnParameters SpawnParams;
 	SpawnParams.SpawnCollisionHandlingOverride = ESpawnActorCollisionHandlingMethod::AlwaysSpawn;
@@ -458,30 +459,27 @@ void UCombatSubsystem::SpawnUnitActor(const FCombatUnit& Unit)
 	{
 		const bool bRanged = Unit.Stats.Attacks.ContainsByPredicate([](const FCombatAttackStats& Attack) { return Attack.IsRanged(); });
 		Actor->InitUnit(Unit.Id, Unit.Team, Unit.Stats.Radius, GetDefault<UCombatSettings>()->GetTeamColor(Unit.Team), bRanged);
-		if (Definition && Definition->Appearance)
+		if (Type)
 		{
 			// Same seed and unit ID, same look: a replay shows the same figures.
-			Actor->InitAppearance(Definition->Appearance, CombatSubsystemPrivate::GetLookSeed(CurrentSeed, Unit.Id));
-		}
-		if (Definition)
-		{
-			Actor->SetLocomotionTuning(Definition->MoveSpeed, Definition->LocomotionRate);
+			Actor->InitLook(Type->Unit.Look, CombatSubsystemPrivate::GetLookSeed(CurrentSeed, Unit.Id));
+			Actor->SetLocomotionTuning(Type->Unit.MoveSpeed, Type->Unit.LocomotionRate);
 		}
 	}
 	UnitActors.Add(Actor);
-	UnitDefinitions.Add(Definition);
+	UnitTypes.Add(Type);
 }
 
 void UCombatSubsystem::SpawnProjectileActor(const FCombatEvent& Event)
 {
-	// The projectile actor class comes from the attack definition the simulation attack was made from.
+	// The projectile actor class comes from the skill the simulation attack was made from.
 	UClass* ActorClass = ACombatProjectileActor::StaticClass();
 	const FCombatUnit& Source = Simulation->GetUnits()[Event.SourceId];
 	const int32 SourceIndex = Source.Stats.GetAttack(Event.AttackIndex).SourceIndex;
-	const UCombatUnitDefinition* Definition = UnitDefinitions[Event.SourceId];
-	if (Definition && Definition->Attacks.IsValidIndex(SourceIndex) && Definition->Attacks[SourceIndex].ProjectileActorClass)
+	const FCombatUnitType* Type = GetUnitType(Event.SourceId);
+	if (Type && Type->Attacks.IsValidIndex(SourceIndex))
 	{
-		ActorClass = Definition->Attacks[SourceIndex].ProjectileActorClass.Get();
+		ActorClass = Type->Attacks[SourceIndex].LoadProjectileActorClass();
 	}
 
 	FActorSpawnParameters SpawnParams;
@@ -527,7 +525,7 @@ void UCombatSubsystem::UpdateActors(float Alpha)
 
 		Actor->SetStatusEffects(GetStatusDisplays(Unit));
 		Actor->SetAnimationState(FVector(Unit.Velocity, 0.0), bPaused ? 0.f : TimeScale);
-		if (Actor->HasAppearanceOverrides())
+		if (Actor->HasLookOverrides())
 		{
 			FGameplayTagContainer Tags = Unit.Stats.Tags;
 			for (const FCombatActiveEffect& Active : Unit.Effects.GetEffects())
@@ -825,22 +823,22 @@ void UCombatSubsystem::HandleArenaCancel()
 	}
 }
 
-const UCombatUnitDefinition* UCombatSubsystem::GetUnitDefinition(int32 UnitId) const
+const FCombatUnitType* UCombatSubsystem::GetUnitType(int32 UnitId) const
 {
-	return UnitDefinitions.IsValidIndex(UnitId) ? UnitDefinitions[UnitId].Get() : nullptr;
+	return UnitTypes.IsValidIndex(UnitId) ? UnitTypes[UnitId].Get() : nullptr;
 }
 
 FGameplayTag UCombatSubsystem::GetAttackAnimationTag(int32 UnitId, int32 AttackIndex) const
 {
 	const FCombatUnitStats& Stats = Simulation->GetUnits()[UnitId].Stats;
 	const FCombatAttackStats& Attack = Stats.GetAttack(AttackIndex);
-	if (const UCombatUnitDefinition* Definition = GetUnitDefinition(UnitId))
+	if (const FCombatUnitType* Type = GetUnitType(UnitId))
 	{
 		// Player abilities come after the attacks; SourceIndex counts within their own list.
-		const TArray<FCombatAttackDefinition>& Definitions = AttackIndex < Stats.Attacks.Num() ? Definition->Attacks : Definition->PlayerAbilities;
-		if (Definitions.IsValidIndex(Attack.SourceIndex) && Definitions[Attack.SourceIndex].AnimationTag.IsValid())
+		const TArray<FCombatSkillRow>& Skills = AttackIndex < Stats.Attacks.Num() ? Type->Attacks : Type->PlayerAbilities;
+		if (Skills.IsValidIndex(Attack.SourceIndex) && Skills[Attack.SourceIndex].AnimationTag.IsValid())
 		{
-			return Definitions[Attack.SourceIndex].AnimationTag;
+			return Skills[Attack.SourceIndex].AnimationTag;
 		}
 	}
 	return Attack.Type;
@@ -853,20 +851,12 @@ ACombatUnitActor* UCombatSubsystem::GetUnitActor(int32 UnitId) const
 
 FText UCombatSubsystem::GetAbilityName(int32 UnitId, int32 AbilityIndex) const
 {
-	const UCombatUnitDefinition* Definition = GetUnitDefinition(UnitId);
-	if (!Definition || !Definition->PlayerAbilities.IsValidIndex(AbilityIndex))
+	const FCombatUnitType* Type = GetUnitType(UnitId);
+	if (!Type || !Type->PlayerAbilities.IsValidIndex(AbilityIndex))
 	{
 		return FText::FromString(FString::Printf(TEXT("Ability %d"), AbilityIndex));
 	}
-
-	const FCombatAttackDefinition& Ability = Definition->PlayerAbilities[AbilityIndex];
-	if (!Ability.DisplayName.IsEmpty())
-	{
-		return Ability.DisplayName;
-	}
-	FString Name = Ability.Type.GetTagName().ToString();
-	Name.Split(TEXT("."), nullptr, &Name, ESearchCase::IgnoreCase, ESearchDir::FromEnd);
-	return FText::FromString(Name);
+	return FText::FromString(Type->PlayerAbilities[AbilityIndex].GetDisplayName());
 }
 
 FString UCombatSubsystem::GetOrderText(int32 UnitId) const
@@ -1026,22 +1016,79 @@ void UCombatSubsystem::UpdateCheckpoints()
 }
 
 bool UCombatSubsystem::BuildSimConfigFromSource(UWorld* World, int32 Seed, const FCombatFightSource& Source, const FCombatSimSettings& Settings,
-	FCombatSimConfig& OutConfig, FVector& OutGridOrigin, TArray<const UCombatUnitDefinition*>* OutDefinitions, TArray<int32>* OutRotations)
+	FCombatSimConfig& OutConfig, FVector& OutGridOrigin, TArray<TSharedPtr<const FCombatUnitType>>* OutTypes, TArray<int32>* OutRotations,
+	FCombatUnitCatalog* OutUnits)
 {
 	if (!Source.Level.IsSet())
 	{
 		return false;
 	}
+	const FCombatLevel& Level = Source.Level.GetValue();
+
+	// The rows of every type the level names, from the replay or from the tables. A type that is not in the table is
+	// skipped by BuildConfig (with a warning); a type that names a missing skill stops the fight.
+	FCombatUnitCatalog Units;
+	if (Source.Units.IsSet())
+	{
+		Units = Source.Units.GetValue();
+	}
+	else
+	{
+		const UDataTable* UnitTable = CombatUnits::GetUnitTable();
+		const UDataTable* SkillTable = CombatUnits::GetSkillTable();
+		if (!UnitTable || !SkillTable)
+		{
+			UE_LOG(LogCombat, Error, TEXT("The unit and skill tables are not set (Project Settings > Game > Combat > Units)."));
+			return false;
+		}
+		TArray<FString> TypeNames;
+		for (const FCombatLevelUnit& Entry : Level.Units)
+		{
+			TypeNames.AddUnique(Entry.Type);
+		}
+		for (const FCombatLevelWave& Wave : Level.Waves)
+		{
+			for (const FCombatLevelSpawn& Entry : Wave.Spawns)
+			{
+				TypeNames.AddUnique(Entry.Type);
+			}
+		}
+		for (const FString& TypeName : TypeNames)
+		{
+			FString Error;
+			if (UnitTable->FindRowUnchecked(FName(*TypeName)) && !Units.AddFromTables(FName(*TypeName), *UnitTable, *SkillTable, Error))
+			{
+				UE_LOG(LogCombat, Error, TEXT("Level %s: %s"), *Level.Name, *Error);
+				return false;
+			}
+		}
+	}
+
+	// One type per name, shared by all units of that type.
+	TMap<FName, TSharedPtr<const FCombatUnitType>> Resolved;
+	auto Resolve = [&Units, &Resolved](const FString& TypeName) -> TSharedPtr<const FCombatUnitType>
+	{
+		const FName Name(*TypeName);
+		if (const TSharedPtr<const FCombatUnitType>* Found = Resolved.Find(Name))
+		{
+			return *Found;
+		}
+		return Resolved.Add(Name, Units.Resolve(Name));
+	};
 
 	const ACombatGrid* Grid = ACombatGrid::Find(World);
 	OutGridOrigin = Grid ? Grid->GetActorLocation() : FVector::ZeroVector;
 	OutConfig.Seed = Seed;
 	OutConfig.TickRate = Settings.TickRate;
-	if (!CombatLevels::BuildConfig(Source.Level.GetValue(), Settings.TickRate, &UCombatSubsystem::FindUnitDefinition, OutConfig, OutDefinitions, OutRotations))
+	if (!CombatLevels::BuildConfig(Level, Settings.TickRate, Resolve, OutConfig, OutTypes, OutRotations))
 	{
 		return false;
 	}
 	Settings.ApplyTo(OutConfig);
+	if (OutUnits)
+	{
+		*OutUnits = MoveTemp(Units);
+	}
 	return true;
 }
 
@@ -1061,28 +1108,6 @@ bool UCombatSubsystem::ResolveSource(const FString& Name, FCombatFightSource& Ou
 	}
 	OutSource.Level = Level;
 	return true;
-}
-
-const UCombatUnitDefinition* UCombatSubsystem::FindUnitDefinition(const FString& NameOrPath)
-{
-	if (NameOrPath.Contains(TEXT("/")))
-	{
-		return LoadObject<UCombatUnitDefinition>(nullptr, *NameOrPath);
-	}
-
-	IAssetRegistry& AssetRegistry = IAssetRegistry::GetChecked();
-	AssetRegistry.WaitForCompletion();
-
-	TArray<FAssetData> Assets;
-	AssetRegistry.GetAssetsByClass(UCombatUnitDefinition::StaticClass()->GetClassPathName(), Assets);
-	for (const FAssetData& Asset : Assets)
-	{
-		if (Asset.AssetName.ToString().Equals(NameOrPath, ESearchCase::IgnoreCase))
-		{
-			return Cast<UCombatUnitDefinition>(Asset.GetAsset());
-		}
-	}
-	return nullptr;
 }
 
 void UCombatSubsystem::ShowSourceInArena(const FCombatFightSource& Source)
@@ -1237,7 +1262,7 @@ void UCombatSubsystem::EnterDesignMode()
 	EnsureDesignLevel();
 	if (DesignUnitType.IsEmpty())
 	{
-		const TArray<FString> Types = GetAllUnitDefinitionNames();
+		const TArray<FString> Types = CombatUnits::GetAllTypeNames();
 		DesignUnitType = Types.IsEmpty() ? FString() : Types[0];
 	}
 	SetDesignWave(DesignWave);
@@ -1284,7 +1309,7 @@ void UCombatSubsystem::NewDesignLevel()
 	DesignSpawnMove.Reset();
 	if (DesignUnitType.IsEmpty())
 	{
-		const TArray<FString> Types = GetAllUnitDefinitionNames();
+		const TArray<FString> Types = CombatUnits::GetAllTypeNames();
 		DesignUnitType = Types.IsEmpty() ? FString() : Types[0];
 	}
 	if (bDesignMode)
@@ -2085,8 +2110,8 @@ void UCombatSubsystem::RotateDesignUnit(int32 Steps)
 void UCombatSubsystem::UpdateDesignUnitGhost(const FVector& WorldPoint)
 {
 	ACombatGrid* Grid = ACombatGrid::Find(GetWorld());
-	const UCombatUnitDefinition* Definition = FindUnitDefinition(DesignUnitType);
-	if (!bDesignMode || !Grid || !Definition || !(bDesignUnitSelected || IsMovingDesignUnit()))
+	const TSharedPtr<const FCombatUnitType> UnitType = CombatUnits::FindType(DesignUnitType);
+	if (!bDesignMode || !Grid || !UnitType || !(bDesignUnitSelected || IsMovingDesignUnit()))
 	{
 		HideDesignUnitGhost();
 		return;
@@ -2100,19 +2125,16 @@ void UCombatSubsystem::UpdateDesignUnitGhost(const FVector& WorldPoint)
 		HideDesignUnitGhost();
 		FActorSpawnParameters SpawnParams;
 		SpawnParams.SpawnCollisionHandlingOverride = ESpawnActorCollisionHandlingMethod::AlwaysSpawn;
-		UClass* ActorClass = Definition->ActorClass ? Definition->ActorClass.Get() : ACombatUnitActor::StaticClass();
+		UClass* ActorClass = UnitType->Unit.LoadActorClass();
 		DesignGhost = GetWorld()->SpawnActor<ACombatUnitActor>(ActorClass, WorldPoint, FRotator::ZeroRotator, SpawnParams);
 		if (!DesignGhost)
 		{
 			return;
 		}
-		const FCombatUnitStats Stats = Definition->ToSimStats(Settings->TickRate);
+		const FCombatUnitStats Stats = UnitType->ToSimStats(Settings->TickRate);
 		const bool bRanged = Stats.Attacks.ContainsByPredicate([](const FCombatAttackStats& Attack) { return Attack.IsRanged(); });
 		DesignGhost->InitUnit(INDEX_NONE, Team, Stats.Radius, Settings->GetTeamColor(Team), bRanged);
-		if (Definition->Appearance)
-		{
-			DesignGhost->InitAppearance(Definition->Appearance, CombatSubsystemPrivate::GetLookSeed(CurrentSeed, INDEX_NONE));
-		}
+		DesignGhost->InitLook(UnitType->Unit.Look, CombatSubsystemPrivate::GetLookSeed(CurrentSeed, INDEX_NONE));
 		DesignGhost->MakeGhost(Settings->DesignGhostMaterial.LoadSynchronous(), Settings->DesignGhostOpacity);
 		DesignGhostType = DesignUnitType;
 		DesignGhostTeam = Team;
@@ -2188,8 +2210,8 @@ bool UCombatSubsystem::IsDesignSpotFree(const FIntPoint& Cell, int32 Position, c
 		}
 		DesignNavRevision = DesignRevision;
 	}
-	const UCombatUnitDefinition* Definition = FindUnitDefinition(Type);
-	const int32 Class = CombatNavigation::GetClearanceClass(Definition ? Definition->Radius : 0.f, DesignLevel.CellSize);
+	const TSharedPtr<const FCombatUnitType> UnitType = CombatUnits::FindType(Type);
+	const int32 Class = CombatNavigation::GetClearanceClass(UnitType ? UnitType->Unit.Radius : 0.f, DesignLevel.CellSize);
 	const int32 Side = CombatLevels::UnitPositionsPerSide;
 	return DesignNavGrids[Class].IsWalkable(Cell * Side + FIntPoint(Position % Side, Position / Side));
 }
@@ -2220,25 +2242,22 @@ void UCombatSubsystem::RefreshDesignView(bool bFitCamera)
 	for (int32 Index = 0; Index < DesignLevel.Units.Num(); ++Index)
 	{
 		const FCombatLevelUnit& Entry = DesignLevel.Units[Index];
-		const UCombatUnitDefinition* Definition = FindUnitDefinition(Entry.Type);
-		if (!Definition)
+		const TSharedPtr<const FCombatUnitType> UnitType = CombatUnits::FindType(Entry.Type);
+		if (!UnitType)
 		{
 			continue;
 		}
 
-		const FCombatUnitStats Stats = Definition->ToSimStats(Settings->TickRate);
+		const FCombatUnitStats Stats = UnitType->ToSimStats(Settings->TickRate);
 		const FVector Location = SimToWorld(DesignLevel.CellSize * FVector2D(Entry.Cell.X + 0.5, Entry.Cell.Y + 0.5)
 			+ CombatLevels::GetUnitPositionOffset(Entry.Position, DesignLevel.CellSize));
-		UClass* ActorClass = Definition->ActorClass ? Definition->ActorClass.Get() : ACombatUnitActor::StaticClass();
+		UClass* ActorClass = UnitType->Unit.LoadActorClass();
 		ACombatUnitActor* Actor = GetWorld()->SpawnActor<ACombatUnitActor>(ActorClass, Location, FRotator(0.0, CombatLevels::GetUnitYaw(Entry.Rotation), 0.0), SpawnParams);
 		if (Actor)
 		{
 			const bool bRanged = Stats.Attacks.ContainsByPredicate([](const FCombatAttackStats& Attack) { return Attack.IsRanged(); });
 			Actor->InitUnit(Index, Entry.Team, Stats.Radius, Settings->GetTeamColor(Entry.Team), bRanged);
-			if (Definition->Appearance)
-			{
-				Actor->InitAppearance(Definition->Appearance, CombatSubsystemPrivate::GetLookSeed(CurrentSeed, Index));
-			}
+			Actor->InitLook(UnitType->Unit.Look, CombatSubsystemPrivate::GetLookSeed(CurrentSeed, Index));
 			Actor->SetHealth(1.f);
 			Actor->UpdatePresentation(Location, FVector::ZeroVector);
 			DesignPreviews.Add(Actor);
@@ -2255,25 +2274,22 @@ void UCombatSubsystem::RefreshDesignView(bool bFitCamera)
 	for (int32 Index = 0; Index < Spawns.Num(); ++Index)
 	{
 		const FCombatLevelSpawn& Entry = Spawns[Index];
-		const UCombatUnitDefinition* Definition = FindUnitDefinition(Entry.Type);
-		if (!Definition)
+		const TSharedPtr<const FCombatUnitType> UnitType = CombatUnits::FindType(Entry.Type);
+		if (!UnitType)
 		{
 			continue;
 		}
 
-		const FCombatUnitStats Stats = Definition->ToSimStats(Settings->TickRate);
+		const FCombatUnitStats Stats = UnitType->ToSimStats(Settings->TickRate);
 		const FVector Location = SimToWorld(DesignLevel.CellSize * FVector2D(Entry.Cell.X + 0.5, Entry.Cell.Y + 0.5)
 			+ CombatLevels::GetUnitPositionOffset(Entry.Position, DesignLevel.CellSize));
-		UClass* ActorClass = Definition->ActorClass ? Definition->ActorClass.Get() : ACombatUnitActor::StaticClass();
+		UClass* ActorClass = UnitType->Unit.LoadActorClass();
 		ACombatUnitActor* Actor = GetWorld()->SpawnActor<ACombatUnitActor>(ActorClass, Location, FRotator(0.0, CombatLevels::GetUnitYaw(Entry.Rotation), 0.0), SpawnParams);
 		if (Actor)
 		{
 			const bool bRanged = Stats.Attacks.ContainsByPredicate([](const FCombatAttackStats& Attack) { return Attack.IsRanged(); });
 			Actor->InitUnit(DesignLevel.Units.Num() + Index, WaveTeam, Stats.Radius, Settings->GetTeamColor(WaveTeam), bRanged);
-			if (Definition->Appearance)
-			{
-				Actor->InitAppearance(Definition->Appearance, CombatSubsystemPrivate::GetLookSeed(CurrentSeed, DesignLevel.Units.Num() + Index));
-			}
+			Actor->InitLook(UnitType->Unit.Look, CombatSubsystemPrivate::GetLookSeed(CurrentSeed, DesignLevel.Units.Num() + Index));
 			Actor->SetHealth(1.f);
 			Actor->SetStatusEffects({ { FString::Printf(TEXT("%gs"), Entry.Time), FLinearColor::Yellow } });
 			Actor->UpdatePresentation(Location, FVector::ZeroVector);
@@ -2457,22 +2473,6 @@ void UCombatSubsystem::DestroyDesignPreviews()
 		}
 	}
 	DesignPreviews.Reset();
-}
-
-TArray<FString> UCombatSubsystem::GetAllUnitDefinitionNames()
-{
-	IAssetRegistry& AssetRegistry = IAssetRegistry::GetChecked();
-	AssetRegistry.WaitForCompletion();
-
-	TArray<FAssetData> Assets;
-	AssetRegistry.GetAssetsByClass(UCombatUnitDefinition::StaticClass()->GetClassPathName(), Assets);
-	TArray<FString> Names;
-	for (const FAssetData& Asset : Assets)
-	{
-		Names.Add(Asset.AssetName.ToString());
-	}
-	Names.Sort();
-	return Names;
 }
 
 UCombatCommandScript* UCombatSubsystem::FindCommandScript(const FString& NameOrPath)
