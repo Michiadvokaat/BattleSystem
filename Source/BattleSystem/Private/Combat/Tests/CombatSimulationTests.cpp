@@ -3,7 +3,6 @@
 #include "Misc/AutomationTest.h"
 #include "Animation/AnimMontage.h"
 #include "Combat/CombatAnimation.h"
-#include "Combat/CombatAppearance.h"
 #include "Combat/CombatBatch.h"
 #include "Combat/CombatCamera.h"
 #include "Combat/CombatLevel.h"
@@ -13,7 +12,7 @@
 #include "Combat/CombatReplay.h"
 #include "Combat/CombatSimulation.h"
 #include "Combat/CombatTags.h"
-#include "Combat/CombatUnitDefinition.h"
+#include "Combat/CombatUnitData.h"
 #include "Components/SkeletalMeshComponent.h"
 #include "Engine/SkeletalMesh.h"
 #include "Misc/FileHelper.h"
@@ -1459,13 +1458,21 @@ namespace CombatTests
 		return Level;
 	}
 
-	/** A melee definition made in code (not a project asset), for building configs from levels. */
-	static const UCombatUnitDefinition* MakeTestDefinition()
+	/** A catalog made in code (not the project's tables): a melee unit "Fighter" with the skill "Punch". */
+	static FCombatUnitCatalog MakeTestCatalog()
 	{
-		UCombatUnitDefinition* Definition = NewObject<UCombatUnitDefinition>(GetTransientPackage());
-		FCombatAttackDefinition& Melee = Definition->Attacks.AddDefaulted_GetRef();
-		Melee.Type = CombatTags::Attack_Melee;
-		return Definition;
+		FCombatUnitCatalog Catalog;
+		FCombatSkillRow& Punch = Catalog.Skills.Add(TEXT("Punch"));
+		Punch.Type = CombatTags::Attack_Melee;
+		FCombatUnitRow& Fighter = Catalog.Units.Add(TEXT("Fighter"));
+		Fighter.Skills.Add(TEXT("Punch"));
+		return Catalog;
+	}
+
+	/** The "Fighter" of MakeTestCatalog, for building configs from levels. */
+	static TSharedPtr<const FCombatUnitType> MakeTestType()
+	{
+		return MakeTestCatalog().Resolve(TEXT("Fighter"));
 	}
 }
 
@@ -1523,19 +1530,19 @@ IMPLEMENT_SIMPLE_AUTOMATION_TEST(FCombatLevelConfigTest, "BattleSystem.Combat.Le
 
 bool FCombatLevelConfigTest::RunTest(const FString& Parameters)
 {
-	const UCombatUnitDefinition* Fighter = CombatTests::MakeTestDefinition();
+	const TSharedPtr<const FCombatUnitType> Fighter = CombatTests::MakeTestType();
 	FCombatLevel Level = CombatTests::MakeTestLevel();
 	Level.Units.Add(CombatTests::MakeLevelUnit(TEXT("Fighter"), 1, FIntPoint(5, 1)));		// on the wall piece: skipped
 	Level.Units.Add(CombatTests::MakeLevelUnit(TEXT("Unknown"), 1, FIntPoint(9, 1)));		// unknown type: skipped
-	auto Resolve = [Fighter](const FString& Type) { return Type == TEXT("Fighter") ? Fighter : nullptr; };
+	auto Resolve = [Fighter](const FString& Type) { return Type == TEXT("Fighter") ? Fighter : TSharedPtr<const FCombatUnitType>(); };
 
 	FCombatSimConfig Config;
-	TArray<const UCombatUnitDefinition*> Definitions;
+	TArray<TSharedPtr<const FCombatUnitType>> Types;
 	TArray<int32> Rotations;
 	Level.Units[2].Rotation = 6;
-	TestTrue(TEXT("Builds"), CombatLevels::BuildConfig(Level, 20, Resolve, Config, &Definitions, &Rotations));
+	TestTrue(TEXT("Builds"), CombatLevels::BuildConfig(Level, 20, Resolve, Config, &Types, &Rotations));
 	TestEqual(TEXT("Three valid units"), Config.Units.Num(), 3);
-	TestEqual(TEXT("A definition per unit"), Definitions.Num(), 3);
+	TestEqual(TEXT("A type per unit"), Types.Num(), 3);
 	TestTrue(TEXT("A rotation per unit, skipped ones left out"), Rotations.Num() == 3 && Rotations[2] == 6);
 	TestTrue(TEXT("Units in the middle of their cell have no offset"), Config.Units[0].StartOffset.IsZero());
 
@@ -1580,8 +1587,8 @@ bool FCombatLevelReplayTest::RunTest(const FString& Parameters)
 	TestEqual(TEXT("Same pieces"), Loaded.Level.Pieces.Num(), Replay.Level.Pieces.Num());
 	TestEqual(TEXT("Same units"), Loaded.Level.Units.Num(), Replay.Level.Units.Num());
 
-	const UCombatUnitDefinition* Fighter = CombatTests::MakeTestDefinition();
-	auto Resolve = [Fighter](const FString& Type) { return Type == TEXT("Fighter") ? Fighter : nullptr; };
+	const TSharedPtr<const FCombatUnitType> Fighter = CombatTests::MakeTestType();
+	auto Resolve = [Fighter](const FString& Type) { return Type == TEXT("Fighter") ? Fighter : TSharedPtr<const FCombatUnitType>(); };
 	auto RunLevel = [&Resolve](const FCombatLevel& Level, int32 Seed)
 	{
 		FCombatSimConfig Config;
@@ -1836,15 +1843,15 @@ bool FCombatWaveLevelTest::RunTest(const FString& Parameters)
 	TestTrue(TEXT("A spawn survives"), Loaded.Waves.Num() == 3 && Loaded.Waves[0].Spawns.Num() == 3
 		&& Loaded.Waves[0].Spawns[0].Cell == FIntPoint(9, 1) && Loaded.Waves[0].Spawns[0].Time == 1.5f);
 
-	const UCombatUnitDefinition* Fighter = CombatTests::MakeTestDefinition();
-	auto Resolve = [Fighter](const FString& Type) { return Type == TEXT("Fighter") ? Fighter : nullptr; };
+	const TSharedPtr<const FCombatUnitType> Fighter = CombatTests::MakeTestType();
+	auto Resolve = [Fighter](const FString& Type) { return Type == TEXT("Fighter") ? Fighter : TSharedPtr<const FCombatUnitType>(); };
 	FCombatSimConfig Config;
-	TArray<const UCombatUnitDefinition*> Definitions;
-	TestTrue(TEXT("Builds"), CombatLevels::BuildConfig(Level, 20, Resolve, Config, &Definitions));
+	TArray<TSharedPtr<const FCombatUnitType>> Types;
+	TestTrue(TEXT("Builds"), CombatLevels::BuildConfig(Level, 20, Resolve, Config, &Types));
 	TestEqual(TEXT("Every wave is kept"), Config.Waves.Num(), 3);
 	TestTrue(TEXT("Invalid spawns are skipped"), Config.Waves.Num() == 3 && Config.Waves[0].Spawns.Num() == 1 && Config.Waves[1].Spawns.IsEmpty());
 	TestTrue(TEXT("Seconds become ticks"), Config.Waves.Num() == 3 && Config.Waves[0].Spawns.Num() == 1 && Config.Waves[0].Spawns[0].DelayTicks == 30);
-	TestEqual(TEXT("A definition per unit and valid spawn"), Definitions.Num(), 3 + 2);
+	TestEqual(TEXT("A type per unit and valid spawn"), Types.Num(), 3 + 2);
 
 	Level.Resize(10, 8);
 	TestTrue(TEXT("Shrinking removes spawns outside"), Level.Waves[0].Spawns.Num() == 3 && Level.Waves[2].Spawns.IsEmpty());
@@ -1935,21 +1942,24 @@ bool FCombatLevelFileTest::RunTest(const FString& Parameters)
 	return true;
 }
 
-IMPLEMENT_SIMPLE_AUTOMATION_TEST(FCombatAppearancePicksTest, "BattleSystem.Combat.AppearancePicks",
+IMPLEMENT_SIMPLE_AUTOMATION_TEST(FCombatLookPicksTest, "BattleSystem.Combat.LookPicks",
 	EAutomationTestFlags::EditorContext | EAutomationTestFlags::ProductFilter)
 
-bool FCombatAppearancePicksTest::RunTest(const FString& Parameters)
+bool FCombatLookPicksTest::RunTest(const FString& Parameters)
 {
 	// Empty transient meshes: the picks only compare pointers, nothing is rendered or merged.
 	auto MakeMesh = []() { return NewObject<USkeletalMesh>(GetTransientPackage()); };
 	USkeletalMesh* Body = MakeMesh();
 	const TArray<USkeletalMesh*> Hairs = { MakeMesh(), MakeMesh(), MakeMesh() };
 
-	UCombatAppearance* Look = NewObject<UCombatAppearance>(GetTransientPackage());
-	auto AddSlot = [Look](const TArray<USkeletalMesh*>& Options, float EmptyChance)
+	FCombatLook Look;
+	auto AddSlot = [&Look](const TArray<USkeletalMesh*>& Options, float EmptyChance)
 	{
-		FCombatAppearanceSlot& Slot = Look->Slots.AddDefaulted_GetRef();
-		Slot.Options.Append(Options);
+		FCombatLookSlot& Slot = Look.Slots.AddDefaulted_GetRef();
+		for (USkeletalMesh* Option : Options)
+		{
+			Slot.Options.Add(Option);
+		}
 		Slot.EmptyChance = EmptyChance;
 	};
 	AddSlot({ Body }, 0.f);
@@ -1958,7 +1968,7 @@ bool FCombatAppearancePicksTest::RunTest(const FString& Parameters)
 	AddSlot({ MakeMesh() }, 1.f);
 	AddSlot({}, 0.f);
 
-	TestTrue(TEXT("Same seed, same picks"), Look->PickMeshes(7) == Look->PickMeshes(7));
+	TestTrue(TEXT("Same seed, same picks"), Look.PickMeshes(7) == Look.PickMeshes(7));
 
 	bool bAnyDifferent = false;
 	bool bAlwaysFixed = true;
@@ -1967,8 +1977,8 @@ bool FCombatAppearancePicksTest::RunTest(const FString& Parameters)
 	constexpr int32 Runs = 200;
 	for (int32 Seed = 0; Seed < Runs; ++Seed)
 	{
-		const TArray<USkeletalMesh*> Picks = Look->PickMeshes(Seed);
-		bAnyDifferent |= Picks != Look->PickMeshes(0);
+		const TArray<USkeletalMesh*> Picks = Look.PickMeshes(Seed);
+		bAnyDifferent |= Picks != Look.PickMeshes(0);
 		bAlwaysFixed &= Picks.Num() == 5 && Picks[0] == Body && Picks[3] == nullptr && Picks[4] == nullptr;
 		const int32 HairIndex = Hairs.IndexOfByKey(Picks[1]);
 		if (HairCounts.IsValidIndex(HairIndex))
@@ -1984,10 +1994,95 @@ bool FCombatAppearancePicksTest::RunTest(const FString& Parameters)
 	TestTrue(TEXT("Every hair option is picked"), HairCounts[0] > 0 && HairCounts[1] > 0 && HairCounts[2] > 0);
 	TestTrue(TEXT("EmptyChance 0.5 leaves about half empty"), EmptyHats > Runs * 3 / 10 && EmptyHats < Runs * 7 / 10);
 
-	Look->UniformScale = 2.f;
-	Look->WidthScale = 1.5f;
-	Look->HeightScale = 0.5f;
-	TestTrue(TEXT("Mesh scale: uniform times width across, times height up"), Look->GetMeshScale().Equals(FVector(3.0, 3.0, 1.0)));
+	Look.UniformScale = 2.f;
+	Look.WidthScale = 1.5f;
+	Look.HeightScale = 0.5f;
+	TestTrue(TEXT("Mesh scale: uniform times width across, times height up"), Look.GetMeshScale().Equals(FVector(3.0, 3.0, 1.0)));
+	return true;
+}
+
+IMPLEMENT_SIMPLE_AUTOMATION_TEST(FCombatUnitSkillsTest, "BattleSystem.Combat.UnitSkills",
+	EAutomationTestFlags::EditorContext | EAutomationTestFlags::ProductFilter)
+
+bool FCombatUnitSkillsTest::RunTest(const FString& Parameters)
+{
+	// Two units share one skill table: a melee hit, a ranged shot with an effect, and a player taunt.
+	FCombatUnitCatalog Catalog;
+	FCombatSkillRow& Hit = Catalog.Skills.Add(TEXT("Hit"));
+	Hit.Type = CombatTags::Attack_Melee;
+	Hit.Range = 60.f;
+	Hit.Damage = 10.f;
+	Hit.Cooldown = 1.f;
+	Hit.Windup = 0.5f;
+	FCombatSkillRow& Shot = Catalog.Skills.Add(TEXT("Shot"));
+	Shot.Type = CombatTags::Attack_Ranged;
+	Shot.Range = 500.f;
+	Shot.Damage = 8.f;
+	Shot.Effects.AddDefaulted_GetRef().Duration = 2.f;
+	FCombatSkillRow& Taunt = Catalog.Skills.Add(TEXT("Taunt"));
+	Taunt.Type = CombatTags::Attack_Taunt;
+	Taunt.bPlayerActivated = true;
+	Taunt.Range = 400.f;
+
+	FCombatUnitRow& Plain = Catalog.Units.Add(TEXT("Plain"));
+	Plain.Skills = { TEXT("Taunt"), TEXT("Hit"), TEXT("Shot") };
+	FCombatUnitRow& Strong = Catalog.Units.Add(TEXT("Strong"));
+	Strong.Skills = { TEXT("Hit"), TEXT("Shot") };
+	Strong.SkillDamageMultiplier = 2.f;
+	Strong.SkillRangeMultiplier = 1.5f;
+	Strong.SkillCooldownMultiplier = 0.5f;
+	Strong.EffectDurationMultiplier = 3.f;
+
+	const TSharedPtr<const FCombatUnitType> PlainType = Catalog.Resolve(TEXT("Plain"));
+	const TSharedPtr<const FCombatUnitType> StrongType = Catalog.Resolve(TEXT("Strong"));
+	if (!TestTrue(TEXT("Both resolve"), PlainType.IsValid() && StrongType.IsValid()))
+	{
+		return false;
+	}
+	const FCombatUnitStats PlainStats = PlainType->ToSimStats(20);
+	const FCombatUnitStats StrongStats = StrongType->ToSimStats(20);
+	if (!TestTrue(TEXT("Player skills go to the player abilities, the others to the attacks"), PlainStats.Attacks.Num() == 2
+		&& PlainStats.PlayerAbilities.Num() == 1 && StrongStats.Attacks.Num() == 2))
+	{
+		return false;
+	}
+	TestTrue(TEXT("Each list keeps the order of the unit's skills"), PlainStats.Attacks[0].Type == CombatTags::Attack_Melee
+		&& PlainStats.Attacks[1].Type == CombatTags::Attack_Ranged && PlainStats.Attacks[1].SourceIndex == 1 && PlainStats.PlayerAbilities[0].SourceIndex == 0);
+	TestTrue(TEXT("Multipliers of 1 keep the skill's values"), PlainStats.Attacks[0].Range == 60.f && PlainStats.Attacks[0].Damage == 10.f
+		&& PlainStats.Attacks[0].CooldownTicks == 20 && PlainStats.Attacks[0].WindupTicks == 10 && PlainStats.Attacks[1].Effects[0].DurationTicks == 40);
+	TestTrue(TEXT("The taunt's area is its range"), PlainStats.PlayerAbilities[0].AreaShape == ECombatAreaShape::CircleAroundSelf
+		&& PlainStats.PlayerAbilities[0].AreaRadius == 400.f);
+	TestTrue(TEXT("Damage and range multiplied"), StrongStats.Attacks[0].Damage == 20.f && StrongStats.Attacks[0].Range == 90.f && StrongStats.Attacks[1].Range == 750.f);
+	TestTrue(TEXT("Cooldown and windup multiplied"), StrongStats.Attacks[0].CooldownTicks == 10 && StrongStats.Attacks[0].WindupTicks == 5);
+	TestEqual(TEXT("Effect duration multiplied"), StrongStats.Attacks[1].Effects[0].DurationTicks, 120);
+	TestTrue(TEXT("The shared skill row is unchanged"), Catalog.Skills.FindChecked(TEXT("Hit")).Damage == 10.f);
+
+	// A unit that names a missing skill does not resolve.
+	Catalog.Units.Add(TEXT("Broken")).Skills = { TEXT("Hit"), TEXT("Missing") };
+	FString Error;
+	TestFalse(TEXT("A missing skill fails"), Catalog.Resolve(TEXT("Broken"), &Error).IsValid());
+	TestTrue(TEXT("The error names the skill"), Error.Contains(TEXT("Missing")));
+	TestFalse(TEXT("An unknown unit fails"), Catalog.Resolve(TEXT("Nobody")).IsValid());
+
+	// The catalog survives a replay's JSON round trip and builds the same fight.
+	FCombatReplay Replay;
+	Replay.Level = CombatTests::MakeTestLevel();
+	Replay.Units = CombatTests::MakeTestCatalog();
+	FString Json;
+	TestTrue(TEXT("Writes JSON"), CombatReplay::ToJson(Replay, Json));
+	FCombatReplay Loaded;
+	TestTrue(TEXT("Reads JSON"), CombatReplay::FromJson(Json, Loaded));
+	auto RunWith = [](const FCombatUnitCatalog& Units, const FCombatLevel& Level)
+	{
+		FCombatSimConfig Config;
+		CombatLevels::BuildConfig(Level, 20, [&Units](const FString& Type) { return Units.Resolve(FName(*Type)); }, Config);
+		Config.Seed = 3;
+		FCombatSimulation Simulation(Config);
+		Simulation.RunToEnd();
+		return Simulation.GetChecksum();
+	};
+	TestTrue(TEXT("The replay's rows build the same fight"), Loaded.Units.Units.Num() == 1 && Loaded.Units.Skills.Num() == 1
+		&& RunWith(Loaded.Units, Loaded.Level) == RunWith(Replay.Units, Replay.Level));
 	return true;
 }
 

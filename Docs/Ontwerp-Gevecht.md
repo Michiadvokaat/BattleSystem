@@ -1,6 +1,6 @@
 # Ontwerp: autobattle-gevechtssysteem
 
-Status: fase 1 t/m 5 klaar (2026-10-03). Fase 6 (navigatielaag) klaar (2026-10-05). Sinds 2026-10-06 komen gevechten alleen uit LevelDesigner-levels: `UCombatSetup`, de opstellingen en `ACombatObstacle` uit fase 1 en 2 zijn vervallen (zie Besluiten). Dit document is zelfstandig: het gaat uit van een **leeg Unreal Engine 5 C++-project** zonder bestaande gameplaycode. Werk het bij als besluiten veranderen of een fase klaar is (zet dan "Status" en de tabel "Besluiten" bij).
+Status: fase 1 t/m 5 klaar (2026-10-03). Fase 6 (navigatielaag) klaar (2026-10-05). Sinds 2026-10-06 komen gevechten alleen uit LevelDesigner-levels: `UCombatSetup`, de opstellingen en `ACombatObstacle` uit fase 1 en 2 zijn vervallen (zie Besluiten). Sinds 2026-10-07 staan units en skills in DataTables in plaats van Data Assets (zie Besluiten). Dit document is zelfstandig: het gaat uit van een **leeg Unreal Engine 5 C++-project** zonder bestaande gameplaycode. Werk het bij als besluiten veranderen of een fase klaar is (zet dan "Status" en de tabel "Besluiten" bij).
 
 In dit document staat `<Module>` voor de naam van de gamemodule van het project. Alle code komt in `Source/<Module>/Public|Private/Combat/`.
 
@@ -193,6 +193,7 @@ Elke fase levert iets op dat je kunt spelen en testen. Nieuwe C++-klassen vereis
 | Meerdere aanvallen | Kortste bereik dat het doel nu kan raken; elke aanval eigen cooldown | Alleen de eerste aanval |
 | Definitie van bereik | Van het centrum van de aanvaller tot de rand van het doelwit, ook voor gebieden rond de aanvaller (sinds 2026-10-06; daarvoor van rand tot rand) | Van rand tot rand; van centrum tot centrum |
 | Kiten | Nee, ranged stopt op bereik | Terugwijken bij melee dichtbij |
+| Unit- en skilldefinities | Sinds 2026-10-07 twee DataTables (`DT_Units`, `DT_Skills`) met JSON in de repo als bron; units bezitten skills per rijnaam (gedeeld mogelijk), met multipliers per unit (schade, bereik, cooldown, effectduur); de look staat in de unitrij; replays bewaren de gebruikte rijen | Eén Data Asset per unit met eigen aanvallen en een apart look-asset (tot 2026-10-07); overrides per skill per unit |
 | Taunt | Gebied rond de tank, effect met duur | Eén doelwit |
 | Doelwitprioriteit | Taunt > threat > zichtbaar (ranged) > dichtstbij, met hysterese | Zichtbaar vóór threat |
 | Threat-bron | Ontvangen schade × ThreatMultiplier van de aanval | Alleen taunt |
@@ -204,6 +205,6 @@ Elke fase levert iets op dat je kunt spelen en testen. Nieuwe C++-klassen vereis
 | Replay | JSON met een kopie van het level, seed, build, sim-instellingen, commando-log en eind-checksum (tot 2026-10-06 ook met setup-pad) | USaveGame; volledig zelfstandige snapshot van unit-stats |
 | Spelersinvoer | Commando's per unit (verplaatsen naar cel, spelersvaardigheid) met vaste vertraging (3 ticks), in een commando-log dat in de replay staat | Directe ingrepen in de simulatie |
 | Verplaatsen vs. taunt | Het commando van de speler wint | Taunt wint |
-| Spelersvaardigheden | Per unit-type in de Data Asset, zonder cooldown | Vaste vaardigheid voor iedere unit |
+| Spelersvaardigheden | Skills met `bPlayerActivated` in `DT_Skills` (sinds 2026-10-07; daarvoor per unit-type in de Data Asset), zonder cooldown | Vaste vaardigheid voor iedere unit |
 | Levels (LevelDesigner) | JSON in Levels/ (in git): grid, pieces, units, golven; de enige gevechtsbron (sinds 2026-10-06; `UCombatSetup` en `ACombatObstacle` vervallen), het Combat-venster speelt het level uit de LevelDesigner | Data Assets; setups naast levels |
 | Replay en level | Volledige kopie van het level in de replay | Verwijzing + checksum |

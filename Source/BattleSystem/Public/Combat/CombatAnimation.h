@@ -31,7 +31,7 @@ struct FCombatAnimAction
 };
 
 /**
- * The animations of one skeleton: the AnimBP, locomotion and the montages per action. A UCombatAppearance points to
+ * The animations of one skeleton: the AnimBP, locomotion and the montages per action. A unit's look (FCombatLook::AnimSet) points to
  * it, so all looks on the same skeleton share one set. Presentation only.
  */
 UCLASS(BlueprintType)
@@ -140,7 +140,7 @@ public:
 	UPROPERTY(BlueprintReadOnly, Category = "Combat")
 	float SpeedRatio = 0.f;
 
-	/** The look's mesh scale (UCombatAppearance::GetMeshScale); 1 without a look. */
+	/** The look's mesh scale (FCombatLook::GetMeshScale); 1 without a look. */
 	UPROPERTY(BlueprintReadOnly, Category = "Combat")
 	FVector MeshScale = FVector::OneVector;
 

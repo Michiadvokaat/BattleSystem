@@ -7,12 +7,12 @@
 #include "CombatAnimPreview.generated.h"
 
 class ACombatUnitActor;
-class UCombatUnitDefinition;
+struct FCombatUnitRow;
 
 /**
  * Animation tuning without PIE: placed in a map, it shows unit figures that walk back and forth in the editor viewport
- * at their definition's MoveSpeed, with their look and AnimSet, as in a fight. MoveSpeed and LocomotionRate are read every
- * frame and a recompiled AnimBP or edited blend space shows at once; after changing a look, press Rebuild.
+ * at their unit row's MoveSpeed, with their look and AnimSet, as in a fight. MoveSpeed and LocomotionRate are read from the
+ * unit table every frame and a recompiled AnimBP or edited blend space shows at once; after changing a look, press Rebuild.
  * Units stand side by side along the actor's Y axis and walk along its X axis. The figures are transient (not saved).
  * Presentation only: no simulation.
  */
@@ -24,9 +24,9 @@ class BATTLESYSTEM_API ACombatAnimPreview : public AActor
 public:
 	ACombatAnimPreview();
 
-	/** The units to show; empty = every unit definition. */
-	UPROPERTY(EditAnywhere, Category = "Preview")
-	TArray<TObjectPtr<UCombatUnitDefinition>> Definitions;
+	/** Row names in the unit table of the units to show; empty = every unit. */
+	UPROPERTY(EditAnywhere, Category = "Preview", meta = (GetOptions = "BattleSystem.CombatSettings.GetUnitRowNames"))
+	TArray<FName> UnitTypes;
 
 	/** Seed of the looks' random picks (the figure in row n uses Seed + n). */
 	UPROPERTY(EditAnywhere, Category = "Preview")
@@ -43,7 +43,7 @@ public:
 	UPROPERTY(EditAnywhere, Category = "Preview", meta = (ClampMin = 0, Units = "s"))
 	float StopTime = 1.5f;
 
-	/** Speed for every unit instead of its MoveSpeed; 0 = the definition's MoveSpeed. */
+	/** Speed for every unit instead of its MoveSpeed; 0 = the unit's MoveSpeed. */
 	UPROPERTY(EditAnywhere, Category = "Preview", meta = (ClampMin = 0, Units = "cm/s"))
 	float SpeedOverride = 0.f;
 
@@ -83,7 +83,7 @@ private:
 	struct FPreviewUnit
 	{
 		TWeakObjectPtr<ACombatUnitActor> Actor;
-		TWeakObjectPtr<const UCombatUnitDefinition> Definition;
+		FName Type;
 		/** Along the path, 0..PathLength. */
 		float Distance = 0.f;
 		/** +1 out, -1 back. */
@@ -97,9 +97,11 @@ private:
 	float GetFacingOffset(const FPreviewUnit& Unit) const;
 
 	void ClearUnits();
-	TArray<const UCombatUnitDefinition*> GetShownDefinitions() const;
+	TArray<FName> GetShownTypes() const;
+	/** The unit's row in the unit table, read again every frame; null if it is gone. */
+	static const FCombatUnitRow* FindRow(FName Type);
 
 	TArray<FPreviewUnit> Units;
-	/** Built at least once, so an empty list (no definitions) does not rebuild every frame. */
+	/** Built at least once, so an empty list (no units) does not rebuild every frame. */
 	bool bBuilt = false;
 };

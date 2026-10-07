@@ -2,7 +2,7 @@
 
 #include "Combat/CombatUnitActor.h"
 #include "Combat/CombatAnimation.h"
-#include "Combat/CombatAppearance.h"
+#include "Combat/CombatMeshMergeCache.h"
 #include "Combat/CombatSubsystem.h"
 #include "Combat/CombatTags.h"
 #include "Animation/AnimMontage.h"
@@ -156,28 +156,28 @@ void ACombatUnitActor::InitUnit(int32 InUnitId, int32 InTeam, float InRadius, co
 	StatusWidget->SetRelativeLocation(FVector(0.0, 0.0, BodyHeight * 0.5));
 }
 
-void ACombatUnitActor::InitAppearance(const UCombatAppearance* InAppearance, int32 Seed)
+void ACombatUnitActor::InitLook(const FCombatLook& InLook, int32 Seed)
 {
-	if (!InAppearance)
+	if (!InLook.HasParts())
 	{
 		return;
 	}
 
-	const TArray<USkeletalMesh*> Picks = InAppearance->PickMeshes(Seed);
+	const TArray<USkeletalMesh*> Picks = InLook.PickMeshes(Seed);
 	TArray<USkeletalMesh*> MergedParts;
 	for (int32 Index = 0; Index < Picks.Num(); ++Index)
 	{
-		if (Picks[Index] && !InAppearance->Slots[Index].bSwappable)
+		if (Picks[Index] && !InLook.Slots[Index].bSwappable)
 		{
 			MergedParts.Add(Picks[Index]);
 		}
 	}
 	if (MergedParts.IsEmpty())
 	{
-		UE_LOG(LogCombat, Warning, TEXT("Look %s has no merged part (body) for unit %d; keeping the placeholder."), *InAppearance->GetName(), UnitId);
+		UE_LOG(LogCombat, Warning, TEXT("The look of unit %d has no merged part (body; are the meshes there?); keeping the placeholder."), UnitId);
 		return;
 	}
-	Appearance = InAppearance;
+	Look = InLook;
 
 	// The fixed parts become one mesh, shared by all units with the same parts. If the merge fails, every part gets
 	// its own component that follows the first one: more expensive, but the unit still looks right.
@@ -191,10 +191,10 @@ void ACombatUnitActor::InitAppearance(const UCombatAppearance* InAppearance, int
 			AddPartComponent(MergedParts[Index]);
 		}
 	}
-	CharacterMesh->SetRelativeRotation(InAppearance->MeshRotation);
-	LookMeshScale = InAppearance->GetMeshScale();
+	CharacterMesh->SetRelativeRotation(Look.MeshRotation);
+	LookMeshScale = Look.GetMeshScale();
 	CharacterMesh->SetRelativeScale3D(LookMeshScale);
-	AnimSet = InAppearance->AnimSet;
+	AnimSet = Look.AnimSet.LoadSynchronous();
 	if (AnimSet && AnimSet->AnimClass)
 	{
 		// In the editor world (ACombatAnimPreview) the pose only updates when asked to.
@@ -214,55 +214,56 @@ void ACombatUnitActor::InitAppearance(const UCombatAppearance* InAppearance, int
 
 	for (int32 Index = 0; Index < Picks.Num(); ++Index)
 	{
-		if (InAppearance->Slots[Index].bSwappable)
+		if (Look.Slots[Index].bSwappable)
 		{
-			AddSwappableSlot(InAppearance->Slots[Index].SlotTag, Picks[Index]);
+			AddSwappableSlot(Look.Slots[Index].SlotTag, Picks[Index]);
 		}
 	}
 	// An override of a slot the look does not have (a helmet while taunted) needs an empty slot to show in.
-	for (const FCombatAppearanceOverride& Override : InAppearance->Overrides)
+	for (const FCombatLookOverride& Override : Look.Overrides)
 	{
 		if (!SwappableSlotTags.Contains(Override.SlotTag))
 		{
-			const bool bMergedSlot = InAppearance->Slots.ContainsByPredicate([&Override](const FCombatAppearanceSlot& Slot) { return Slot.SlotTag == Override.SlotTag; });
+			const bool bMergedSlot = Look.Slots.ContainsByPredicate([&Override](const FCombatLookSlot& Slot) { return Slot.SlotTag == Override.SlotTag; });
 			if (bMergedSlot)
 			{
-				UE_LOG(LogCombat, Warning, TEXT("Look %s: override for %s is ignored, that slot is merged (turn on Swappable)."),
-					*InAppearance->GetName(), *Override.SlotTag.ToString());
+				UE_LOG(LogCombat, Warning, TEXT("Look of unit %d: override for %s is ignored, that slot is merged (turn on Swappable)."),
+					UnitId, *Override.SlotTag.ToString());
 				continue;
 			}
 			AddSwappableSlot(Override.SlotTag, nullptr);
 		}
 	}
 
-	for (const FCombatAppearanceProp& Prop : InAppearance->Props)
+	for (const FCombatLookProp& Prop : Look.Props)
 	{
-		if (!Prop.Mesh)
+		UStaticMesh* PropMesh = Prop.Mesh.LoadSynchronous();
+		if (!PropMesh)
 		{
 			continue;
 		}
 		UStaticMeshComponent* PropComponent = NewObject<UStaticMeshComponent>(this);
 		PropComponent->SetupAttachment(CharacterMesh, Prop.Socket);
-		PropComponent->SetStaticMesh(Prop.Mesh);
+		PropComponent->SetStaticMesh(PropMesh);
 		PropComponent->SetRelativeTransform(Prop.Offset);
 		PropComponent->SetCollisionEnabled(ECollisionEnabled::NoCollision);
 		PropComponent->RegisterComponent();
 	}
 
 	// Widgets and texts by the figure's height (feet at the mesh origin) instead of BodyHeight.
-	VisualHeight = FMath::Max(CharacterMesh->GetSkeletalMeshAsset()->GetBounds().GetBox().Max.Z * InAppearance->GetMeshScale().Z, 10.0);
+	VisualHeight = FMath::Max(CharacterMesh->GetSkeletalMeshAsset()->GetBounds().GetBox().Max.Z * LookMeshScale.Z, 10.0);
 	HealthBarWidget->SetRelativeLocation(FVector(0.0, 0.0, VisualHeight + HealthBarOffset));
 	StatusWidget->SetRelativeLocation(FVector(0.0, 0.0, VisualHeight * 0.5));
 }
 
-bool ACombatUnitActor::HasAppearanceOverrides() const
+bool ACombatUnitActor::HasLookOverrides() const
 {
-	return Appearance && !Appearance->Overrides.IsEmpty();
+	return !Look.Overrides.IsEmpty();
 }
 
 void ACombatUnitActor::SetActiveTags(const FGameplayTagContainer& InTags)
 {
-	if (!HasAppearanceOverrides() || InTags == ActiveTags)
+	if (!HasLookOverrides() || InTags == ActiveTags)
 	{
 		return;
 	}
@@ -275,14 +276,14 @@ void ACombatUnitActor::SetActiveTags(const FGameplayTagContainer& InTags)
 
 bool ACombatUnitActor::SetSlotMesh(FGameplayTag SlotTag, USkeletalMesh* Mesh)
 {
-	if (!Appearance)
+	if (!Look.HasParts())
 	{
 		return false;
 	}
 	int32 Index = SwappableSlotTags.IndexOfByKey(SlotTag);
 	if (Index == INDEX_NONE)
 	{
-		const bool bMergedSlot = Appearance->Slots.ContainsByPredicate([SlotTag](const FCombatAppearanceSlot& Slot) { return Slot.SlotTag == SlotTag; });
+		const bool bMergedSlot = Look.Slots.ContainsByPredicate([SlotTag](const FCombatLookSlot& Slot) { return Slot.SlotTag == SlotTag; });
 		if (bMergedSlot)
 		{
 			return false;
@@ -319,11 +320,11 @@ int32 ACombatUnitActor::AddSwappableSlot(FGameplayTag SlotTag, USkeletalMesh* Ba
 void ACombatUnitActor::RefreshSwappableSlot(int32 Index)
 {
 	USkeletalMesh* Mesh = SwappableBaseMeshes[Index];
-	for (const FCombatAppearanceOverride& Override : Appearance->Overrides)
+	for (const FCombatLookOverride& Override : Look.Overrides)
 	{
 		if (Override.SlotTag == SwappableSlotTags[Index] && ActiveTags.HasTag(Override.WhileTag))
 		{
-			Mesh = Override.Mesh;
+			Mesh = Override.Mesh.LoadSynchronous();
 			break;
 		}
 	}

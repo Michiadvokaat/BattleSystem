@@ -3,7 +3,7 @@
 #include "SCombatUnitList.h"
 #include "Combat/CombatSettings.h"
 #include "Combat/CombatSubsystem.h"
-#include "Combat/CombatUnitDefinition.h"
+#include "Combat/CombatUnitData.h"
 #include "SCombatUnitWidgets.h"
 #include "Styling/CoreStyle.h"
 #include "Widgets/Input/SButton.h"
@@ -96,9 +96,8 @@ void SCombatUnitList::Rebuild()
 		{
 			continue;
 		}
-		const UCombatUnitDefinition* Definition = CombatSubsystem->GetUnitDefinition(Unit.Id);
-		FString Name = Definition && !Definition->DisplayName.IsEmpty() ? Definition->DisplayName.ToString()
-			: Definition ? Definition->GetName().Replace(TEXT("DA_"), TEXT("")) : FString::Printf(TEXT("Unit %d"), Unit.Id);
+		const FCombatUnitType* Type = CombatSubsystem->GetUnitType(Unit.Id);
+		FString Name = Type ? Type->GetDisplayName() : FString::Printf(TEXT("Unit %d"), Unit.Id);
 		Names.Add(Name);
 		UnitIds.Add(Unit.Id);
 	}

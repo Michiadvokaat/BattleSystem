@@ -5,6 +5,7 @@
 #include "CoreMinimal.h"
 #include "GameFramework/Actor.h"
 #include "GameplayTagContainer.h"
+#include "Combat/CombatUnitData.h"
 #include "CombatUnitActor.generated.h"
 
 class SCombatHealthBar;
@@ -12,7 +13,6 @@ class SCombatStatusIcons;
 class UAnimMontage;
 class UCombatAnimInstance;
 class UCombatAnimSet;
-class UCombatAppearance;
 class USkeletalMesh;
 class USkeletalMeshComponent;
 class UMaterialInstanceDynamic;
@@ -26,7 +26,7 @@ class UStaticMeshComponent;
  * simulation (interpolated position, events) and contains no gameplay logic.
  * Placeholder look: a cylinder (melee) or cube (ranged) in the team color with a "nose" that shows the facing,
  * a health bar above it and its active effects as short labels on its center (both screen-space widgets).
- * With a UCombatAppearance (InitAppearance) it shows a modular character instead of the placeholder shape.
+ * With a look (FCombatLook, InitLook) it shows a modular character instead of the placeholder shape.
  */
 /** One status label shown on a unit, for example "T" in magenta while taunted. */
 struct FCombatStatusDisplay
@@ -52,10 +52,10 @@ public:
 	 * Shows the modular look instead of the placeholder shape. Call after InitUnit. Seed picks the variations
 	 * (the subsystem passes a hash of the fight seed and the unit ID).
 	 */
-	virtual void InitAppearance(const UCombatAppearance* InAppearance, int32 Seed);
+	virtual void InitLook(const FCombatLook& InLook, int32 Seed);
 
 	/** True when the look has overrides, so the subsystem only collects tags for the units that use them. */
-	bool HasAppearanceOverrides() const;
+	bool HasLookOverrides() const;
 
 	/** The unit's active effect tags plus the tags they grant; switches the look's overrides. Called every frame. */
 	virtual void SetActiveTags(const FGameplayTagContainer& InTags);
@@ -64,7 +64,7 @@ public:
 	 * Puts another mesh in a swappable slot (nullptr = empty). A slot the look does not have yet is added; a merged
 	 * slot cannot change. An active override of the slot stays visible until its tag ends. False if not possible.
 	 */
-	UFUNCTION(BlueprintCallable, Category = "Combat|Appearance")
+	UFUNCTION(BlueprintCallable, Category = "Combat|Look")
 	bool SetSlotMesh(FGameplayTag SlotTag, USkeletalMesh* Mesh);
 
 	/**
@@ -103,7 +103,7 @@ public:
 
 	/**
 	 * LevelDesigner ghost: every mesh gets Material (Color = the team color, Opacity), without shadows, and the
-	 * health bar and labels are hidden. Call after InitUnit and InitAppearance.
+	 * health bar and labels are hidden. Call after InitUnit and InitLook.
 	 */
 	void MakeGhost(UMaterialInterface* Material, float Opacity);
 
@@ -204,8 +204,9 @@ private:
 	/** Shows the slot's mesh: the first override whose tag is active, else the base mesh. */
 	void RefreshSwappableSlot(int32 Index);
 
+	/** The look shown (InitLook); empty Slots = the placeholder. */
 	UPROPERTY(Transient)
-	TObjectPtr<const UCombatAppearance> Appearance;
+	FCombatLook Look;
 
 	/** The look's AnimSet and the body's anim instance; null without animations. */
 	UPROPERTY(Transient)

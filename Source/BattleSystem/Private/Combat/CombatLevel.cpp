@@ -3,7 +3,7 @@
 #include "Combat/CombatLevel.h"
 #include "Combat/CombatSimulation.h"
 #include "Combat/CombatSubsystem.h"
-#include "Combat/CombatUnitDefinition.h"
+#include "Combat/CombatUnitData.h"
 #include "HAL/FileManager.h"
 #include "JsonObjectConverter.h"
 #include "Misc/FileHelper.h"
@@ -543,8 +543,8 @@ bool CombatLevels::Delete(const FString& Name)
 	return Exists(Name) && IFileManager::Get().Delete(*(GetDirectory() / (Name + TEXT(".json"))));
 }
 
-bool CombatLevels::BuildConfig(const FCombatLevel& Level, int32 TickRate, TFunctionRef<const UCombatUnitDefinition*(const FString&)> Resolve,
-	FCombatSimConfig& OutConfig, TArray<const UCombatUnitDefinition*>* OutDefinitions, TArray<int32>* OutRotations)
+bool CombatLevels::BuildConfig(const FCombatLevel& Level, int32 TickRate, TFunctionRef<TSharedPtr<const FCombatUnitType>(const FString&)> Resolve,
+	FCombatSimConfig& OutConfig, TArray<TSharedPtr<const FCombatUnitType>>* OutTypes, TArray<int32>* OutRotations)
 {
 	Level.ToGridData(OutConfig.Grid);
 
@@ -552,8 +552,8 @@ bool CombatLevels::BuildConfig(const FCombatLevel& Level, int32 TickRate, TFunct
 	for (int32 Index = 0; Index < Level.Units.Num(); ++Index)
 	{
 		const FCombatLevelUnit& Entry = Level.Units[Index];
-		const UCombatUnitDefinition* Definition = Resolve(Entry.Type);
-		if (!Definition)
+		const TSharedPtr<const FCombatUnitType> Type = Resolve(Entry.Type);
+		if (!Type)
 		{
 			UE_LOG(LogCombat, Warning, TEXT("Level %s: unit %d has unknown type '%s', skipped."), *Level.Name, Index, *Entry.Type);
 			continue;
@@ -566,13 +566,13 @@ bool CombatLevels::BuildConfig(const FCombatLevel& Level, int32 TickRate, TFunct
 		}
 
 		FCombatUnitSpawn& Spawn = OutConfig.Units.AddDefaulted_GetRef();
-		Spawn.Stats = Definition->ToSimStats(TickRate);
+		Spawn.Stats = Type->ToSimStats(TickRate);
 		Spawn.Team = Entry.Team;
 		Spawn.StartCell = Entry.Cell;
 		Spawn.StartOffset = GetUnitPositionOffset(Entry.Position, Level.CellSize);
-		if (OutDefinitions)
+		if (OutTypes)
 		{
-			OutDefinitions->Add(Definition);
+			OutTypes->Add(Type);
 		}
 		if (OutRotations)
 		{
@@ -595,8 +595,8 @@ bool CombatLevels::BuildConfig(const FCombatLevel& Level, int32 TickRate, TFunct
 		for (int32 Index = 0; Index < Spawns.Num(); ++Index)
 		{
 			const FCombatLevelSpawn& Entry = Spawns[Index];
-			const UCombatUnitDefinition* Definition = Resolve(Entry.Type);
-			if (!Definition)
+			const TSharedPtr<const FCombatUnitType> Type = Resolve(Entry.Type);
+			if (!Type)
 			{
 				UE_LOG(LogCombat, Warning, TEXT("Level %s: wave %d spawn %d has unknown type '%s', skipped."), *Level.Name, WaveIndex + 1, Index, *Entry.Type);
 				continue;
@@ -609,13 +609,13 @@ bool CombatLevels::BuildConfig(const FCombatLevel& Level, int32 TickRate, TFunct
 			}
 
 			FCombatWaveSpawn& Spawn = Wave.Spawns.AddDefaulted_GetRef();
-			Spawn.Stats = Definition->ToSimStats(TickRate);
+			Spawn.Stats = Type->ToSimStats(TickRate);
 			Spawn.Cell = Entry.Cell;
 			Spawn.Offset = GetUnitPositionOffset(Entry.Position, Level.CellSize);
 			Spawn.DelayTicks = FMath::Max(FMath::RoundToInt32(Entry.Time * TickRate), 0);
-			if (OutDefinitions)
+			if (OutTypes)
 			{
-				OutDefinitions->Add(Definition);
+				OutTypes->Add(Type);
 			}
 			if (OutRotations)
 			{

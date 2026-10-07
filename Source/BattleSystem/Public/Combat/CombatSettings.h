@@ -10,6 +10,7 @@
 class UCombatCueTable;
 class UMaterialInterface;
 class UCombatPieceCatalog;
+class UDataTable;
 
 /** How an active effect is shown on a unit. */
 USTRUCT()
@@ -136,6 +137,22 @@ public:
 	/** Seed used by the auto-start. */
 	UPROPERTY(Config, EditAnywhere, Category = "Arena")
 	int32 DefaultSeed = 42;
+
+	/** Unit types (FCombatUnitRow), heroes and enemies; levels name them by row name. Filled from Data/Units.json (Scripts/ImportCombatData.py). */
+	UPROPERTY(Config, EditAnywhere, Category = "Units", meta = (RequiredAssetDataTags = "RowStructure=/Script/BattleSystem.CombatUnitRow"))
+	TSoftObjectPtr<UDataTable> UnitTable = TSoftObjectPtr<UDataTable>(FSoftObjectPath(TEXT("/Game/Combat/DT_Units.DT_Units")));
+
+	/** Skills (FCombatSkillRow) that units own by row name. Filled from Data/Skills.json (Scripts/ImportCombatData.py). */
+	UPROPERTY(Config, EditAnywhere, Category = "Units", meta = (RequiredAssetDataTags = "RowStructure=/Script/BattleSystem.CombatSkillRow"))
+	TSoftObjectPtr<UDataTable> SkillTable = TSoftObjectPtr<UDataTable>(FSoftObjectPath(TEXT("/Game/Combat/DT_Skills.DT_Skills")));
+
+	/** Row names of the skill table, sorted (the dropdown of FCombatUnitRow::Skills). */
+	UFUNCTION()
+	static TArray<FName> GetSkillRowNames();
+
+	/** Row names of the unit table, sorted (the dropdown of ACombatAnimPreview::UnitTypes). */
+	UFUNCTION()
+	static TArray<FName> GetUnitRowNames();
 
 	/** Maps cue tags to VFX, sound and debug colors. */
 	UPROPERTY(Config, EditAnywhere, Category = "Presentation")

@@ -6,6 +6,7 @@
 #include "Combat/CombatPieces.h"
 #include "Combat/CombatSettings.h"
 #include "Combat/CombatSubsystem.h"
+#include "Combat/CombatUnitData.h"
 #include "HAL/PlatformTime.h"
 #include "Styling/CoreStyle.h"
 #include "Widgets/Input/SButton.h"
@@ -50,7 +51,7 @@ void SCombatLevelDesigner::Construct(const FArguments& InArgs)
 {
 	Subsystem = InArgs._Subsystem;
 	RefreshLevelOptions();
-	for (const FString& Type : UCombatSubsystem::GetAllUnitDefinitionNames())
+	for (const FString& Type : CombatUnits::GetAllTypeNames())
 	{
 		UnitTypeOptions.Add(MakeShared<FString>(Type));
 	}

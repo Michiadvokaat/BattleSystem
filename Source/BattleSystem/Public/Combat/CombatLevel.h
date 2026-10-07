@@ -6,15 +6,15 @@
 #include "Combat/CombatGridData.h"
 #include "CombatLevel.generated.h"
 
-class UCombatUnitDefinition;
 struct FCombatSimConfig;
+struct FCombatUnitType;
 
 USTRUCT()
 struct FCombatLevelUnit
 {
 	GENERATED_BODY()
 
-	/** Asset name of the UCombatUnitDefinition, for example "DA_Krijger". */
+	/** Row name in the unit table (FCombatUnitRow), for example "Krijger". */
 	UPROPERTY() FString Type;
 	UPROPERTY() int32 Team = 0;
 	UPROPERTY() FIntPoint Cell = FIntPoint::ZeroValue;
@@ -30,7 +30,7 @@ struct FCombatLevelSpawn
 {
 	GENERATED_BODY()
 
-	/** Asset name of the UCombatUnitDefinition. */
+	/** Row name in the unit table (FCombatUnitRow). */
 	UPROPERTY() FString Type;
 	UPROPERTY() FIntPoint Cell = FIntPoint::ZeroValue;
 	/** Seconds after the start of its wave. */
@@ -160,7 +160,7 @@ struct BATTLESYSTEM_API FCombatLevel
 	 * side: team 0 +X, the rest and spawns -X, their pieces are white, their units stand in the middle of their cell,
 	 * and rotations in eighth turns are converted).
 	 */
-	UPROPERTY() int32 FormatVersion = 8;
+	UPROPERTY() int32 FormatVersion = 9;
 	UPROPERTY() FString Name;
 	UPROPERTY() int32 Width = 20;
 	UPROPERTY() int32 Height = 12;
@@ -252,11 +252,11 @@ namespace CombatLevels
 
 	/**
 	 * Builds a simulation config (grid, units and waves) from a level. Resolve turns a unit type name into its
-	 * definition; units and spawns of an unknown type or on an unwalkable cell are skipped with a warning.
-	 * OutDefinitions gets the definition per FCombatUnit::SourceIndex: the units, then every wave's spawns;
+	 * type; units and spawns of an unknown type or on an unwalkable cell are skipped with a warning.
+	 * OutTypes gets the type per FCombatUnit::SourceIndex: the units, then every wave's spawns;
 	 * OutRotations their start rotation in the same order (presentation only, not in the config).
 	 * Settings (tick rate and the rest) are applied by the caller.
 	 */
-	BATTLESYSTEM_API bool BuildConfig(const FCombatLevel& Level, int32 TickRate, TFunctionRef<const UCombatUnitDefinition*(const FString&)> Resolve,
-		FCombatSimConfig& OutConfig, TArray<const UCombatUnitDefinition*>* OutDefinitions = nullptr, TArray<int32>* OutRotations = nullptr);
+	BATTLESYSTEM_API bool BuildConfig(const FCombatLevel& Level, int32 TickRate, TFunctionRef<TSharedPtr<const FCombatUnitType>(const FString&)> Resolve,
+		FCombatSimConfig& OutConfig, TArray<TSharedPtr<const FCombatUnitType>>* OutTypes = nullptr, TArray<int32>* OutRotations = nullptr);
 }
