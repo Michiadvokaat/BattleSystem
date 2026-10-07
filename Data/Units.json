@@ -11,7 +11,7 @@
 			"ParentTags": []
 		},
 		"Skills": [
-			"Bijlman_AoE"
+			"Cleave"
 		],
 		"SkillDamageMultiplier": 1,
 		"SkillRangeMultiplier": 1,
@@ -48,8 +48,8 @@
 			"ParentTags": []
 		},
 		"Skills": [
-			"Boogschutter_Ranged",
-			"Boogschutter_Melee"
+			"QuickShot",
+			"Punch"
 		],
 		"SkillDamageMultiplier": 1,
 		"SkillRangeMultiplier": 1,
@@ -143,11 +143,11 @@
 			"ParentTags": []
 		},
 		"Skills": [
-			"Brute_Melee"
+			"Punch"
 		],
-		"SkillDamageMultiplier": 1,
-		"SkillRangeMultiplier": 1,
-		"SkillCooldownMultiplier": 1,
+		"SkillDamageMultiplier": 3,
+		"SkillRangeMultiplier": 1.6,
+		"SkillCooldownMultiplier": 1.6,
 		"EffectDurationMultiplier": 1,
 		"ActorClass": "None",
 		"Look":
@@ -346,12 +346,12 @@
 			"ParentTags": []
 		},
 		"Skills": [
-			"Krijger_Melee",
-			"Krijger_PlayerTaunt"
+			"Punch",
+			"Shout"
 		],
-		"SkillDamageMultiplier": 1,
-		"SkillRangeMultiplier": 1,
-		"SkillCooldownMultiplier": 1,
+		"SkillDamageMultiplier": 1.2,
+		"SkillRangeMultiplier": 0.8,
+		"SkillCooldownMultiplier": 0.8,
 		"EffectDurationMultiplier": 1,
 		"ActorClass": "None",
 		"Look":
@@ -417,8 +417,8 @@
 			"ParentTags": []
 		},
 		"Skills": [
-			"Magier_AoE",
-			"Magier_Melee"
+			"Fireball",
+			"Punch"
 		],
 		"SkillDamageMultiplier": 1,
 		"SkillRangeMultiplier": 1,
@@ -455,13 +455,13 @@
 			"ParentTags": []
 		},
 		"Skills": [
-			"Tank_Melee",
-			"Tank_Taunt",
-			"Tank_PlayerTaunt"
+			"Punch",
+			"Taunt",
+			"Shout"
 		],
-		"SkillDamageMultiplier": 1,
+		"SkillDamageMultiplier": 1.2,
 		"SkillRangeMultiplier": 1,
-		"SkillCooldownMultiplier": 1,
+		"SkillCooldownMultiplier": 1.2,
 		"EffectDurationMultiplier": 1,
 		"ActorClass": "None",
 		"Look":
@@ -559,8 +559,8 @@
 			"ParentTags": []
 		},
 		"Skills": [
-			"Vaandeldrager_AoE",
-			"Vaandeldrager_Melee"
+			"Rally",
+			"Punch"
 		],
 		"SkillDamageMultiplier": 1,
 		"SkillRangeMultiplier": 1,

@@ -1,129 +1,13 @@
 [
 	{
-		"Name": "Bijlman_AoE",
-		"DisplayName": "",
-		"Type": "AoE",
-		"bPlayerActivated": false,
-		"Range": 70,
-		"Cooldown": 1.5,
-		"Windup": 0.4,
-		"Damage": 20,
-		"ThreatMultiplier": 1,
-		"Effects": [],
-		"ImpactCue":
-		{
-			"TagName": "Cue.Cleave"
-		},
-		"ProjectileSpeed": 1500,
-		"bRequiresLineOfSight": false,
-		"AreaShape": "Cone",
-		"AreaRadius": 160,
-		"ConeAngle": 100,
-		"TelegraphDelay": 0,
-		"bAffectsEnemies": true,
-		"bAffectsAllies": false,
-		"AnimationTag":
-		{
-			"TagName": "Anim.Throw"
-		},
-		"ProjectileActorClass": "None"
-	},
-	{
-		"Name": "Boogschutter_Ranged",
-		"DisplayName": "Throw",
-		"Type": "Ranged",
-		"bPlayerActivated": false,
-		"Range": 400,
-		"Cooldown": 3,
-		"Windup": 0.5,
-		"Damage": 14,
-		"ThreatMultiplier": 1,
-		"Effects": [],
-		"ImpactCue":
-		{
-			"TagName": "None"
-		},
-		"ProjectileSpeed": 10000,
-		"bRequiresLineOfSight": true,
-		"AreaShape": "CircleAtTarget",
-		"AreaRadius": 150,
-		"ConeAngle": 90,
-		"TelegraphDelay": 0,
-		"bAffectsEnemies": true,
-		"bAffectsAllies": false,
-		"AnimationTag":
-		{
-			"TagName": "Anim.Throw"
-		},
-		"ProjectileActorClass": "None"
-	},
-	{
-		"Name": "Boogschutter_Melee",
+		"Name": "Punch",
 		"DisplayName": "",
 		"Type": "Melee",
 		"bPlayerActivated": false,
 		"Range": 50,
 		"Cooldown": 1,
 		"Windup": 0.2,
-		"Damage": 5,
-		"ThreatMultiplier": 1,
-		"Effects": [],
-		"ImpactCue":
-		{
-			"TagName": "None"
-		},
-		"ProjectileSpeed": 1500,
-		"bRequiresLineOfSight": true,
-		"AreaShape": "CircleAtTarget",
-		"AreaRadius": 150,
-		"ConeAngle": 90,
-		"TelegraphDelay": 0,
-		"bAffectsEnemies": true,
-		"bAffectsAllies": false,
-		"AnimationTag":
-		{
-			"TagName": "None"
-		},
-		"ProjectileActorClass": "None"
-	},
-	{
-		"Name": "Brute_Melee",
-		"DisplayName": "",
-		"Type": "Melee",
-		"bPlayerActivated": false,
-		"Range": 80,
-		"Cooldown": 1.6,
-		"Windup": 0.5,
-		"Damage": 30,
-		"ThreatMultiplier": 1,
-		"Effects": [],
-		"ImpactCue":
-		{
-			"TagName": "None"
-		},
-		"ProjectileSpeed": 1500,
-		"bRequiresLineOfSight": true,
-		"AreaShape": "CircleAtTarget",
-		"AreaRadius": 150,
-		"ConeAngle": 90,
-		"TelegraphDelay": 0,
-		"bAffectsEnemies": true,
-		"bAffectsAllies": false,
-		"AnimationTag":
-		{
-			"TagName": "Anim.Push"
-		},
-		"ProjectileActorClass": "None"
-	},
-	{
-		"Name": "Krijger_Melee",
-		"DisplayName": "",
-		"Type": "Melee",
-		"bPlayerActivated": false,
-		"Range": 40,
-		"Cooldown": 0.8,
-		"Windup": 0.25,
-		"Damage": 12,
+		"Damage": 10,
 		"ThreatMultiplier": 1,
 		"Effects": [],
 		"ImpactCue":
@@ -145,177 +29,7 @@
 		"ProjectileActorClass": "None"
 	},
 	{
-		"Name": "Krijger_PlayerTaunt",
-		"DisplayName": "",
-		"Type": "Taunt",
-		"bPlayerActivated": true,
-		"Range": 50,
-		"Cooldown": 0,
-		"Windup": 0,
-		"Damage": 0,
-		"ThreatMultiplier": 1,
-		"Effects": [
-			{
-				"EffectTag":
-				{
-					"TagName": "Effect.Taunt"
-				},
-				"Duration": 2,
-				"Stacking": "Refresh",
-				"MaxStacks": 1,
-				"GrantedTags":
-				{
-					"GameplayTags": [
-						{
-							"TagName": "Status.Taunted"
-						}
-					],
-					"ParentTags": [
-						{
-							"TagName": "Status"
-						}
-					]
-				},
-				"BlockedByTags":
-				{
-					"GameplayTags": [],
-					"ParentTags": []
-				},
-				"MoveSpeedMultiplier": 1,
-				"DamageDealtMultiplier": 1,
-				"DamageTakenMultiplier": 1
-			}
-		],
-		"ImpactCue":
-		{
-			"TagName": "Cue.Taunt"
-		},
-		"ProjectileSpeed": 1500,
-		"bRequiresLineOfSight": true,
-		"AreaShape": "CircleAtTarget",
-		"AreaRadius": 150,
-		"ConeAngle": 90,
-		"TelegraphDelay": 0,
-		"bAffectsEnemies": true,
-		"bAffectsAllies": false,
-		"AnimationTag":
-		{
-			"TagName": "None"
-		},
-		"ProjectileActorClass": "None"
-	},
-	{
-		"Name": "Magier_AoE",
-		"DisplayName": "",
-		"Type": "AoE",
-		"bPlayerActivated": false,
-		"Range": 500,
-		"Cooldown": 3,
-		"Windup": 0.4,
-		"Damage": 25,
-		"ThreatMultiplier": 1,
-		"Effects": [
-			{
-				"EffectTag":
-				{
-					"TagName": "Effect.Slow"
-				},
-				"Duration": 2,
-				"Stacking": "Refresh",
-				"MaxStacks": 1,
-				"GrantedTags":
-				{
-					"GameplayTags": [],
-					"ParentTags": []
-				},
-				"BlockedByTags":
-				{
-					"GameplayTags": [],
-					"ParentTags": []
-				},
-				"MoveSpeedMultiplier": 0.5,
-				"DamageDealtMultiplier": 1,
-				"DamageTakenMultiplier": 1
-			}
-		],
-		"ImpactCue":
-		{
-			"TagName": "Cue.Fire"
-		},
-		"ProjectileSpeed": 1500,
-		"bRequiresLineOfSight": true,
-		"AreaShape": "CircleAtTarget",
-		"AreaRadius": 150,
-		"ConeAngle": 90,
-		"TelegraphDelay": 0.6,
-		"bAffectsEnemies": true,
-		"bAffectsAllies": false,
-		"AnimationTag":
-		{
-			"TagName": "Anim.Throw"
-		},
-		"ProjectileActorClass": "None"
-	},
-	{
-		"Name": "Magier_Melee",
-		"DisplayName": "",
-		"Type": "Melee",
-		"bPlayerActivated": false,
-		"Range": 50,
-		"Cooldown": 1,
-		"Windup": 0.2,
-		"Damage": 4,
-		"ThreatMultiplier": 1,
-		"Effects": [],
-		"ImpactCue":
-		{
-			"TagName": "None"
-		},
-		"ProjectileSpeed": 1500,
-		"bRequiresLineOfSight": true,
-		"AreaShape": "CircleAtTarget",
-		"AreaRadius": 150,
-		"ConeAngle": 90,
-		"TelegraphDelay": 0,
-		"bAffectsEnemies": true,
-		"bAffectsAllies": false,
-		"AnimationTag":
-		{
-			"TagName": "None"
-		},
-		"ProjectileActorClass": "None"
-	},
-	{
-		"Name": "Tank_Melee",
-		"DisplayName": "",
-		"Type": "Melee",
-		"bPlayerActivated": false,
-		"Range": 70,
-		"Cooldown": 1.2,
-		"Windup": 0.3,
-		"Damage": 12,
-		"ThreatMultiplier": 3,
-		"Effects": [],
-		"ImpactCue":
-		{
-			"TagName": "None"
-		},
-		"ProjectileSpeed": 1500,
-		"bRequiresLineOfSight": true,
-		"AreaShape": "CircleAtTarget",
-		"AreaRadius": 150,
-		"ConeAngle": 90,
-		"TelegraphDelay": 0,
-		"bAffectsEnemies": true,
-		"bAffectsAllies": false,
-		"AnimationTag":
-		{
-			"TagName": "Anim.Push"
-		},
-		"ProjectileActorClass": "None"
-	},
-	{
-		"Name": "Tank_Taunt",
+		"Name": "Taunt",
 		"DisplayName": "",
 		"Type": "Taunt",
 		"bPlayerActivated": false,
@@ -375,7 +89,7 @@
 		"ProjectileActorClass": "None"
 	},
 	{
-		"Name": "Tank_PlayerTaunt",
+		"Name": "Shout",
 		"DisplayName": "",
 		"Type": "Taunt",
 		"bPlayerActivated": true,
@@ -435,7 +149,117 @@
 		"ProjectileActorClass": "None"
 	},
 	{
-		"Name": "Vaandeldrager_AoE",
+		"Name": "QuickShot",
+		"DisplayName": "Throw",
+		"Type": "Ranged",
+		"bPlayerActivated": false,
+		"Range": 400,
+		"Cooldown": 3,
+		"Windup": 0.5,
+		"Damage": 14,
+		"ThreatMultiplier": 1,
+		"Effects": [],
+		"ImpactCue":
+		{
+			"TagName": "None"
+		},
+		"ProjectileSpeed": 10000,
+		"bRequiresLineOfSight": true,
+		"AreaShape": "CircleAtTarget",
+		"AreaRadius": 150,
+		"ConeAngle": 90,
+		"TelegraphDelay": 0,
+		"bAffectsEnemies": true,
+		"bAffectsAllies": false,
+		"AnimationTag":
+		{
+			"TagName": "Anim.Throw"
+		},
+		"ProjectileActorClass": "None"
+	},
+	{
+		"Name": "Cleave",
+		"DisplayName": "",
+		"Type": "AoE",
+		"bPlayerActivated": false,
+		"Range": 70,
+		"Cooldown": 1.5,
+		"Windup": 0.4,
+		"Damage": 20,
+		"ThreatMultiplier": 1,
+		"Effects": [],
+		"ImpactCue":
+		{
+			"TagName": "Cue.Cleave"
+		},
+		"ProjectileSpeed": 1500,
+		"bRequiresLineOfSight": false,
+		"AreaShape": "Cone",
+		"AreaRadius": 160,
+		"ConeAngle": 100,
+		"TelegraphDelay": 0,
+		"bAffectsEnemies": true,
+		"bAffectsAllies": false,
+		"AnimationTag":
+		{
+			"TagName": "Anim.Throw"
+		},
+		"ProjectileActorClass": "None"
+	},
+	{
+		"Name": "Fireball",
+		"DisplayName": "",
+		"Type": "AoE",
+		"bPlayerActivated": false,
+		"Range": 500,
+		"Cooldown": 3,
+		"Windup": 0.4,
+		"Damage": 25,
+		"ThreatMultiplier": 1,
+		"Effects": [
+			{
+				"EffectTag":
+				{
+					"TagName": "Effect.Slow"
+				},
+				"Duration": 2,
+				"Stacking": "Refresh",
+				"MaxStacks": 1,
+				"GrantedTags":
+				{
+					"GameplayTags": [],
+					"ParentTags": []
+				},
+				"BlockedByTags":
+				{
+					"GameplayTags": [],
+					"ParentTags": []
+				},
+				"MoveSpeedMultiplier": 0.5,
+				"DamageDealtMultiplier": 1,
+				"DamageTakenMultiplier": 1
+			}
+		],
+		"ImpactCue":
+		{
+			"TagName": "Cue.Fire"
+		},
+		"ProjectileSpeed": 1500,
+		"bRequiresLineOfSight": true,
+		"AreaShape": "CircleAtTarget",
+		"AreaRadius": 150,
+		"ConeAngle": 90,
+		"TelegraphDelay": 0.6,
+		"bAffectsEnemies": true,
+		"bAffectsAllies": false,
+		"AnimationTag":
+		{
+			"TagName": "Anim.Throw"
+		},
+		"ProjectileActorClass": "None"
+	},
+	{
+		"Name": "Rally",
 		"DisplayName": "",
 		"Type": "AoE",
 		"bPlayerActivated": false,
@@ -483,35 +307,6 @@
 		"AnimationTag":
 		{
 			"TagName": "Anim.Throw"
-		},
-		"ProjectileActorClass": "None"
-	},
-	{
-		"Name": "Vaandeldrager_Melee",
-		"DisplayName": "",
-		"Type": "Melee",
-		"bPlayerActivated": false,
-		"Range": 50,
-		"Cooldown": 1,
-		"Windup": 0.2,
-		"Damage": 8,
-		"ThreatMultiplier": 1,
-		"Effects": [],
-		"ImpactCue":
-		{
-			"TagName": "None"
-		},
-		"ProjectileSpeed": 1500,
-		"bRequiresLineOfSight": true,
-		"AreaShape": "CircleAtTarget",
-		"AreaRadius": 150,
-		"ConeAngle": 90,
-		"TelegraphDelay": 0,
-		"bAffectsEnemies": true,
-		"bAffectsAllies": false,
-		"AnimationTag":
-		{
-			"TagName": "None"
 		},
 		"ProjectileActorClass": "None"
 	}
