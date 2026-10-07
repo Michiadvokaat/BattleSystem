@@ -33,6 +33,7 @@ FCombatSimSettings FCombatSimSettings::FromProjectSettings(float InTauntRangeOve
 		Settings.ThreatDecayAmountPerTick = Project->ThreatDecayPerSecond / Settings.TickRate;
 	}
 	Settings.ThreatThreshold = Project->ThreatThreshold;
+	Settings.HitStaggerTicks = Project->SecondsToTicks(Project->HitStagger);
 	Settings.ThreatSwitchRatio = Project->ThreatSwitchRatio;
 	Settings.RetargetDistanceMargin = Project->RetargetDistanceMargin;
 	Settings.TauntRangeOverride = InTauntRangeOverride;
@@ -52,6 +53,7 @@ void FCombatSimSettings::ApplyTo(FCombatSimConfig& Config) const
 	Config.ThreatDecayFactorPerTick = ThreatDecayFactorPerTick;
 	Config.ThreatDecayAmountPerTick = ThreatDecayAmountPerTick;
 	Config.ThreatThreshold = ThreatThreshold;
+	Config.HitStaggerTicks = HitStaggerTicks;
 	Config.ThreatSwitchRatio = ThreatSwitchRatio;
 	Config.RetargetDistanceMargin = RetargetDistanceMargin;
 	Config.WavePauseTicks = WavePauseTicks;

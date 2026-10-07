@@ -2089,6 +2089,98 @@ bool FCombatUnitSkillsTest::RunTest(const FString& Parameters)
 	return true;
 }
 
+IMPLEMENT_SIMPLE_AUTOMATION_TEST(FCombatActionLockTest, "BattleSystem.Combat.ActionLock",
+	EAutomationTestFlags::EditorContext | EAutomationTestFlags::ProductFilter)
+
+bool FCombatActionLockTest::RunTest(const FString& Parameters)
+{
+	// Recovery: an archer kills a weak enemy in range with one direct shot, then walks to a far one. With a recovery of
+	// 8 ticks it stands still for 8 steps after the shot.
+	auto FirstMoveAfterShot = [](int32 RecoveryTicks) -> int32
+	{
+		FCombatSimConfig Config;
+		Config.Grid.Init(20, 5, 100.f);
+		Config.MaxFirstAttackDelayTicks = 0;
+		FCombatUnitStats Archer = CombatTests::MakeArcherStats(300.f, 0.f, 10.f);
+		Archer.Attacks[0].RecoveryTicks = RecoveryTicks;
+		Archer.Attacks[0].CooldownTicks = 200;
+		CombatTests::AddUnit(Config, Archer, 0, FIntPoint(1, 2));
+		FCombatUnitStats Weak = CombatTests::MakeDummyStats();
+		Weak.MaxHP = 1.f;
+		CombatTests::AddUnit(Config, Weak, 1, FIntPoint(3, 2));
+		CombatTests::AddUnit(Config, CombatTests::MakeDummyStats(), 1, FIntPoint(18, 2));
+		FCombatSimulation Simulation(Config);
+		for (int32 Step = 1; Step <= 40; ++Step)
+		{
+			const FVector2D Before = Simulation.GetUnits()[0].Position;
+			Simulation.Step();
+			if (!Simulation.GetUnits()[0].Position.Equals(Before, 0.01))
+			{
+				return Step;
+			}
+		}
+		return INDEX_NONE;
+	};
+	const int32 FreeStep = FirstMoveAfterShot(0);
+	TestEqual(TEXT("Without recovery it walks on right after the shot"), FreeStep, 2);
+	TestEqual(TEXT("With a recovery of 8 ticks it stands 8 more steps"), FirstMoveAfterShot(8), FreeStep + 8);
+
+	// Stagger: a melee unit walks at an archer that hits it directly every 30 ticks; after each hit it stands still for
+	// HitStaggerTicks steps.
+	FCombatSimConfig Config;
+	Config.Grid.Init(20, 5, 100.f);
+	Config.MaxFirstAttackDelayTicks = 0;
+	Config.HitStaggerTicks = 6;
+	FCombatUnitStats Archer = CombatTests::MakeArcherStats(1200.f, 0.f, 1.f);
+	Archer.Attacks[0].CooldownTicks = 30;
+	Archer.MoveSpeed = 0.f;
+	CombatTests::AddUnit(Config, Archer, 0, FIntPoint(1, 2));
+	CombatTests::AddUnit(Config, CombatTests::MakeStats(100.f, 1.f, 20, 0), 1, FIntPoint(12, 2));
+	{
+		FCombatSimulation Simulation(Config);
+		Simulation.Step();
+		TestEqual(TEXT("The first shot hits at once"), CombatTests::CountEvents(Simulation, ECombatEventType::Hit, 0), 1);
+		const FVector2D HitAt = Simulation.GetUnits()[1].Position;
+		bool bStood = true;
+		for (int32 Step = 0; Step < 6; ++Step)
+		{
+			Simulation.Step();
+			bStood &= Simulation.GetUnits()[1].Position.Equals(HitAt, 0.01);
+		}
+		TestTrue(TEXT("Staggered for 6 steps"), bStood);
+		Simulation.Step();
+		TestFalse(TEXT("Then it walks again"), Simulation.GetUnits()[1].Position.Equals(HitAt, 0.01));
+	}
+
+	// Anchored: a unit winding up is not pushed; an idle ally that overlaps it takes the whole push.
+	FCombatSimConfig Push;
+	Push.Grid.Init(10, 5, 100.f);
+	Push.MaxFirstAttackDelayTicks = 0;
+	Push.SeparationStrength = 0.5f;
+	FCombatUnitStats Swinger = CombatTests::MakeStats(100.f, 1.f, 200, 40);
+	Swinger.Attacks[0].Range = 100.f;
+	Swinger.MoveSpeed = 0.f;
+	CombatTests::AddUnit(Push, Swinger, 0, FIntPoint(5, 2));
+	CombatTests::AddUnit(Push, CombatTests::MakeDummyStats(), 0, FIntPoint(5, 2));
+	Push.Units[1].StartOffset = FVector2D(-60.0, 0.0);
+	CombatTests::AddUnit(Push, CombatTests::MakeDummyStats(), 1, FIntPoint(6, 2));
+	{
+		FCombatSimulation Simulation(Push);
+		Simulation.Step();
+		TestTrue(TEXT("The swinger winds up"), Simulation.GetUnits()[0].WindupTicks > 0);
+		const FVector2D SwingerAt = Simulation.GetUnits()[0].Position;
+		const FVector2D AllyAt = Simulation.GetUnits()[1].Position;
+		const double Overlap = 80.0 - FVector2D::Distance(SwingerAt, AllyAt);
+		Simulation.Step();
+		TestTrue(TEXT("The anchored unit stays"), Simulation.GetUnits()[0].Position.Equals(SwingerAt, 0.01));
+		TestEqual(TEXT("The ally takes the whole push"), Simulation.GetUnits()[1].Position.X, AllyAt.X - Overlap * 0.5, 0.01);
+	}
+
+	Config.Seed = 4;
+	TestTrue(TEXT("Deterministic with locks"), CombatTests::RunAndCollectChecksums(Config) == CombatTests::RunAndCollectChecksums(Config));
+	return true;
+}
+
 IMPLEMENT_SIMPLE_AUTOMATION_TEST(FCombatCameraMathTest, "BattleSystem.Combat.CameraMath",
 	EAutomationTestFlags::EditorContext | EAutomationTestFlags::ProductFilter)
 

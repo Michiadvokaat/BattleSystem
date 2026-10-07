@@ -21,6 +21,8 @@ struct FCombatAttackStats
 	int32 CooldownTicks = 20;
 	/** Ticks from the start of the attack until it hits or fires. 0 = same tick. */
 	int32 WindupTicks = 0;
+	/** Ticks the unit stands still after the attack hit or fired (the rest of its animation). */
+	int32 RecoveryTicks = 0;
 	/** Melee: needs a clear walking line to the target. Units with only such attacks are melee units. */
 	bool bNeedsWalkableLine = true;
 	/** Needs line of sight (no sight-blocking cells) to the target. */
@@ -167,6 +169,8 @@ struct FCombatSimConfig
 	float ThreatDecayAmountPerTick = 0.f;
 	/** Threat below this does not count for targeting. */
 	float ThreatThreshold = 5.f;
+	/** Ticks a unit stands still after it takes damage (its hit reaction); 0 = none. */
+	int32 HitStaggerTicks = 0;
 	/** A unit on a threat target only switches to an enemy with this many times more threat. */
 	float ThreatSwitchRatio = 1.2f;
 	/** A unit on a nearest target only switches to an enemy that is this many cm closer (as the crow flies). */
@@ -225,6 +229,13 @@ struct FCombatUnit
 	int32 WindupTicks = 0;
 	int32 WindupTargetId = INDEX_NONE;
 	int32 WindupAttackIndex = INDEX_NONE;
+	/** Ticks the unit still stands still after an attack (recovery) or a hit (stagger); it may still start attacks. */
+	int32 LockTicks = 0;
+	/**
+	 * Standing still at the start of this step (winding up or locked): it does not walk and is not pushed by others,
+	 * who take the whole push instead. Set at the start of every step, so the processing order cannot matter.
+	 */
+	bool bAnchored = false;
 
 	/** Threat per enemy that damaged this unit; at most MaxThreatEntries. */
 	TArray<FCombatThreatEntry, TInlineAllocator<8>> Threat;
@@ -469,6 +480,8 @@ private:
 	/** Starts an attack (event, cooldown, windup or fire); TargetId is INDEX_NONE for area attacks. */
 	void StartAttack(FCombatUnit& Unit, int32 TargetId, int32 AttackIndex);
 	/** End of the windup: queue the hit, or spawn the projectile. */
+	/** After an attack hit or fired: the unit stands still for its RecoveryTicks. */
+	void StartRecovery(FCombatUnit& Unit, int32 AttackIndex);
 	void FireAttack(const FCombatUnit& Unit, int32 AttackIndex, int32 TargetId);
 	void UpdateProjectiles();
 	void EndProjectile(FCombatProjectile& Projectile);

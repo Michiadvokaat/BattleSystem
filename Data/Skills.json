@@ -7,6 +7,7 @@
 		"Range": 50,
 		"Cooldown": 1,
 		"Windup": 0.2,
+		"Recovery": 0.3,
 		"Damage": 10,
 		"ThreatMultiplier": 1,
 		"Effects": [],
@@ -36,6 +37,7 @@
 		"Range": 600,
 		"Cooldown": 6,
 		"Windup": 0.2,
+		"Recovery": 0.2,
 		"Damage": 0,
 		"ThreatMultiplier": 1,
 		"Effects": [
@@ -96,6 +98,7 @@
 		"Range": 400,
 		"Cooldown": 0,
 		"Windup": 0,
+		"Recovery": 0,
 		"Damage": 0,
 		"ThreatMultiplier": 1,
 		"Effects": [
@@ -156,6 +159,7 @@
 		"Range": 400,
 		"Cooldown": 3,
 		"Windup": 0.5,
+		"Recovery": 0.3,
 		"Damage": 14,
 		"ThreatMultiplier": 1,
 		"Effects": [],
@@ -185,6 +189,7 @@
 		"Range": 70,
 		"Cooldown": 1.5,
 		"Windup": 0.4,
+		"Recovery": 0.4,
 		"Damage": 20,
 		"ThreatMultiplier": 1,
 		"Effects": [],
@@ -214,6 +219,7 @@
 		"Range": 500,
 		"Cooldown": 3,
 		"Windup": 0.4,
+		"Recovery": 0.4,
 		"Damage": 25,
 		"ThreatMultiplier": 1,
 		"Effects": [
@@ -266,6 +272,7 @@
 		"Range": 150,
 		"Cooldown": 4,
 		"Windup": 0.2,
+		"Recovery": 0.2,
 		"Damage": 0,
 		"ThreatMultiplier": 1,
 		"Effects": [

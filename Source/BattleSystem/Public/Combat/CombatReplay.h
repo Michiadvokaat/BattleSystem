@@ -30,6 +30,8 @@ struct BATTLESYSTEM_API FCombatSimSettings
 	UPROPERTY() float ThreatDecayFactorPerTick = 1.f;
 	UPROPERTY() float ThreatDecayAmountPerTick = 0.f;
 	UPROPERTY() float ThreatThreshold = 5.f;
+	/** Ticks a unit stands still after a hit; 0 in replays saved before it existed. */
+	UPROPERTY() int32 HitStaggerTicks = 0;
 	UPROPERTY() float ThreatSwitchRatio = 1.2f;
 	UPROPERTY() float RetargetDistanceMargin = 150.f;
 	/** cm for every Attack.Taunt; 0 = the skill's Range. */
@@ -52,10 +54,10 @@ struct BATTLESYSTEM_API FCombatReplay
 
 	/**
 	 * 1 = no commands; 2 = with the command log and checkpoints; 3 = can hold a level; 4 = always a level (no setup assets);
-	 * 5 = holds the unit and skill rows (no unit definition assets); 6 = skill types and look slots as enums instead of tags.
-	 * Older ones do not play.
+	 * 5 = holds the unit and skill rows (no unit definition assets); 6 = skill types and look slots as enums instead of tags;
+	 * 7 = recovery per skill and the hit stagger. Older ones do not play.
 	 */
-	UPROPERTY() int32 FormatVersion = 6;
+	UPROPERTY() int32 FormatVersion = 7;
 	UPROPERTY() FString SavedAt;
 	/** Engine build; a replay is only guaranteed identical on the same build. */
 	UPROPERTY() FString BuildVersion;

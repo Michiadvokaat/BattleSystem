@@ -64,6 +64,13 @@ public:
 	UPROPERTY(Config, EditAnywhere, Category = "Simulation", meta = (ClampMin = 0, Units = "s"))
 	float MaxFirstAttackDelay = 0.5f;
 
+	/**
+	 * Seconds a unit stands still after it takes damage (its hit reaction), rounded to ticks; 0 = none. A new hit restarts
+	 * it. While standing still (also during windup and a skill's Recovery) it is not pushed by other units.
+	 */
+	UPROPERTY(Config, EditAnywhere, Category = "Simulation", meta = (ClampMin = 0, Units = "s"))
+	float HitStagger = 0.2f;
+
 	/** Pause before the first wave of a level, and between a cleared wave and the next (rounded to ticks). */
 	UPROPERTY(Config, EditAnywhere, Category = "Waves", meta = (ClampMin = 0.05, Units = "s"))
 	float WavePauseSeconds = 5.f;

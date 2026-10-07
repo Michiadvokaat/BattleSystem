@@ -28,6 +28,7 @@ namespace
 		Attack.Damage = Skill.Damage * Unit.SkillDamageMultiplier;
 		Attack.CooldownTicks = FMath::Max(FMath::RoundToInt32(Skill.Cooldown * Unit.SkillCooldownMultiplier * TickRate), 1);
 		Attack.WindupTicks = FMath::Max(FMath::RoundToInt32(Skill.Windup * Unit.SkillCooldownMultiplier * TickRate), 0);
+		Attack.RecoveryTicks = FMath::Max(FMath::RoundToInt32(Skill.Recovery * Unit.SkillCooldownMultiplier * TickRate), 0);
 		Attack.bNeedsWalkableLine = bMelee || (bAoE && !Skill.bRequiresLineOfSight);
 		Attack.bNeedsLineOfSight = (bRanged || bAoE) && Skill.bRequiresLineOfSight;
 		Attack.ProjectileSpeed = bRanged ? Skill.ProjectileSpeed : 0.f;
