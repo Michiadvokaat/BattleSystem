@@ -1463,7 +1463,7 @@ namespace CombatTests
 	{
 		FCombatUnitCatalog Catalog;
 		FCombatSkillRow& Punch = Catalog.Skills.Add(TEXT("Punch"));
-		Punch.Type = CombatTags::Attack_Melee;
+		Punch.Type = ECombatSkillType::Melee;
 		FCombatUnitRow& Fighter = Catalog.Units.Add(TEXT("Fighter"));
 		Fighter.Skills.Add(TEXT("Punch"));
 		return Catalog;
@@ -2009,18 +2009,18 @@ bool FCombatUnitSkillsTest::RunTest(const FString& Parameters)
 	// Two units share one skill table: a melee hit, a ranged shot with an effect, and a player taunt.
 	FCombatUnitCatalog Catalog;
 	FCombatSkillRow& Hit = Catalog.Skills.Add(TEXT("Hit"));
-	Hit.Type = CombatTags::Attack_Melee;
+	Hit.Type = ECombatSkillType::Melee;
 	Hit.Range = 60.f;
 	Hit.Damage = 10.f;
 	Hit.Cooldown = 1.f;
 	Hit.Windup = 0.5f;
 	FCombatSkillRow& Shot = Catalog.Skills.Add(TEXT("Shot"));
-	Shot.Type = CombatTags::Attack_Ranged;
+	Shot.Type = ECombatSkillType::Ranged;
 	Shot.Range = 500.f;
 	Shot.Damage = 8.f;
 	Shot.Effects.AddDefaulted_GetRef().Duration = 2.f;
 	FCombatSkillRow& Taunt = Catalog.Skills.Add(TEXT("Taunt"));
-	Taunt.Type = CombatTags::Attack_Taunt;
+	Taunt.Type = ECombatSkillType::Taunt;
 	Taunt.bPlayerActivated = true;
 	Taunt.Range = 400.f;
 
@@ -2046,8 +2046,8 @@ bool FCombatUnitSkillsTest::RunTest(const FString& Parameters)
 	{
 		return false;
 	}
-	TestTrue(TEXT("Each list keeps the order of the unit's skills"), PlainStats.Attacks[0].Type == CombatTags::Attack_Melee
-		&& PlainStats.Attacks[1].Type == CombatTags::Attack_Ranged && PlainStats.Attacks[1].SourceIndex == 1 && PlainStats.PlayerAbilities[0].SourceIndex == 0);
+	TestTrue(TEXT("Each list keeps the order of the unit's skills"), PlainStats.Attacks[0].Type == ECombatSkillType::Melee
+		&& PlainStats.Attacks[1].Type == ECombatSkillType::Ranged && PlainStats.Attacks[1].SourceIndex == 1 && PlainStats.PlayerAbilities[0].SourceIndex == 0);
 	TestTrue(TEXT("Multipliers of 1 keep the skill's values"), PlainStats.Attacks[0].Range == 60.f && PlainStats.Attacks[0].Damage == 10.f
 		&& PlainStats.Attacks[0].CooldownTicks == 20 && PlainStats.Attacks[0].WindupTicks == 10 && PlainStats.Attacks[1].Effects[0].DurationTicks == 40);
 	TestTrue(TEXT("The taunt's area is its range"), PlainStats.PlayerAbilities[0].AreaShape == ECombatAreaShape::CircleAroundSelf
@@ -2056,6 +2056,7 @@ bool FCombatUnitSkillsTest::RunTest(const FString& Parameters)
 	TestTrue(TEXT("Cooldown and windup multiplied"), StrongStats.Attacks[0].CooldownTicks == 10 && StrongStats.Attacks[0].WindupTicks == 5);
 	TestEqual(TEXT("Effect duration multiplied"), StrongStats.Attacks[1].Effects[0].DurationTicks, 120);
 	TestTrue(TEXT("The shared skill row is unchanged"), Catalog.Skills.FindChecked(TEXT("Hit")).Damage == 10.f);
+	TestEqual(TEXT("A skill without DisplayName is named after its type"), Taunt.GetDisplayName(), FString(TEXT("Taunt")));
 
 	// A unit that names a missing skill does not resolve.
 	Catalog.Units.Add(TEXT("Broken")).Skills = { TEXT("Hit"), TEXT("Missing") };
@@ -2071,7 +2072,9 @@ bool FCombatUnitSkillsTest::RunTest(const FString& Parameters)
 	FString Json;
 	TestTrue(TEXT("Writes JSON"), CombatReplay::ToJson(Replay, Json));
 	FCombatReplay Loaded;
+	TestTrue(TEXT("Skill types are written by name"), Json.Contains(TEXT("\"Melee\"")));
 	TestTrue(TEXT("Reads JSON"), CombatReplay::FromJson(Json, Loaded));
+	TestTrue(TEXT("The skill type survives"), Loaded.Units.Skills.Num() == 1 && Loaded.Units.Skills.FindChecked(TEXT("Punch")).Type == ECombatSkillType::Melee);
 	auto RunWith = [](const FCombatUnitCatalog& Units, const FCombatLevel& Level)
 	{
 		FCombatSimConfig Config;
@@ -2183,12 +2186,12 @@ bool FCombatAnimSetTest::RunTest(const FString& Parameters)
 	UCombatAnimSet* Set = NewObject<UCombatAnimSet>(GetTransientPackage());
 	Set->Actions.Add({ CombatTags::Anim, Generic });
 	Set->Actions.Add({ CombatTags::Anim_Throw, Throw });
-	Set->Actions.Add({ CombatTags::Attack_Melee, nullptr });
+	Set->Actions.Add({ CombatTags::Cue_Fire, nullptr });
 
 	TestTrue(TEXT("An exact entry wins over its parent"), Set->FindMontage(CombatTags::Anim_Throw) == Throw);
 	TestTrue(TEXT("A tag without an entry uses its nearest parent"), Set->FindMontage(CombatTags::Anim_Push) == Generic);
-	TestTrue(TEXT("An entry without a montage counts as none"), Set->FindMontage(CombatTags::Attack_Melee) == nullptr);
-	TestTrue(TEXT("No entry, no montage"), Set->FindMontage(CombatTags::Attack_Ranged) == nullptr);
+	TestTrue(TEXT("An entry without a montage counts as none"), Set->FindMontage(CombatTags::Cue_Fire) == nullptr);
+	TestTrue(TEXT("No entry, no montage"), Set->FindMontage(CombatTags::Cue_Cleave) == nullptr);
 	TestTrue(TEXT("An empty tag has no montage"), Set->FindMontage(FGameplayTag()) == nullptr);
 
 	Set->MinPlayRate = 0.25f;

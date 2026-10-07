@@ -66,21 +66,21 @@ struct FCombatSkillRow : public FTableRowBase
 {
 	GENERATED_BODY()
 
-	/** Name in the UI (the unit list's ability buttons). Empty = the last part of Type, for example "Taunt". */
+	/** Name in the UI (the unit list's ability buttons). Empty = the Type, for example "Taunt". */
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Skill")
 	FString DisplayName;
 
 	/**
-	 * Attack.Melee and Attack.Ranged are aimed at the target: the unit picks the shortest-range one that can reach it.
-	 * Attack.AoE hits an area (AreaShape); with bRequiresLineOfSight it acts as ranged (needs sight), otherwise as melee.
-	 * Attack.Taunt is an area around the unit (Range = radius, from its center to the enemy's edge) that applies its effects to every enemy in it.
+	 * Melee and Ranged are aimed at the target: the unit picks the shortest-range one that can reach it.
+	 * AoE hits an area (AreaShape); with bRequiresLineOfSight it acts as ranged (needs sight), otherwise as melee.
+	 * Taunt is an area around the unit (Range = radius, from its center to the enemy's edge) that applies its effects to every enemy in it.
 	 */
-	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Skill", meta = (Categories = "Attack"))
-	FGameplayTag Type;
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Skill")
+	ECombatSkillType Type = ECombatSkillType::None;
 
 	/**
 	 * Off: the AI uses it in the fight. On: only the player triggers it (Ability commands); it goes off right away,
-	 * without cooldown or windup. For now an Attack.Taunt, or an Attack.AoE with CircleAroundSelf.
+	 * without cooldown or windup. For now a Taunt, or an AoE with CircleAroundSelf.
 	 */
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Skill")
 	bool bPlayerActivated = false;
@@ -120,19 +120,19 @@ struct FCombatSkillRow : public FTableRowBase
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Skill|Ranged")
 	bool bRequiresLineOfSight = true;
 
-	/** Attack.AoE: the shape. Range is how far the target may be to start the skill (not used by CircleAroundSelf). */
+	/** AoE: the shape. Range is how far the target may be to start the skill (not used by CircleAroundSelf). */
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Skill|Area")
 	ECombatAreaShape AreaShape = ECombatAreaShape::CircleAtTarget;
 
-	/** Attack.AoE: size of the area in cm (circle radius, or cone length). */
+	/** AoE: size of the area in cm (circle radius, or cone length). */
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Skill|Area", meta = (ClampMin = 0, Units = "cm"))
 	float AreaRadius = 150.f;
 
-	/** Attack.AoE with Cone: full angle of the fan. */
+	/** AoE with Cone: full angle of the fan. */
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Skill|Area", meta = (ClampMin = 1, ClampMax = 360, Units = "deg"))
 	float ConeAngle = 90.f;
 
-	/** Attack.AoE: seconds between firing and going off; the area stays where it was placed (0 = right away). */
+	/** AoE: seconds between firing and going off; the area stays where it was placed (0 = right away). */
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Skill|Area", meta = (ClampMin = 0, Units = "s"))
 	float TelegraphDelay = 0.f;
 
@@ -144,7 +144,7 @@ struct FCombatSkillRow : public FTableRowBase
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Skill|Area")
 	bool bAffectsAllies = false;
 
-	/** Presentation: the montage tag in the look's UCombatAnimSet (Anim.Throw). Empty = the skill type (Attack.Melee). */
+	/** Presentation: the montage tag in the look's UCombatAnimSet (Anim.Throw). Empty = no montage (the body lunges). */
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Presentation", meta = (Categories = "Anim"))
 	FGameplayTag AnimationTag;
 
@@ -155,7 +155,7 @@ struct FCombatSkillRow : public FTableRowBase
 	/** ProjectileActorClass, loaded; ACombatProjectileActor when empty or missing. */
 	BATTLESYSTEM_API UClass* LoadProjectileActorClass() const;
 
-	/** DisplayName, or the last part of Type ("Taunt"). */
+	/** DisplayName, or the name of Type ("Taunt"). */
 	BATTLESYSTEM_API FString GetDisplayName() const;
 };
 
@@ -165,9 +165,9 @@ struct FCombatLookSlot
 {
 	GENERATED_BODY()
 
-	/** What this part is. Overrides and SetSlotMesh find the slot by this tag. */
-	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Slot", meta = (Categories = "Slot"))
-	FGameplayTag SlotTag;
+	/** What this part is. Overrides and SetSlotMesh find the slot by it. */
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Slot")
+	ECombatLookSlot Slot = ECombatLookSlot::Body;
 
 	/** Meshes to choose from when the unit spawns. One mesh = always that one. */
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Slot")
@@ -214,8 +214,8 @@ struct FCombatLookOverride
 	FGameplayTag WhileTag;
 
 	/** A slot with bSwappable on. A slot the look does not have gets its own component. */
-	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Override", meta = (Categories = "Slot"))
-	FGameplayTag SlotTag;
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Override")
+	ECombatLookSlot Slot = ECombatLookSlot::Hat;
 
 	/** Mesh shown while the tag is active. Empty = hide the slot. */
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Override")

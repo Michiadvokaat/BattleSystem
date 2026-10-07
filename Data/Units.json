@@ -60,10 +60,7 @@
 		{
 			"Slots": [
 				{
-					"SlotTag":
-					{
-						"TagName": "Slot.Body"
-					},
+					"Slot": "Body",
 					"Options": [
 						"/Game/Characters/Heroes/Meshes/SKM_Hero.SKM_Hero"
 					],
@@ -71,10 +68,7 @@
 					"bSwappable": false
 				},
 				{
-					"SlotTag":
-					{
-						"TagName": "Slot.Face"
-					},
+					"Slot": "Face",
 					"Options": [
 						"/Game/Characters/Heroes/Ranger/SKM_Ranger_Face.SKM_Ranger_Face"
 					],
@@ -82,10 +76,7 @@
 					"bSwappable": false
 				},
 				{
-					"SlotTag":
-					{
-						"TagName": "Slot.Hair"
-					},
+					"Slot": "Hair",
 					"Options": [
 						"/Game/Characters/Heroes/Ranger/SKM_Ranger_Hair.SKM_Ranger_Hair"
 					],
@@ -93,10 +84,7 @@
 					"bSwappable": false
 				},
 				{
-					"SlotTag":
-					{
-						"TagName": "Slot.Shirt"
-					},
+					"Slot": "Shirt",
 					"Options": [
 						"/Game/Characters/Heroes/Ranger/SKM_Ranger_Shirt.SKM_Ranger_Shirt"
 					],
@@ -104,10 +92,7 @@
 					"bSwappable": false
 				},
 				{
-					"SlotTag":
-					{
-						"TagName": "Slot.Pants"
-					},
+					"Slot": "Pants",
 					"Options": [
 						"/Game/Characters/Heroes/Ranger/SKM_Ranger_Pants.SKM_Ranger_Pants"
 					],
@@ -115,10 +100,7 @@
 					"bSwappable": false
 				},
 				{
-					"SlotTag":
-					{
-						"TagName": "Slot.Shoes"
-					},
+					"Slot": "Shoes",
 					"Options": [
 						"/Game/Characters/Heroes/Ranger/SKM_Ranger_Shoes.SKM_Ranger_Shoes"
 					],
@@ -126,10 +108,7 @@
 					"bSwappable": false
 				},
 				{
-					"SlotTag":
-					{
-						"TagName": "Slot.Hat"
-					},
+					"Slot": "Hat",
 					"Options": [
 						"/Game/Characters/Heroes/Ranger/SKM_Ranger_Hat.SKM_Ranger_Hat"
 					],
@@ -175,10 +154,7 @@
 		{
 			"Slots": [
 				{
-					"SlotTag":
-					{
-						"TagName": "Slot.Body"
-					},
+					"Slot": "Body",
 					"Options": [
 						"/Game/Characters/Heroes/Meshes/Child/Male/SKM_Child_Male_Body_01.SKM_Child_Male_Body_01",
 						"/Game/Characters/Heroes/Meshes/Child/Male/SKM_Child_Male_Body_02.SKM_Child_Male_Body_02",
@@ -189,10 +165,7 @@
 					"bSwappable": false
 				},
 				{
-					"SlotTag":
-					{
-						"TagName": "Slot.Face"
-					},
+					"Slot": "Face",
 					"Options": [
 						"/Game/Characters/Heroes/Meshes/Child/Male/SKM_Child_Male_Face_Usual.SKM_Child_Male_Face_Usual",
 						"/Game/Characters/Heroes/Meshes/Child/Male/SKM_Child_Male_Face_Neutral.SKM_Child_Male_Face_Neutral",
@@ -204,10 +177,7 @@
 					"bSwappable": false
 				},
 				{
-					"SlotTag":
-					{
-						"TagName": "Slot.Hair"
-					},
+					"Slot": "Hair",
 					"Options": [
 						"/Game/Characters/Heroes/Meshes/Child/Male/SKM_Child_Male_Hairstyle_01.SKM_Child_Male_Hairstyle_01",
 						"/Game/Characters/Heroes/Meshes/Child/Male/SKM_Child_Male_Hairstyle_02.SKM_Child_Male_Hairstyle_02",
@@ -223,10 +193,7 @@
 					"bSwappable": false
 				},
 				{
-					"SlotTag":
-					{
-						"TagName": "Slot.Shirt"
-					},
+					"Slot": "Shirt",
 					"Options": [
 						"/Game/Characters/Heroes/Meshes/Child/Male/SKM_Child_Male_Shirt_01.SKM_Child_Male_Shirt_01",
 						"/Game/Characters/Heroes/Meshes/Child/Male/SKM_Child_Male_Shirt_02.SKM_Child_Male_Shirt_02",
@@ -238,10 +205,7 @@
 					"bSwappable": false
 				},
 				{
-					"SlotTag":
-					{
-						"TagName": "Slot.Outwear"
-					},
+					"Slot": "Outwear",
 					"Options": [
 						"/Game/Characters/Heroes/Meshes/Child/Male/SKM_Child_Male_Outwear_01.SKM_Child_Male_Outwear_01",
 						"/Game/Characters/Heroes/Meshes/Child/Male/SKM_Child_Male_Outwear_02.SKM_Child_Male_Outwear_02",
@@ -253,10 +217,7 @@
 					"bSwappable": false
 				},
 				{
-					"SlotTag":
-					{
-						"TagName": "Slot.Pants"
-					},
+					"Slot": "Pants",
 					"Options": [
 						"/Game/Characters/Heroes/Meshes/Child/Male/SKM_Child_Male_Pants_01.SKM_Child_Male_Pants_01",
 						"/Game/Characters/Heroes/Meshes/Child/Male/SKM_Child_Male_Pants_02.SKM_Child_Male_Pants_02",
@@ -270,10 +231,7 @@
 					"bSwappable": false
 				},
 				{
-					"SlotTag":
-					{
-						"TagName": "Slot.Shoes"
-					},
+					"Slot": "Shoes",
 					"Options": [
 						"/Game/Characters/Heroes/Meshes/Child/Male/SKM_Child_Male_Shoes_01.SKM_Child_Male_Shoes_01",
 						"/Game/Characters/Heroes/Meshes/Child/Male/SKM_Child_Male_Shoes_02.SKM_Child_Male_Shoes_02",
@@ -288,10 +246,7 @@
 					"bSwappable": false
 				},
 				{
-					"SlotTag":
-					{
-						"TagName": "Slot.Hat"
-					},
+					"Slot": "Hat",
 					"Options": [
 						"/Game/Characters/Heroes/Meshes/Child/Male/SKM_Child_Male_Hat_01.SKM_Child_Male_Hat_01",
 						"/Game/Characters/Heroes/Meshes/Child/Male/SKM_Child_Male_Hat_02.SKM_Child_Male_Hat_02",
@@ -303,10 +258,7 @@
 					"bSwappable": true
 				},
 				{
-					"SlotTag":
-					{
-						"TagName": "Slot.Glasses"
-					},
+					"Slot": "Glasses",
 					"Options": [
 						"/Game/Characters/Heroes/Meshes/Child/Male/SKM_Child_Male_Glasses_01.SKM_Child_Male_Glasses_01",
 						"/Game/Characters/Heroes/Meshes/Child/Male/SKM_Child_Male_Glasses_02.SKM_Child_Male_Glasses_02"
@@ -315,10 +267,7 @@
 					"bSwappable": true
 				},
 				{
-					"SlotTag":
-					{
-						"TagName": "Slot.Backpack"
-					},
+					"Slot": "Backpack",
 					"Options": [
 						"/Game/Characters/Heroes/Meshes/Child/Male/SKM_Child_Male_Backpack_01.SKM_Child_Male_Backpack_01"
 					],
@@ -333,10 +282,7 @@
 					{
 						"TagName": "Status.Taunted"
 					},
-					"SlotTag":
-					{
-						"TagName": "Slot.Hat"
-					},
+					"Slot": "Hat",
 					"Mesh": "/Game/Characters/Heroes/Meshes/Child/Male/SKM_Child_Male_Bicyclist_Hat.SKM_Child_Male_Bicyclist_Hat"
 				}
 			],
@@ -412,10 +358,7 @@
 		{
 			"Slots": [
 				{
-					"SlotTag":
-					{
-						"TagName": "Slot.Body"
-					},
+					"Slot": "Body",
 					"Options": [
 						"/Game/Characters/Heroes/Meshes/Child/Male/SKM_Child_Male_Body_02.SKM_Child_Male_Body_02"
 					],
@@ -423,10 +366,7 @@
 					"bSwappable": false
 				},
 				{
-					"SlotTag":
-					{
-						"TagName": "Slot.Shirt"
-					},
+					"Slot": "Shirt",
 					"Options": [
 						"/Game/Characters/Heroes/Meshes/Child/Male/SKM_Child_Male_Shirt_02.SKM_Child_Male_Shirt_02"
 					],
@@ -434,10 +374,7 @@
 					"bSwappable": false
 				},
 				{
-					"SlotTag":
-					{
-						"TagName": "Slot.Pants"
-					},
+					"Slot": "Pants",
 					"Options": [
 						"/Game/Characters/Heroes/Meshes/Child/Male/SKM_Child_Male_Shorts_02.SKM_Child_Male_Shorts_02"
 					],
@@ -445,10 +382,7 @@
 					"bSwappable": false
 				},
 				{
-					"SlotTag":
-					{
-						"TagName": "Slot.Shoes"
-					},
+					"Slot": "Shoes",
 					"Options": [
 						"/Game/Characters/Heroes/Meshes/Child/Male/SKM_Child_Male_Shoes_06.SKM_Child_Male_Shoes_06"
 					],
@@ -534,10 +468,7 @@
 		{
 			"Slots": [
 				{
-					"SlotTag":
-					{
-						"TagName": "Slot.Body"
-					},
+					"Slot": "Body",
 					"Options": [
 						"/Game/Characters/Heroes/Meshes/Child/Female/SKM_Child_Female_Body_04.SKM_Child_Female_Body_04"
 					],
@@ -545,10 +476,7 @@
 					"bSwappable": false
 				},
 				{
-					"SlotTag":
-					{
-						"TagName": "Slot.Face"
-					},
+					"Slot": "Face",
 					"Options": [
 						"/Game/Characters/Heroes/Barbarian/SKM_Tank_Face.SKM_Tank_Face"
 					],
@@ -556,10 +484,7 @@
 					"bSwappable": false
 				},
 				{
-					"SlotTag":
-					{
-						"TagName": "Slot.Hair"
-					},
+					"Slot": "Hair",
 					"Options": [
 						"/Game/Characters/Heroes/Barbarian/SKM_Tank_Hair.SKM_Tank_Hair"
 					],
@@ -567,10 +492,7 @@
 					"bSwappable": false
 				},
 				{
-					"SlotTag":
-					{
-						"TagName": "Slot.Outwear"
-					},
+					"Slot": "Outwear",
 					"Options": [
 						"/Game/Characters/Heroes/Barbarian/SKM_Tank_Jacket.SKM_Tank_Jacket"
 					],
@@ -578,10 +500,7 @@
 					"bSwappable": false
 				},
 				{
-					"SlotTag":
-					{
-						"TagName": "Slot.Pants"
-					},
+					"Slot": "Pants",
 					"Options": [
 						"/Game/Characters/Heroes/Barbarian/SKM_Tank_Pants.SKM_Tank_Pants"
 					],
@@ -589,10 +508,7 @@
 					"bSwappable": false
 				},
 				{
-					"SlotTag":
-					{
-						"TagName": "Slot.Shoes"
-					},
+					"Slot": "Shoes",
 					"Options": [
 						"/Game/Characters/Heroes/Barbarian/SKM_Tank_Shoes.SKM_Tank_Shoes"
 					],
@@ -600,10 +516,7 @@
 					"bSwappable": false
 				},
 				{
-					"SlotTag":
-					{
-						"TagName": "Slot.Hat"
-					},
+					"Slot": "Hat",
 					"Options": [
 						"/Game/Characters/Heroes/Barbarian/SKM_Tank_Hat.SKM_Tank_Hat"
 					],
@@ -611,10 +524,7 @@
 					"bSwappable": true
 				},
 				{
-					"SlotTag":
-					{
-						"TagName": "Slot.Glasses"
-					},
+					"Slot": "Glasses",
 					"Options": [
 						"/Game/Characters/Heroes/Barbarian/SKM_Tank_Glasses.SKM_Tank_Glasses"
 					],

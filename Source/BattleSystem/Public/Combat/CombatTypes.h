@@ -5,6 +5,46 @@
 #include "CoreMinimal.h"
 #include "CombatTypes.generated.h"
 
+/** What kind of skill an attack is; the simulation picks its behavior by this. */
+UENUM(BlueprintType)
+enum class ECombatSkillType : uint8
+{
+	/** Not set: the simulation does not use the skill. */
+	None,
+	/** Hits after a windup when the target is within range; needs a clear walking line. */
+	Melee,
+	/** Fires a homing projectile (or hits directly with ProjectileSpeed 0); needs sight if required. */
+	Ranged,
+	/** Hits an area (FCombatSkillRow::AreaShape): a circle at the target, around the attacker, or a cone. */
+	AoE,
+	/** An area around the unit (Range = radius) that applies its effects (a taunt) to enemies in it. */
+	Taunt,
+};
+
+/** A body part of a unit look. Presentation only. Python: CombatLookSlotType (FCombatLookSlot is CombatLookSlot). */
+UENUM(BlueprintType, meta = (ScriptName = "CombatLookSlotType"))
+enum class ECombatLookSlot : uint8
+{
+	/** The body (skin, head). */
+	Body,
+	/** Face (expression). */
+	Face,
+	Hair,
+	/** Hat or helmet. */
+	Hat,
+	Glasses,
+	/** Shirt or top. */
+	Shirt,
+	/** Jacket or coat. */
+	Outwear,
+	/** Pants, shorts or skirt. */
+	Pants,
+	Shoes,
+	Gloves,
+	/** Backpack or bag. */
+	Backpack,
+};
+
 /** Shape of an area attack. */
 UENUM(BlueprintType)
 enum class ECombatAreaShape : uint8

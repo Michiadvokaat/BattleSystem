@@ -216,22 +216,22 @@ void ACombatUnitActor::InitLook(const FCombatLook& InLook, int32 Seed)
 	{
 		if (Look.Slots[Index].bSwappable)
 		{
-			AddSwappableSlot(Look.Slots[Index].SlotTag, Picks[Index]);
+			AddSwappableSlot(Look.Slots[Index].Slot, Picks[Index]);
 		}
 	}
 	// An override of a slot the look does not have (a helmet while taunted) needs an empty slot to show in.
 	for (const FCombatLookOverride& Override : Look.Overrides)
 	{
-		if (!SwappableSlotTags.Contains(Override.SlotTag))
+		if (!SwappableSlots.Contains(Override.Slot))
 		{
-			const bool bMergedSlot = Look.Slots.ContainsByPredicate([&Override](const FCombatLookSlot& Slot) { return Slot.SlotTag == Override.SlotTag; });
+			const bool bMergedSlot = Look.Slots.ContainsByPredicate([&Override](const FCombatLookSlot& Slot) { return Slot.Slot == Override.Slot; });
 			if (bMergedSlot)
 			{
 				UE_LOG(LogCombat, Warning, TEXT("Look of unit %d: override for %s is ignored, that slot is merged (turn on Swappable)."),
-					UnitId, *Override.SlotTag.ToString());
+					UnitId, *StaticEnum<ECombatLookSlot>()->GetNameStringByValue(static_cast<int64>(Override.Slot)));
 				continue;
 			}
-			AddSwappableSlot(Override.SlotTag, nullptr);
+			AddSwappableSlot(Override.Slot, nullptr);
 		}
 	}
 
@@ -268,27 +268,27 @@ void ACombatUnitActor::SetActiveTags(const FGameplayTagContainer& InTags)
 		return;
 	}
 	ActiveTags = InTags;
-	for (int32 Index = 0; Index < SwappableSlotTags.Num(); ++Index)
+	for (int32 Index = 0; Index < SwappableSlots.Num(); ++Index)
 	{
 		RefreshSwappableSlot(Index);
 	}
 }
 
-bool ACombatUnitActor::SetSlotMesh(FGameplayTag SlotTag, USkeletalMesh* Mesh)
+bool ACombatUnitActor::SetSlotMesh(ECombatLookSlot Slot, USkeletalMesh* Mesh)
 {
 	if (!Look.HasParts())
 	{
 		return false;
 	}
-	int32 Index = SwappableSlotTags.IndexOfByKey(SlotTag);
+	int32 Index = SwappableSlots.IndexOfByKey(Slot);
 	if (Index == INDEX_NONE)
 	{
-		const bool bMergedSlot = Look.Slots.ContainsByPredicate([SlotTag](const FCombatLookSlot& Slot) { return Slot.SlotTag == SlotTag; });
+		const bool bMergedSlot = Look.Slots.ContainsByPredicate([Slot](const FCombatLookSlot& LookSlot) { return LookSlot.Slot == Slot; });
 		if (bMergedSlot)
 		{
 			return false;
 		}
-		Index = AddSwappableSlot(SlotTag, Mesh);
+		Index = AddSwappableSlot(Slot, Mesh);
 	}
 	SwappableBaseMeshes[Index] = Mesh;
 	RefreshSwappableSlot(Index);
@@ -307,12 +307,12 @@ USkeletalMeshComponent* ACombatUnitActor::AddPartComponent(USkeletalMesh* Mesh)
 	return Part;
 }
 
-int32 ACombatUnitActor::AddSwappableSlot(FGameplayTag SlotTag, USkeletalMesh* BaseMesh)
+int32 ACombatUnitActor::AddSwappableSlot(ECombatLookSlot Slot, USkeletalMesh* BaseMesh)
 {
-	SwappableSlotTags.Add(SlotTag);
+	SwappableSlots.Add(Slot);
 	SwappableComponents.Add(AddPartComponent(BaseMesh));
 	SwappableBaseMeshes.Add(BaseMesh);
-	const int32 Index = SwappableSlotTags.Num() - 1;
+	const int32 Index = SwappableSlots.Num() - 1;
 	RefreshSwappableSlot(Index);
 	return Index;
 }
@@ -322,7 +322,7 @@ void ACombatUnitActor::RefreshSwappableSlot(int32 Index)
 	USkeletalMesh* Mesh = SwappableBaseMeshes[Index];
 	for (const FCombatLookOverride& Override : Look.Overrides)
 	{
-		if (Override.SlotTag == SwappableSlotTags[Index] && ActiveTags.HasTag(Override.WhileTag))
+		if (Override.Slot == SwappableSlots[Index] && ActiveTags.HasTag(Override.WhileTag))
 		{
 			Mesh = Override.Mesh.LoadSynchronous();
 			break;

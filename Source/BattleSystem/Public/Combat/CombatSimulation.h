@@ -13,7 +13,7 @@
 /** One attack as the simulation sees it. */
 struct FCombatAttackStats
 {
-	FGameplayTag Type;
+	ECombatSkillType Type = ECombatSkillType::None;
 	/** Distance in cm from the attacker's center to the target's edge at which the attack can start (GetReach). */
 	float Range = 150.f;
 	float Damage = 10.f;

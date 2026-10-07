@@ -87,7 +87,7 @@ void ACombatAnimPreview::Rebuild()
 
 		const bool bRanged = Type->Attacks.ContainsByPredicate([](const FCombatSkillRow& Skill)
 		{
-			return Skill.Type.MatchesTagExact(CombatTags::Attack_Ranged);
+			return Skill.Type == ECombatSkillType::Ranged;
 		});
 		Actor->InitUnit(Index, 0, Type->Unit.Radius, GetDefault<UCombatSettings>()->GetTeamColor(0), bRanged);
 		Actor->InitLook(Type->Unit.Look, Seed + Index);

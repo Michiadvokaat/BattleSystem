@@ -52,9 +52,10 @@ struct BATTLESYSTEM_API FCombatReplay
 
 	/**
 	 * 1 = no commands; 2 = with the command log and checkpoints; 3 = can hold a level; 4 = always a level (no setup assets);
-	 * 5 = holds the unit and skill rows (no unit definition assets). Older ones do not play.
+	 * 5 = holds the unit and skill rows (no unit definition assets); 6 = skill types and look slots as enums instead of tags.
+	 * Older ones do not play.
 	 */
-	UPROPERTY() int32 FormatVersion = 5;
+	UPROPERTY() int32 FormatVersion = 6;
 	UPROPERTY() FString SavedAt;
 	/** Engine build; a replay is only guaranteed identical on the same build. */
 	UPROPERTY() FString BuildVersion;

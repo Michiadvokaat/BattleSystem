@@ -62,7 +62,7 @@ void FCombatSimSettings::ApplyTo(FCombatSimConfig& Config) const
 		{
 			for (FCombatAttackStats& Attack : Stats.Attacks)
 			{
-				if (Attack.Type.MatchesTagExact(CombatTags::Attack_Taunt))
+				if (Attack.Type == ECombatSkillType::Taunt)
 				{
 					Attack.AreaRadius = TauntRangeOverride;
 				}
