@@ -97,6 +97,13 @@ struct FCombatSkillRow : public FTableRowBase
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Skill", meta = (ClampMin = 0, Units = "s"))
 	float Windup = 0.3f;
 
+	/**
+	 * Seconds the unit stands still after the hit (melee) or shot (the rest of its animation; tune the montage to it).
+	 * Rounded to simulation ticks; the unit's SkillCooldownMultiplier counts.
+	 */
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Skill", meta = (ClampMin = 0, Units = "s"))
+	float Recovery = 0.f;
+
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Skill", meta = (ClampMin = 0))
 	float Damage = 10.f;
 
@@ -317,7 +324,7 @@ struct FCombatUnitRow : public FTableRowBase
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Skills", meta = (ClampMin = 0))
 	float SkillRangeMultiplier = 1.f;
 
-	/** Multiplies the cooldown and windup of all its skills (below 1 = faster). */
+	/** Multiplies the cooldown, windup and recovery of all its skills (below 1 = faster). */
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Skills", meta = (ClampMin = 0))
 	float SkillCooldownMultiplier = 1.f;
 

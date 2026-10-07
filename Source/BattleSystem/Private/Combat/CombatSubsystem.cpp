@@ -219,7 +219,8 @@ bool UCombatSubsystem::PlayReplay(const FString& FileOrPath, FString& OutMessage
 	}
 
 	// Before version 4 replays could come from a setup asset instead of a level, before 5 they named unit definition
-	// assets, before 6 their rows had tags for skill types and look slots; those are gone.
+	// assets, before 6 their rows had tags for skill types and look slots, before 7 they had no recovery or stagger;
+	// those are gone.
 	if (Replay.FormatVersion < FCombatReplay().FormatVersion)
 	{
 		OutMessage = FString::Printf(TEXT("Replay %s is from an older format (version %d) and cannot be played."), *Path, Replay.FormatVersion);

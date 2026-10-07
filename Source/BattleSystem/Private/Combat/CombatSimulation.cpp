@@ -192,10 +192,11 @@ void FCombatSimulation::Step()
 	Events.Reset();
 	PendingHits.Reset();
 
-	// Decisions use the positions at the start of the step, so the processing order cannot matter.
+	// Decisions use the positions (and who stands still) at the start of the step, so the processing order cannot matter.
 	for (FCombatUnit& Unit : Units)
 	{
 		Unit.PreviousPosition = Unit.Position;
+		Unit.bAnchored = Unit.bAlive && (Unit.WindupTicks > 0 || Unit.LockTicks > 0);
 	}
 	for (FCombatProjectile& Projectile : Projectiles)
 	{
@@ -513,8 +514,23 @@ void FCombatSimulation::UpdateUnit(FCombatUnit& Unit)
 		}
 	}
 
-	const FVector2D Move = UpdateCombat(Unit);
-	const FVector2D Separation = ComputeSeparation(Unit);
+	// A locked unit (recovery or stagger) still picks targets and may start an attack, but does not walk. A move
+	// order waits until it is free, so it is not given up or finished on the spot.
+	const bool bLocked = Unit.LockTicks > 0;
+	if (bLocked)
+	{
+		--Unit.LockTicks;
+	}
+	FVector2D Move = FVector2D::ZeroVector;
+	if (!bLocked || !Unit.bHasMoveOrder)
+	{
+		Move = UpdateCombat(Unit);
+	}
+	if (bLocked)
+	{
+		Move = FVector2D::ZeroVector;
+	}
+	const FVector2D Separation = Unit.bAnchored ? FVector2D::ZeroVector : ComputeSeparation(Unit);
 	const float Clearance = FMath::Min(Unit.Stats.Radius, Config.WallClearance);
 	if (Clearance > 0.f)
 	{
@@ -549,6 +565,7 @@ FVector2D FCombatSimulation::UpdateCombat(FCombatUnit& Unit)
 			if (Unit.WindupTargetId == INDEX_NONE || Units[Unit.WindupTargetId].bAlive)
 			{
 				FireAttack(Unit, Unit.WindupAttackIndex, Unit.WindupTargetId);
+				StartRecovery(Unit, Unit.WindupAttackIndex);
 			}
 			Unit.WindupTargetId = INDEX_NONE;
 			Unit.WindupAttackIndex = INDEX_NONE;
@@ -802,6 +819,7 @@ void FCombatSimulation::ExecuteCommand(const FCombatCommand& Command)
 		// The order replaces any windup and earlier order.
 		Unit.bHasMoveOrder = true;
 		Unit.MoveTargetCell = Command.TargetCell;
+		// A running recovery or stagger stays: the order starts when it ends.
 		Unit.WindupTicks = 0;
 		Unit.WindupTargetId = INDEX_NONE;
 		Unit.WindupAttackIndex = INDEX_NONE;
@@ -825,6 +843,7 @@ void FCombatSimulation::ExecuteCommand(const FCombatCommand& Command)
 		FCombatEvent& Event = Events.Add_GetRef({ ECombatEventType::Attack, Unit.Id, INDEX_NONE, 0.f });
 		Event.AttackIndex = AttackIndex;
 		PlaceArea(Unit, AttackIndex, INDEX_NONE);
+		StartRecovery(Unit, AttackIndex);
 		return;
 	}
 
@@ -851,9 +870,11 @@ FVector2D FCombatSimulation::ComputeSeparation(const FCombatUnit& Unit) const
 			continue;
 		}
 
-		// Exactly on top of each other: the lower ID goes to -X, the higher to +X.
+		// Exactly on top of each other: the lower ID goes to -X, the higher to +X. An anchored unit is not pushed, so the
+		// other one takes the whole push.
 		const FVector2D Direction = Distance > UE_KINDA_SMALL_NUMBER ? Offset / Distance : FVector2D(Unit.Id < Other.Id ? -1.0 : 1.0, 0.0);
-		Push += Direction * (MinDistance - Distance) * 0.5 * Config.SeparationStrength;
+		const double Share = Other.bAnchored ? 1.0 : 0.5;
+		Push += Direction * (MinDistance - Distance) * Share * Config.SeparationStrength;
 	}
 	return Push;
 }
@@ -938,7 +959,14 @@ void FCombatSimulation::StartAttack(FCombatUnit& Unit, int32 TargetId, int32 Att
 	else
 	{
 		FireAttack(Unit, AttackIndex, TargetId);
+		StartRecovery(Unit, AttackIndex);
 	}
+}
+
+void FCombatSimulation::StartRecovery(FCombatUnit& Unit, int32 AttackIndex)
+{
+	// From the next step on; a longer lock that is still running (a stagger) is kept.
+	Unit.LockTicks = FMath::Max(Unit.LockTicks, Unit.Stats.GetAttack(AttackIndex).RecoveryTicks);
 }
 
 void FCombatSimulation::FireAttack(const FCombatUnit& Unit, int32 AttackIndex, int32 TargetId)
@@ -1115,6 +1143,8 @@ void FCombatSimulation::ApplyPendingHits()
 			const float Damage = Hit.Damage * Target.Effects.GetDamageTakenMultiplier();
 			Target.HP -= Damage;
 			Target.DamageTaken += Damage;
+			// Hit reaction: a new hit restarts the stagger to its full length, it does not add up.
+			Target.LockTicks = FMath::Max(Target.LockTicks, Config.HitStaggerTicks);
 			Units[Hit.SourceId].DamageDealt += Damage;
 			AddThreat(Target, Hit.SourceId, Damage * Hit.ThreatMultiplier);
 
@@ -1154,6 +1184,7 @@ void FCombatSimulation::ApplyPendingHits()
 			Unit.TargetReason = ECombatTargetReason::None;
 			Unit.WindupTicks = 0;
 			Unit.WindupTargetId = INDEX_NONE;
+			Unit.LockTicks = 0;
 			Unit.Threat.Reset();
 			Unit.Effects.Reset();
 			Unit.Path.Reset();
@@ -1253,6 +1284,7 @@ uint32 FCombatSimulation::ComputeChecksum() const
 		Crc = FCrc::MemCrc32(&Unit.WindupAttackIndex, sizeof(Unit.WindupAttackIndex), Crc);
 		Crc = FCrc::MemCrc32(&Unit.FirstAttackDelayTicks, sizeof(Unit.FirstAttackDelayTicks), Crc);
 		Crc = FCrc::MemCrc32(&Unit.WindupTicks, sizeof(Unit.WindupTicks), Crc);
+		Crc = FCrc::MemCrc32(&Unit.LockTicks, sizeof(Unit.LockTicks), Crc);
 		Crc = FCrc::MemCrc32(&bAlive, sizeof(bAlive), Crc);
 		Crc = FCrc::MemCrc32(&Unit.TargetReason, sizeof(Unit.TargetReason), Crc);
 		for (const FCombatThreatEntry& Entry : Unit.Threat)
