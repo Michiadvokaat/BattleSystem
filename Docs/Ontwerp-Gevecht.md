@@ -193,6 +193,7 @@ Elke fase levert iets op dat je kunt spelen en testen. Nieuwe C++-klassen vereis
 | Meerdere aanvallen | Kortste bereik dat het doel nu kan raken; elke aanval eigen cooldown | Alleen de eerste aanval |
 | Definitie van bereik | Van het centrum van de aanvaller tot de rand van het doelwit, ook voor gebieden rond de aanvaller (sinds 2026-10-06; daarvoor van rand tot rand) | Van rand tot rand; van centrum tot centrum |
 | Kiten | Nee, ranged stopt op bereik | Terugwijken bij melee dichtbij |
+| Skilltypes en look-slots | Sinds 2026-10-07 enums (`ECombatSkillType`, `ECombatLookSlot`): vaste sets waarop de code reageert. Statussen, effecten, cues en animaties blijven GameplayTags (open sets in data, met hiërarchie) | Alles als tags (tot 2026-10-07); alles als enums; open sets als `FName` |
 | Unit- en skilldefinities | Sinds 2026-10-07 twee DataTables (`DT_Units`, `DT_Skills`) met JSON in de repo als bron; units bezitten skills per rijnaam (gedeeld mogelijk), met multipliers per unit (schade, bereik, cooldown, effectduur); de look staat in de unitrij; replays bewaren de gebruikte rijen | Eén Data Asset per unit met eigen aanvallen en een apart look-asset (tot 2026-10-07); overrides per skill per unit |
 | Taunt | Gebied rond de tank, effect met duur | Eén doelwit |
 | Doelwitprioriteit | Taunt > threat > zichtbaar (ranged) > dichtstbij, met hysterese | Zichtbaar vóór threat |

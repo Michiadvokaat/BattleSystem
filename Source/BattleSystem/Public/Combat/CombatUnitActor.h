@@ -65,7 +65,7 @@ public:
 	 * slot cannot change. An active override of the slot stays visible until its tag ends. False if not possible.
 	 */
 	UFUNCTION(BlueprintCallable, Category = "Combat|Look")
-	bool SetSlotMesh(FGameplayTag SlotTag, USkeletalMesh* Mesh);
+	bool SetSlotMesh(ECombatLookSlot Slot, USkeletalMesh* Mesh);
 
 	/**
 	 * Called every frame: the velocity (world cm/s; the AnimBP gets it relative to the figure's facing) for locomotion,
@@ -200,7 +200,7 @@ private:
 
 	/** A part component on CharacterMesh that follows its pose (Leader Pose). */
 	USkeletalMeshComponent* AddPartComponent(USkeletalMesh* Mesh);
-	int32 AddSwappableSlot(FGameplayTag SlotTag, USkeletalMesh* BaseMesh);
+	int32 AddSwappableSlot(ECombatLookSlot Slot, USkeletalMesh* BaseMesh);
 	/** Shows the slot's mesh: the first override whose tag is active, else the base mesh. */
 	void RefreshSwappableSlot(int32 Index);
 
@@ -235,7 +235,7 @@ private:
 	bool bHasFacing = false;
 
 	/** Swappable slots, parallel arrays: tag, component and the mesh shown when no override is active. */
-	TArray<FGameplayTag> SwappableSlotTags;
+	TArray<ECombatLookSlot> SwappableSlots;
 
 	UPROPERTY(Transient)
 	TArray<TObjectPtr<USkeletalMeshComponent>> SwappableComponents;

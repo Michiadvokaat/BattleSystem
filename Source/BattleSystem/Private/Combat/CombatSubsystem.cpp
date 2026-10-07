@@ -219,7 +219,7 @@ bool UCombatSubsystem::PlayReplay(const FString& FileOrPath, FString& OutMessage
 	}
 
 	// Before version 4 replays could come from a setup asset instead of a level, before 5 they named unit definition
-	// assets; those are gone.
+	// assets, before 6 their rows had tags for skill types and look slots; those are gone.
 	if (Replay.FormatVersion < FCombatReplay().FormatVersion)
 	{
 		OutMessage = FString::Printf(TEXT("Replay %s is from an older format (version %d) and cannot be played."), *Path, Replay.FormatVersion);
@@ -665,7 +665,7 @@ void UCombatSubsystem::OnAreaFired(const FCombatEvent& Event)
 	{
 		Color = Cue->DebugColor;
 	}
-	else if (Attack.Type.MatchesTagExact(CombatTags::Attack_Taunt))
+	else if (Attack.Type == ECombatSkillType::Taunt)
 	{
 		Color = Settings->TauntColor;
 	}
@@ -841,7 +841,8 @@ FGameplayTag UCombatSubsystem::GetAttackAnimationTag(int32 UnitId, int32 AttackI
 			return Skills[Attack.SourceIndex].AnimationTag;
 		}
 	}
-	return Attack.Type;
+	// No tag: no montage, the body lunges.
+	return FGameplayTag();
 }
 
 ACombatUnitActor* UCombatSubsystem::GetUnitActor(int32 UnitId) const
@@ -2748,13 +2749,14 @@ namespace CombatConsole
 			return;
 		}
 
-		const FString SlotName = Args[1].StartsWith(TEXT("Slot.")) ? Args[1] : TEXT("Slot.") + Args[1];
-		const FGameplayTag SlotTag = FGameplayTag::RequestGameplayTag(FName(*SlotName), false);
-		if (!SlotTag.IsValid())
+		const FString SlotName = Args[1].StartsWith(TEXT("Slot."), ESearchCase::IgnoreCase) ? Args[1].RightChop(5) : Args[1];
+		const int64 SlotValue = StaticEnum<ECombatLookSlot>()->GetValueByNameString(SlotName);
+		if (SlotValue == INDEX_NONE)
 		{
-			UE_LOG(LogCombat, Error, TEXT("Unknown slot tag %s."), *SlotName);
+			UE_LOG(LogCombat, Error, TEXT("Unknown slot %s (Body, Face, Hair, Hat, Glasses, Shirt, Outwear, Pants, Shoes, Gloves, Backpack)."), *SlotName);
 			return;
 		}
+		const ECombatLookSlot Slot = static_cast<ECombatLookSlot>(SlotValue);
 
 		USkeletalMesh* Mesh = nullptr;
 		if (Args.Num() > 2)
@@ -2777,7 +2779,7 @@ namespace CombatConsole
 			}
 		}
 
-		if (!Actor->SetSlotMesh(SlotTag, Mesh))
+		if (!Actor->SetSlotMesh(Slot, Mesh))
 		{
 			UE_LOG(LogCombat, Warning, TEXT("Slot %s of unit %s cannot change (no look, or a merged slot)."), *SlotName, *Args[0]);
 		}
@@ -2785,7 +2787,7 @@ namespace CombatConsole
 
 	static FAutoConsoleCommandWithWorldAndArgs SetSlotCommand(
 		TEXT("Combat.SetSlot"),
-		TEXT("Combat.SetSlot <unit> <slot> [mesh]: presentation debug, puts a skeletal mesh (asset name or path; none = empty) in a swappable slot (Hat or Slot.Hat) of the unit's look."),
+		TEXT("Combat.SetSlot <unit> <slot> [mesh]: presentation debug, puts a skeletal mesh (asset name or path; none = empty) in a swappable slot (Hat) of the unit's look."),
 		FConsoleCommandWithWorldAndArgsDelegate::CreateStatic(&SetSlot));
 
 	static FAutoConsoleCommandWithWorldAndArgs CallWaveCommand(

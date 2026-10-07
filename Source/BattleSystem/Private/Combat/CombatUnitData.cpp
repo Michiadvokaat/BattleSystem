@@ -5,7 +5,6 @@
 #include "Combat/CombatSettings.h"
 #include "Combat/CombatSimulation.h"
 #include "Combat/CombatSubsystem.h"
-#include "Combat/CombatTags.h"
 #include "Combat/CombatUnitActor.h"
 #include "Engine/SkeletalMesh.h"
 
@@ -14,10 +13,10 @@ namespace
 	/** Converts one skill to simulation stats with the unit's multipliers. False for types the simulation does not use. */
 	bool ConvertSkill(const FCombatSkillRow& Skill, const FCombatUnitRow& Unit, int32 Index, int32 TickRate, FCombatAttackStats& Attack)
 	{
-		const bool bMelee = Skill.Type.MatchesTagExact(CombatTags::Attack_Melee);
-		const bool bRanged = Skill.Type.MatchesTagExact(CombatTags::Attack_Ranged);
-		const bool bTaunt = Skill.Type.MatchesTagExact(CombatTags::Attack_Taunt);
-		const bool bAoE = Skill.Type.MatchesTagExact(CombatTags::Attack_AoE);
+		const bool bMelee = Skill.Type == ECombatSkillType::Melee;
+		const bool bRanged = Skill.Type == ECombatSkillType::Ranged;
+		const bool bTaunt = Skill.Type == ECombatSkillType::Taunt;
+		const bool bAoE = Skill.Type == ECombatSkillType::AoE;
 		if (!bMelee && !bRanged && !bTaunt && !bAoE)
 		{
 			return false;
@@ -79,9 +78,7 @@ FString FCombatSkillRow::GetDisplayName() const
 	{
 		return DisplayName;
 	}
-	FString Name = Type.GetTagName().ToString();
-	Name.Split(TEXT("."), nullptr, &Name, ESearchCase::IgnoreCase, ESearchDir::FromEnd);
-	return Name;
+	return StaticEnum<ECombatSkillType>()->GetNameStringByValue(static_cast<int64>(Type));
 }
 
 UClass* FCombatUnitRow::LoadActorClass() const

@@ -2,10 +2,7 @@
 	{
 		"Name": "Bijlman_AoE",
 		"DisplayName": "",
-		"Type":
-		{
-			"TagName": "Attack.AoE"
-		},
+		"Type": "AoE",
 		"bPlayerActivated": false,
 		"Range": 70,
 		"Cooldown": 1.5,
@@ -34,10 +31,7 @@
 	{
 		"Name": "Boogschutter_Ranged",
 		"DisplayName": "Throw",
-		"Type":
-		{
-			"TagName": "Attack.Ranged"
-		},
+		"Type": "Ranged",
 		"bPlayerActivated": false,
 		"Range": 400,
 		"Cooldown": 3,
@@ -66,10 +60,7 @@
 	{
 		"Name": "Boogschutter_Melee",
 		"DisplayName": "",
-		"Type":
-		{
-			"TagName": "Attack.Melee"
-		},
+		"Type": "Melee",
 		"bPlayerActivated": false,
 		"Range": 50,
 		"Cooldown": 1,
@@ -98,10 +89,7 @@
 	{
 		"Name": "Brute_Melee",
 		"DisplayName": "",
-		"Type":
-		{
-			"TagName": "Attack.Melee"
-		},
+		"Type": "Melee",
 		"bPlayerActivated": false,
 		"Range": 80,
 		"Cooldown": 1.6,
@@ -130,10 +118,7 @@
 	{
 		"Name": "Krijger_Melee",
 		"DisplayName": "",
-		"Type":
-		{
-			"TagName": "Attack.Melee"
-		},
+		"Type": "Melee",
 		"bPlayerActivated": false,
 		"Range": 40,
 		"Cooldown": 0.8,
@@ -162,10 +147,7 @@
 	{
 		"Name": "Krijger_PlayerTaunt",
 		"DisplayName": "",
-		"Type":
-		{
-			"TagName": "Attack.Taunt"
-		},
+		"Type": "Taunt",
 		"bPlayerActivated": true,
 		"Range": 50,
 		"Cooldown": 0,
@@ -225,10 +207,7 @@
 	{
 		"Name": "Magier_AoE",
 		"DisplayName": "",
-		"Type":
-		{
-			"TagName": "Attack.AoE"
-		},
+		"Type": "AoE",
 		"bPlayerActivated": false,
 		"Range": 500,
 		"Cooldown": 3,
@@ -280,10 +259,7 @@
 	{
 		"Name": "Magier_Melee",
 		"DisplayName": "",
-		"Type":
-		{
-			"TagName": "Attack.Melee"
-		},
+		"Type": "Melee",
 		"bPlayerActivated": false,
 		"Range": 50,
 		"Cooldown": 1,
@@ -312,10 +288,7 @@
 	{
 		"Name": "Tank_Melee",
 		"DisplayName": "",
-		"Type":
-		{
-			"TagName": "Attack.Melee"
-		},
+		"Type": "Melee",
 		"bPlayerActivated": false,
 		"Range": 70,
 		"Cooldown": 1.2,
@@ -344,10 +317,7 @@
 	{
 		"Name": "Tank_Taunt",
 		"DisplayName": "",
-		"Type":
-		{
-			"TagName": "Attack.Taunt"
-		},
+		"Type": "Taunt",
 		"bPlayerActivated": false,
 		"Range": 600,
 		"Cooldown": 6,
@@ -407,10 +377,7 @@
 	{
 		"Name": "Tank_PlayerTaunt",
 		"DisplayName": "",
-		"Type":
-		{
-			"TagName": "Attack.Taunt"
-		},
+		"Type": "Taunt",
 		"bPlayerActivated": true,
 		"Range": 400,
 		"Cooldown": 0,
@@ -470,10 +437,7 @@
 	{
 		"Name": "Vaandeldrager_AoE",
 		"DisplayName": "",
-		"Type":
-		{
-			"TagName": "Attack.AoE"
-		},
+		"Type": "AoE",
 		"bPlayerActivated": false,
 		"Range": 150,
 		"Cooldown": 4,
@@ -525,10 +489,7 @@
 	{
 		"Name": "Vaandeldrager_Melee",
 		"DisplayName": "",
-		"Type":
-		{
-			"TagName": "Attack.Melee"
-		},
+		"Type": "Melee",
 		"bPlayerActivated": false,
 		"Range": 50,
 		"Cooldown": 1,
