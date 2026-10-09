@@ -15,7 +15,9 @@ Clothing ("kind": "clothing") keeps its own weights and is moved from the adult'
 (retarget_maps): each bone's region is turned along the hero's bone, stretched to its length and scaled across by the ratio
 of the two bodies there (front, back and side to side apart; body_extents), blended by the clothing's weights. Vertices that
 end up inside the hero's body (or closer than CLOTH_MARGIN) are pushed out along the nearest face's normal, and weights on
-bones the hero lacks move to their nearest ancestor it has.
+bones the hero lacks move to their nearest ancestor it has. Finally the vertices near the body take the body's weights at the
+nearest point (transfer_weights), so the clothing bends like the skin under it instead of poking through at the joints; loose
+parts further away (hoods, hems) keep their own.
 
 All measuring happens in Blender's world space after the FBX import, so the units and axes of the import cancel out.
 """
@@ -27,6 +29,7 @@ import sys
 import bpy
 from mathutils import Matrix, Vector
 from mathutils.bvhtree import BVHTree
+from mathutils.interpolate import poly_3d_calc
 
 LOG_TAG = "[FitToHero]"
 HEAD_BONE = "Head"
@@ -37,6 +40,9 @@ ROOT_NAME = "Root"
 HIPS_BONE = "Hips"
 # Children a bone with several children points at (the spine goes on through them).
 SPINE_CHAIN = ("Spine", "Spine1", "Spine2", "Neck", "Head")
+# The trunk, Hips up to the Neck: stretched as one piece, because the skeletons split it differently (the hero's Hips->Spine is
+# 2.3 cm), so stretching each bone apart squeezed the waist and the overlap of tops and pants.
+TRUNK_BONES = ("Hips", "Spine", "Spine1", "Spine2")
 # Clothing: a bone's girth ratio (hero body / adult body) needs this many body vertices, and is clamped to this range.
 MIN_GIRTH_VERTICES = 8
 EXTENT_PERCENTILE = 0.8
@@ -45,6 +51,13 @@ MIN_EXTENT = 0.01
 GIRTH_RANGE = (0.3, 1.5)
 # Clothing: how far (m) every vertex stays outside the hero's body.
 CLOTH_MARGIN = 0.006
+# Clothing: vertices up to WEIGHT_NEAR (m) from the hero's body take the body's weights there, so they bend like the skin
+# under them; from WEIGHT_FAR on (hoods, hems, skirts) they keep their own; in between the two are blended.
+WEIGHT_NEAR = 0.02
+WEIGHT_FAR = 0.06
+# Clothing: at most this many bones per vertex, and smaller weights are dropped.
+MAX_INFLUENCES = 8
+MIN_WEIGHT = 0.01
 
 
 def log(message):
@@ -255,19 +268,26 @@ def girth_of(name, girths, adult_armature, index):
 def retarget_maps(adult_armature, hero_armature, girths):
     """Bone name -> BoneMap from the adult's rest pose onto the hero's.
 
-    A bone with a main child is turned along the hero's bone, stretched to its length and scaled across by its girth ratios;
+    A bone with a main child is turned along the hero's bone, stretched to its length and scaled across by its girth ratios
+    (the trunk bones all use the segment Hips to Neck, see TRUNK_BONES);
     an end bone keeps its parent's turn and scales around its own head; a bone the hero lacks (the packs' hand prop bones,
     the Funny pack's Spine2) follows its parent, and a root bone (the Funny pack has Root as a bone, the hero as the
     armature object) stays where it is."""
     hero_names = set(hero_armature.data.bones.keys())
     adult = bone_segments(adult_armature, hero_names)
     hero = bone_segments(hero_armature)
+    trunk = {bone: (bone_world(adult_armature, HIPS_BONE), bone_world(adult_armature, NECK_BONE),
+                    bone_world(hero_armature, HIPS_BONE), bone_world(hero_armature, NECK_BONE))
+             for bone in TRUNK_BONES if bone in hero_names}
     identity_axes = (Vector((0.0, 0.0, 1.0)), Vector((0.0, 1.0, 0.0)), Vector((-1.0, 0.0, 0.0)))
     maps = {}
     for bone in hierarchy(adult_armature):
         parent = maps.get(bone.parent.name) if bone.parent else None
         a_head, a_tail = adult[bone.name]
         c_head, c_tail = hero.get(bone.name, (None, None))
+        if bone.name in trunk:
+            # The trunk bones share one segment, Hips to Neck, anchored at the hips; only their girth differs.
+            a_head, a_tail, c_head, c_tail = trunk[bone.name]
         if c_head is None:
             maps[bone.name] = parent or BoneMap(Vector(), Vector(), Matrix.Identity(3), identity_axes, (1.0, 1.0, 1.0, 1.0))
         elif a_tail is not None and c_tail is not None:
@@ -304,21 +324,74 @@ def skin_points(mesh, maps, root):
     return points
 
 
-def body_tree(meshes):
-    verts, polys = [], []
-    for mesh in meshes:
-        base = len(verts)
-        verts.extend(mesh.matrix_world @ v.co for v in mesh.data.vertices)
-        polys.extend([base + i for i in p.vertices] for p in mesh.data.polygons)
-    return BVHTree.FromPolygons(verts, polys)
+def vertex_weights(mesh):
+    """Per vertex a dict bone name -> weight."""
+    names = {g.index: g.name for g in mesh.vertex_groups}
+    return [{names[g.group]: g.weight for g in v.groups if g.weight > 0.0 and g.group in names} for v in mesh.data.vertices]
 
 
-def push_out(points, tree, margin):
+def body_region(bone):
+    """The part of the body a bone moves: Left/RightArm (arm, forearm, hand, fingers), Left/RightLeg, else Trunk."""
+    for side in ("Left", "Right"):
+        if bone.startswith(side):
+            rest = bone[len(side):]
+            if rest.startswith(("Arm", "ForeArm", "Hand")):
+                return side + "Arm"
+            if rest.startswith(("UpLeg", "Leg", "Foot", "Toe")):
+                return side + "Leg"
+    return "Trunk"
+
+
+def dominant(weights):
+    return max(weights.items(), key=lambda item: item[1])[0] if weights else None
+
+
+class BodySurface:
+    """The hero's body in world space: BVH trees over its faces (all, and per body region), with their corners' positions
+    and weights."""
+
+    def __init__(self, meshes):
+        self.points, self.polys, self.weights = [], [], []
+        for mesh in meshes:
+            base = len(self.points)
+            self.points.extend(mesh.matrix_world @ v.co for v in mesh.data.vertices)
+            self.polys.extend([base + i for i in p.vertices] for p in mesh.data.polygons)
+            self.weights.extend(vertex_weights(mesh))
+        self.tree = BVHTree.FromPolygons(self.points, self.polys)
+        # A face belongs to the region of the bone that moves most of its corners.
+        by_region = {}
+        for index, corners in enumerate(self.polys):
+            regions = [body_region(dominant(self.weights[c]) or HIPS_BONE) for c in corners]
+            by_region.setdefault(max(set(regions), key=regions.count), []).append(index)
+        self.regions = {region: (BVHTree.FromPolygons(self.points, [self.polys[i] for i in faces]), faces)
+                        for region, faces in by_region.items()}
+
+    def nearest(self, p, region=None):
+        """(location, normal, face index, distance) of the nearest point, on the faces of region when it has any."""
+        if region in self.regions:
+            tree, faces = self.regions[region]
+            location, normal, index, distance = tree.find_nearest(p)
+            if location is not None:
+                return location, normal, faces[index], distance
+        return self.tree.find_nearest(p)
+
+    def weights_at(self, location, index):
+        """The body's weights at a point on face index, interpolated over the face's corners."""
+        corners = self.polys[index]
+        factors = poly_3d_calc([self.points[i] for i in corners], location)
+        result = {}
+        for corner, factor in zip(corners, factors):
+            for bone, weight in self.weights[corner].items():
+                result[bone] = result.get(bone, 0.0) + factor * weight
+        return result
+
+
+def push_out(points, surface, margin):
     """Moves the points that are inside the body, or closer to it than margin, out along the nearest face's normal."""
     pushed = 0
     result = []
     for p in points:
-        location, normal, _index, _distance = tree.find_nearest(p)
+        location, normal, _index, _distance = surface.tree.find_nearest(p)
         if location is not None and (p - location).dot(normal) < margin:
             p = location + normal * margin
             pushed += 1
@@ -346,14 +419,46 @@ def merge_missing_groups(mesh, adult_armature, hero_armature):
         mesh.vertex_groups.remove(group)
 
 
-def fit_clothing(mesh, armature, hero, girths, hero_tree):
+def transfer_weights(mesh, surface):
+    """Gives the vertices near the body the body's weights at the nearest point of the same body part (body_region of their
+    own main bone; WEIGHT_NEAR..WEIGHT_FAR blends them with their own), so the clothing bends like the skin under it;
+    returns how many took the body's weights fully."""
+    own = vertex_weights(mesh)
+    blended = []
+    full = 0
+    for v, weights in zip(mesh.data.vertices, own):
+        # Only the skin of the vertex's own body part: a sleeve at the armpit is nearer to the trunk, but bends with the arm.
+        region = body_region(dominant(weights)) if weights else None
+        location, _normal, index, distance = surface.nearest(mesh.matrix_world @ v.co, region)
+        body = max(0.0, min(1.0, (WEIGHT_FAR - distance) / (WEIGHT_FAR - WEIGHT_NEAR))) if location is not None else 0.0
+        if body >= 1.0:
+            full += 1
+        mixed = {bone: (1.0 - body) * w for bone, w in weights.items()}
+        if body > 0.0:
+            for bone, w in surface.weights_at(location, index).items():
+                mixed[bone] = mixed.get(bone, 0.0) + body * w
+        kept = sorted(((w, bone) for bone, w in mixed.items() if w >= MIN_WEIGHT), reverse=True)[:MAX_INFLUENCES]
+        total = sum(w for w, _ in kept)
+        blended.append({bone: w / total for w, bone in kept} if total > 0.0 else weights)
+    mesh.vertex_groups.clear()
+    groups = {}
+    for v, weights in zip(mesh.data.vertices, blended):
+        for bone, w in weights.items():
+            if bone not in groups:
+                groups[bone] = mesh.vertex_groups.new(name=bone)
+            groups[bone].add([v.index], w, "REPLACE")
+    return full
+
+
+def fit_clothing(mesh, armature, hero, girths, surface):
     """Moves the clothing from the adult's rest pose to the hero's (its own weights over the per-bone retarget), pushes it
-    out of the hero's body and rebinds it to the hero's armature."""
+    out of the hero's body, rebinds it to the hero's armature and gives it the body's weights where it lies on the body.
+    Returns (vertices pushed out, vertices with the body's weights)."""
     points = skin_points(mesh, retarget_maps(armature, hero, girths), HIPS_BONE)
-    points, pushed = push_out(points, hero_tree, CLOTH_MARGIN)
+    points, pushed = push_out(points, surface, CLOTH_MARGIN)
     merge_missing_groups(mesh, armature, hero)
     rebind(mesh, hero, points)
-    return pushed
+    return pushed, transfer_weights(mesh, surface)
 
 
 def weight_rigid(mesh, bone):
@@ -394,7 +499,7 @@ def main():
     child = measure_head(hero, hero_meshes)
     log(f"Hero head bone {tuple(round(x, 4) for x in child[0])}, head box {tuple(round(x, 4) for x in child[2] - child[1])}")
     hero_extents = body_extents(hero, hero_meshes)
-    hero_tree = body_tree(hero_meshes)
+    hero_surface = BodySurface(hero_meshes)
     for m in hero_meshes:
         m.hide_set(True)
 
@@ -424,8 +529,9 @@ def main():
                 rebind(mesh, hero, [place(mesh.matrix_world @ v.co) for v in mesh.data.vertices])
                 weight_rigid(mesh, HEAD_BONE)
             else:
-                pushed = fit_clothing(mesh, armature, hero, girths, hero_tree)
-                log(f"{part['name']}: {len(mesh.data.vertices)} vertices, {pushed} pushed out of the body")
+                pushed, skin = fit_clothing(mesh, armature, hero, girths, hero_surface)
+                log(f"{part['name']}: {len(mesh.data.vertices)} vertices, {pushed} pushed out of the body, "
+                    f"{skin} with the body's weights")
             delete([armature] + others)
             mesh.name = part["name"]
             path = os.path.join(fitted_dir, part["name"] + ".fbx")
