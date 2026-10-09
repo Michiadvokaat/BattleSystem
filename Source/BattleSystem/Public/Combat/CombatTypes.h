@@ -43,6 +43,10 @@ enum class ECombatLookSlot : uint8
 	Gloves,
 	/** Backpack or bag. */
 	Backpack,
+	/** Mustache or beard. */
+	FacialHair,
+	/** Eyebrows, masks, a clown nose, piercings, earrings, a pacifier, a bandage. */
+	FaceAccessory,
 };
 
 /** Shape of an area attack. */

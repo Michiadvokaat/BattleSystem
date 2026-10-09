@@ -58,7 +58,8 @@ $P  = "D:\Unreal\UnrealProjects\BattleSystem\BattleSystem.uproject"
 # in /Game/Characters/Animations/Heroes; existing ones are skipped (local content; editor must be closed)
 & "$UE\Engine\Binaries\Win64\UnrealEditor-Cmd.exe" "$P" -run=pythonscript -script="D:/Unreal/UnrealProjects/BattleSystem/Scripts/ImportMixamoAnimations.py" -unattended -nullrhi -nosplash
 
-# Fit the hats, tops and pants of the Creative/Funny Characters packs onto SKEL_Hero in /Game/Characters/Meshes/Child/<Hats|Outwear|Pants>
+# Fit the hats, tops, pants, facewear and shoes of the Creative/Funny Characters packs onto SKEL_Hero in
+# /Game/Characters/Meshes/Child/<Hats|Outwear|Pants|Facewear|Shoes>
 # (categories by name, see ExportAdultParts.py; -Parts picks them, default all; the other categories are left alone): UE exports
 # FBX, Blender 5.1 scales, moves and rebinds them (Scripts/Blender/FitToHero.py), UE imports them (local content; editor must be closed;
 # an editor window opens briefly, because UE's FBX export of skeletal meshes needs a renderer).

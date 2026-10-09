@@ -5,9 +5,11 @@ Step 1 of Scripts/FitChildParts.ps1; run with the editor closed, in editor mode 
 briefly. The arguments are the categories to export (CATEGORIES; none = all):
     UnrealEditor-Cmd.exe BattleSystem.uproject -unattended -nosplash -nosound -ExecCmds="py <abs path>/Scripts/ExportAdultParts.py Outwear Pants, QUIT_EDITOR"
 
-A part's category comes from its name (category_of): SK_Hat_* are hats (copies SK_Hat_<Pack>_*), names with Outwear,
-Outerwear or Outfit tops, names with Pants or Shorts pants (copies SK_<Pack>_*). Of a pack with colour variants
-(COLOR_VARIANTS) only one colour is taken.
+A part's category comes from its name (category_of): SK_Hat_* are hats (copies SK_Hat_<Pack>_*), the others are copied as
+SK_<Pack>_*: tops (Outwear, Outerwear, Outfit), pants (Pants, Shorts), facewear (faces, glasses, facial hair, eyebrows and
+small face pieces; FACEWEAR) and shoes (Shoe, Socks). Of a pack with colour variants (COLOR_VARIANTS) only one colour of
+the listed categories is taken. For facewear the export also holds a neutral face of the pack and of the child
+(FACE_REFERENCES, CHILD_FACE), which FitToHero.py lines up to place the face parts.
 
 Writes EXPORT_DIR/<pack>/*.fbx, EXPORT_DIR/SKM_Hero.fbx and EXPORT_DIR/manifest.json, which Scripts/Blender/FitToHero.py
 reads. Only LOD 0 is exported (Blender's FBX import does not keep LOD groups). The FBX files are local, outside the repo.
@@ -28,6 +30,14 @@ CATEGORIES = {
     "Hats": ("/Game/Characters/Meshes/Child/Hats", "hat"),
     "Outwear": ("/Game/Characters/Meshes/Child/Outwear", "clothing"),
     "Pants": ("/Game/Characters/Meshes/Child/Pants", "clothing"),
+    "Facewear": ("/Game/Characters/Meshes/Child/Facewear", "face"),
+    "Shoes": ("/Game/Characters/Meshes/Child/Shoes", "clothing"),
+}
+FACEWEAR = r"emotion|Glasses|Mustache|Beard|Eyebrow|Clown_nose|Mask|Piercing|Earrings|Pacifier|Bandage"
+# The neutral faces FitToHero.py lines up: the child's, and per pack an adult one (none: the pack has no faces).
+CHILD_FACE = "/Game/Characters/Meshes/Child/Male/SKM_Child_Male_Face_Neutral.SKM_Child_Male_Face_Neutral"
+FACE_REFERENCES = {
+    "Creative": "/Game/ZZ_FAB/Creative_Characters/Skeleton_Meshes/SK_Male_emotion_neutral_001.SK_Male_emotion_neutral_001",
 }
 HERO_MESH = "/Game/Characters/Meshes/SKM_Hero.SKM_Hero"
 
@@ -36,8 +46,9 @@ PACKS = [
     ("/Game/ZZ_FAB/Creative_Characters/Skeleton_Meshes", "Creative", "/Game/ZZ_FAB/Creative_Characters/Skeleton_Meshes/SK_Body_001.SK_Body_001", 1.0),
     ("/Game/ZZ_FAB/Funny_Characters/Meshes", "Funny", "/Game/ZZ_FAB/Funny_Characters/Meshes/SK_Body_Blue_001.SK_Body_Blue_001", 1.0),
 ]
-# Packs whose clothing comes in colours (SK_<Type>_<Colour>_<Number>) -> the one colour that is fitted.
-COLOR_VARIANTS = {"Funny": "White"}
+# Packs whose clothing comes in colours (SK_<Type>_<Colour>_<Number>) -> (the one colour that is fitted, the categories it
+# applies to; the Funny mustaches keep their three colours, which are hair colours).
+COLOR_VARIANTS = {"Funny": ("White", ("Outwear", "Pants"))}
 
 
 def log(message):
@@ -70,14 +81,18 @@ def category_of(name):
         return "Outwear"
     if re.search(r"Pants|Shorts", name):
         return "Pants"
+    if re.search(FACEWEAR, name):
+        return "Facewear"
+    if re.search(r"Shoe|Socks", name):
+        return "Shoes"
     return None
 
 
-def wanted_colour(name, pack_name):
-    """False for a colour variant other than the pack's chosen colour (COLOR_VARIANTS)."""
-    colour = COLOR_VARIANTS.get(pack_name)
+def wanted_colour(name, pack_name, category):
+    """False for a colour variant other than the pack's chosen colour (COLOR_VARIANTS) in the categories it applies to."""
+    colour, categories = COLOR_VARIANTS.get(pack_name, (None, ()))
     match = re.match(r"^SK_[A-Za-z]+_(.+)_\d+$", name)
-    return colour is None or name.startswith("SK_Hat_") or not match or match.group(1) == colour
+    return colour is None or category not in categories or not match or match.group(1) == colour
 
 
 def main():
@@ -102,7 +117,7 @@ def main():
         for data in sorted(registry.get_assets_by_path(folder, recursive=False), key=lambda d: str(d.asset_name)):
             name = str(data.asset_name)
             category = category_of(name)
-            if category not in categories or not wanted_colour(name, pack_name):
+            if category not in categories or not wanted_colour(name, pack_name, category):
                 continue
             target_folder, kind = CATEGORIES[category]
             # SK_Hat_001 -> SK_Hat_Creative_001, SK_Outwear_001 -> SK_Creative_Outwear_001
@@ -110,12 +125,20 @@ def main():
             export_fbx(unreal.load_asset(f"{folder}/{name}"), f"{EXPORT_DIR}/{pack_name}/{name}.fbx")
             parts.append({"kind": kind, "name": target_name, "fbx": f"{pack_name}/{name}.fbx",
                           "source": f"{folder}/{name}", "target": f"{target_folder}/{target_name}"})
-        packs.append({"name": pack_name, "body": f"{pack_name}/_Body.fbx", "tune": tune, "parts": parts})
+        pack = {"name": pack_name, "body": f"{pack_name}/_Body.fbx", "tune": tune, "parts": parts}
+        if "Facewear" in categories and pack_name in FACE_REFERENCES:
+            export_fbx(unreal.load_asset(FACE_REFERENCES[pack_name]), f"{EXPORT_DIR}/{pack_name}/_Face.fbx")
+            pack["face"] = f"{pack_name}/_Face.fbx"
+        packs.append(pack)
         count += len(parts)
         log(f"{pack_name}: {len(parts)} parts")
 
+    manifest = {"hero": "SKM_Hero.fbx", "packs": packs}
+    if "Facewear" in categories:
+        export_fbx(unreal.load_asset(CHILD_FACE), f"{EXPORT_DIR}/_ChildFace.fbx")
+        manifest["child_face"] = "_ChildFace.fbx"
     with open(f"{EXPORT_DIR}/manifest.json", "w", encoding="utf-8") as f:
-        json.dump({"hero": "SKM_Hero.fbx", "packs": packs}, f, indent="\t")
+        json.dump(manifest, f, indent="\t")
     log(f"{count} parts in {EXPORT_DIR}")
     log("Done")
 

@@ -19,6 +19,10 @@ bones the hero lacks move to their nearest ancestor it has. Finally the vertices
 nearest point (transfer_weights), so the clothing bends like the skin under it instead of poking through at the joints; loose
 parts further away (hoods, hems) keep their own.
 
+Face parts ("kind": "face") are rigid on the Head bone like hats, but placed through a FaceFrame that lines the pack's neutral
+face up with the child's (or, for a pack without faces, its head with the child's), and what lies on the adult's skin is
+laid on the hero's (fit_face).
+
 Every part also gets the hide zones of the hero's body it covers ("hide_zones" in fitted.json, a bit mask over
 BODY_ZONES; covered_zones), and body_zones.json lists the hero's skin vertices with their zone for
 Scripts/CreateBodyZones.py, which writes the zones into the bodies' vertex colors.
@@ -62,6 +66,19 @@ WEIGHT_FAR = 0.06
 # Clothing: at most this many bones per vertex, and smaller weights are dropped.
 MAX_INFLUENCES = 8
 MIN_WEIGHT = 0.01
+# Face parts (faces, glasses, facial hair, small face pieces): what lies within CONFORM_NEAR (m, on the adult) of the adult's
+# skin is laid on the hero's skin at the same (scaled) height, what lies beyond CONFORM_FAR keeps the frame's shape, and in
+# between the two are blended. FACE_MARGIN (m) is how far they stay out of the hero's skin (decals lie just above it).
+CONFORM_NEAR = 0.01
+CONFORM_FAR = 0.03
+FACE_MARGIN = 0.0015
+# Mustaches (names with UNDER_NOSE) are moved up or down so the top of their middle (within UNDER_NOSE_WIDTH m of the centre
+# line) sits UNDER_NOSE_GAP (m) below the hero's nose: the frames place them by the adult's face, whose nose and mouth sit
+# elsewhere relative to each other.
+UNDER_NOSE = "Mustache"
+UNDER_NOSE_WIDTH = 0.015
+UNDER_NOSE_GAP = 0.003
+NOSE_DEPTH = 0.005
 # Hide zones of the hero's body, in the bit order of ECombatBodyZone (CombatHideZones.h); the two must match.
 BODY_ZONES = ("Neck", "Collar", "Chest", "Waist", "Pelvis", "UpperArmL", "UpperArmR", "ForeArmL", "ForeArmR", "HandL", "HandR",
               "ThighL", "ThighR", "ShinL", "ShinR", "FootL", "FootR", "Crown", "BackOfHead", "Ears")
@@ -376,7 +393,8 @@ class BodySurface:
     """The hero's body in world space: BVH trees over its faces (all, and per body region), with their corners' positions
     and weights."""
 
-    def __init__(self, meshes):
+    def __init__(self, meshes, armature=None):
+        self.armature = armature
         self.points, self.polys, self.weights = [], [], []
         for mesh in meshes:
             base = len(self.points)
@@ -485,6 +503,74 @@ def fit_clothing(mesh, armature, hero, girths, surface):
     merge_missing_groups(mesh, armature, hero)
     rebind(mesh, hero, points)
     return pushed, transfer_weights(mesh, surface)
+
+
+class FaceFrame:
+    """Maps the adult's face region onto the child's: per axis scaled around the centre of a reference box (side to side
+    by the width ratio, up and down by the height ratio, front to back by their mean)."""
+
+    def __init__(self, adult_low, adult_high, child_low, child_high):
+        self.adult_centre = (adult_low + adult_high) * 0.5
+        self.child_centre = (child_low + child_high) * 0.5
+        width = (child_high.x - child_low.x) / (adult_high.x - adult_low.x)
+        height = (child_high.z - child_low.z) / (adult_high.z - adult_low.z)
+        self.scale = Vector((width, 0.5 * (width + height), height))
+
+    def __call__(self, p):
+        return self.child_centre + (p - self.adult_centre) * self.scale
+
+    @property
+    def mean_scale(self):
+        return (self.scale.x + self.scale.y + self.scale.z) / 3.0
+
+
+def mesh_box(meshes):
+    points = [m.matrix_world @ v.co for m in meshes for v in m.data.vertices]
+    return (Vector((min(p.x for p in points), min(p.y for p in points), min(p.z for p in points))),
+            Vector((max(p.x for p in points), max(p.y for p in points), max(p.z for p in points))))
+
+
+def nose_bottom(armature, meshes):
+    """The height (world z) of the underside of the hero's nose: the lowest skin of the nose (around the front-most point of
+    the head, NOSE_DEPTH deep; deeper it takes in the upper lip)."""
+    head = bone_world(armature, HEAD_BONE)
+    on_head = [m.matrix_world @ v.co for m, bones in zip(meshes, (dominant_bones(m) for m in meshes))
+               for v, bone in zip(m.data.vertices, bones) if bone == HEAD_BONE]
+    tip = min((p for p in on_head if p.z > head.z), key=lambda p: p.y)
+    # The nose is the skin that stands out: within NOSE_DEPTH of the tip, front to back.
+    nose = [p for p in on_head if abs(p.x - tip.x) < 0.012 and p.y < tip.y + NOSE_DEPTH and abs(p.z - tip.z) < 0.03]
+    return min(p.z for p in nose)
+
+
+def fit_face(mesh, frame, adult_surface, hero_surface, under_nose=None):
+    """Moves a face part through the frame (and, given under_nose, up or down so the top of its middle sits UNDER_NOSE_GAP
+    below that height), lays what lies on the adult's skin onto the hero's (CONFORM_NEAR..CONFORM_FAR), keeps it
+    FACE_MARGIN out of the hero's skin and rebinds it rigidly to the Head bone. Returns how many vertices were laid on the
+    skin."""
+    shift = Vector((0.0, 0.0, 0.0))
+    if under_nose is not None:
+        mapped = [frame(mesh.matrix_world @ v.co) for v in mesh.data.vertices]
+        middle = [q for q in mapped if abs(q.x - frame.child_centre.x) < UNDER_NOSE_WIDTH] or mapped
+        shift.z = under_nose - UNDER_NOSE_GAP - max(q.z for q in middle)
+    points = []
+    laid = 0
+    for v in mesh.data.vertices:
+        p = mesh.matrix_world @ v.co
+        q = frame(p) + shift
+        location, normal, _index, _distance = adult_surface.tree.find_nearest(p)
+        height = (p - location).dot(normal) if location is not None else CONFORM_FAR
+        on_skin = max(0.0, min(1.0, (CONFORM_FAR - height) / (CONFORM_FAR - CONFORM_NEAR)))
+        if on_skin > 0.0:
+            hero_location, hero_normal, _i, _d = hero_surface.tree.find_nearest(q)
+            if hero_location is not None:
+                skin = hero_location + hero_normal * max(FACE_MARGIN, height * frame.mean_scale)
+                q = q.lerp(skin, on_skin)
+                laid += on_skin >= 1.0
+        points.append(q)
+    points, _pushed = push_out(points, hero_surface, FACE_MARGIN)
+    rebind(mesh, hero_surface.armature, points)
+    weight_rigid(mesh, HEAD_BONE)
+    return laid
 
 
 def bone_zone(bone):
@@ -626,10 +712,17 @@ def main():
     child = measure_head(hero, hero_meshes)
     log(f"Hero head bone {tuple(round(x, 4) for x in child[0])}, head box {tuple(round(x, 4) for x in child[2] - child[1])}")
     hero_extents = body_extents(hero, hero_meshes)
-    hero_surface = BodySurface(hero_meshes)
+    hero_surface = BodySurface(hero_meshes, hero)
     hero_zones = body_zones(hero, hero_meshes)
+    hero_nose = nose_bottom(hero, hero_meshes)
     for m in hero_meshes:
         m.hide_set(True)
+
+    child_face = None
+    if manifest.get("child_face"):
+        face_armature, face_meshes, face_others = import_fbx(os.path.join(export_dir, manifest["child_face"]))
+        child_face = mesh_box(face_meshes)
+        delete([face_armature] + face_meshes + face_others)
 
     fitted = []
     for pack in manifest["packs"]:
@@ -637,7 +730,19 @@ def main():
         adult = measure_head(body, body_meshes)
         scale, offset = fit_head(child, adult, pack.get("tune", 1.0))
         girths = girth_ratios(body_extents(body, body_meshes, set(hero.data.bones.keys())), hero_extents)
-        delete([body] + body_meshes + body_others)
+        face_frame = None
+        if any(part["kind"] == "face" for part in pack["parts"]):
+            # Lined up on the faces when the pack has a neutral face, else on the heads (the skin above the neck).
+            if pack.get("face") and child_face:
+                face_armature, face_meshes, face_others = import_fbx(os.path.join(export_dir, pack["face"]))
+                face_frame = FaceFrame(*mesh_box(face_meshes), *child_face)
+                delete([face_armature] + face_meshes + face_others)
+                frame_source = "the neutral faces"
+            else:
+                face_frame = FaceFrame(adult[1], adult[2], child[1], child[2])
+                frame_source = "the heads"
+            log(f"{pack['name']}: face parts scaled {tuple(round(x, 3) for x in face_frame.scale)} on {frame_source}")
+        adult_surface = BodySurface(body_meshes, body)
         log(f"{pack['name']}: girth ratios (front, back, width) "
             + ", ".join(f"{b} " + "/".join("-" if r is None else f"{r:.2f}" for r in g) for b, g in sorted(girths.items())))
         log(f"{pack['name']}: scale {scale:.3f} around the adult head bone, then offset {tuple(round(x, 4) for x in offset)} "
@@ -647,7 +752,7 @@ def main():
             return child[0] + scale * (p - adult_head) + offset
 
         for part in pack["parts"]:
-            if part["kind"] not in ("hat", "clothing"):
+            if part["kind"] not in ("hat", "clothing", "face"):
                 raise RuntimeError(f"{LOG_TAG} {part['name']}: unknown kind {part['kind']}")
             armature, meshes, others = import_fbx(os.path.join(export_dir, part["fbx"]))
             if len(meshes) != 1:
@@ -656,6 +761,11 @@ def main():
             if part["kind"] == "hat":
                 rebind(mesh, hero, [place(mesh.matrix_world @ v.co) for v in mesh.data.vertices])
                 weight_rigid(mesh, HEAD_BONE)
+            elif part["kind"] == "face":
+                under_nose = hero_nose if UNDER_NOSE in part["name"] else None
+                laid = fit_face(mesh, face_frame, adult_surface, hero_surface, under_nose)
+                log(f"{part['name']}: {len(mesh.data.vertices)} vertices, {laid} laid on the skin"
+                    + (" (under the nose)" if under_nose is not None else ""))
             else:
                 pushed, skin = fit_clothing(mesh, armature, hero, girths, hero_surface)
                 log(f"{part['name']}: {len(mesh.data.vertices)} vertices, {pushed} pushed out of the body, "
@@ -670,6 +780,7 @@ def main():
             delete([mesh])
             fitted.append({"name": part["name"], "fbx": part["name"] + ".fbx", "source": part["source"], "target": part["target"],
                            "hide_zones": hide_zones})
+        delete([body] + body_meshes + body_others)
 
     with open(os.path.join(fitted_dir, "fitted.json"), "w", encoding="utf-8") as f:
         json.dump({"parts": fitted}, f, indent="\t")
