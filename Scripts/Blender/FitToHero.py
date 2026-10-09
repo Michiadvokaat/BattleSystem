@@ -9,8 +9,15 @@ files goes to <fitted dir>/fitted.json for Scripts/ImportFittedParts.py.
 
 Hats ("kind": "hat") are rigid: all vertices get weight 1 on the Head bone. They are scaled around the adult head bone by the
 ratio of the hero's head to the pack's adult head (width and depth of the vertices above the Neck bone), times the pack's
-"tune", and moved onto the hero's head so the hat sits as high and as far forward on it as on the adult head. All measuring
-happens in Blender's world space after the FBX import, so the units and axes of the import cancel out.
+"tune", and moved onto the hero's head so the hat sits as high and as far forward on it as on the adult head.
+
+Clothing ("kind": "clothing") keeps its own weights and is moved from the adult's rest pose to the hero's per bone
+(retarget_maps): each bone's region is turned along the hero's bone, stretched to its length and scaled across by the ratio
+of the two bodies there (front, back and side to side apart; body_extents), blended by the clothing's weights. Vertices that
+end up inside the hero's body (or closer than CLOTH_MARGIN) are pushed out along the nearest face's normal, and weights on
+bones the hero lacks move to their nearest ancestor it has.
+
+All measuring happens in Blender's world space after the FBX import, so the units and axes of the import cancel out.
 """
 
 import json
@@ -19,12 +26,25 @@ import sys
 
 import bpy
 from mathutils import Matrix, Vector
+from mathutils.bvhtree import BVHTree
 
 LOG_TAG = "[FitToHero]"
 HEAD_BONE = "Head"
 NECK_BONE = "Neck"
 # The root bone of the UE skeletons; Blender's FBX import makes it the armature object.
 ROOT_NAME = "Root"
+# The first bone under the root; clothing vertices without weights follow it.
+HIPS_BONE = "Hips"
+# Children a bone with several children points at (the spine goes on through them).
+SPINE_CHAIN = ("Spine", "Spine1", "Spine2", "Neck", "Head")
+# Clothing: a bone's girth ratio (hero body / adult body) needs this many body vertices, and is clamped to this range.
+MIN_GIRTH_VERTICES = 8
+EXTENT_PERCENTILE = 0.8
+# Clothing: a girth ratio needs both bodies to reach at least this far (m) from the bone.
+MIN_EXTENT = 0.01
+GIRTH_RANGE = (0.3, 1.5)
+# Clothing: how far (m) every vertex stays outside the hero's body.
+CLOTH_MARGIN = 0.006
 
 
 def log(message):
@@ -77,9 +97,8 @@ def delete(objects):
         bpy.data.objects.remove(o, do_unlink=True)
 
 
-def rebind(mesh, armature, place):
-    """Parents the mesh to the armature with a fresh Armature modifier; place maps each old world position to the new one."""
-    points = [place(mesh.matrix_world @ v.co) for v in mesh.data.vertices]
+def rebind(mesh, armature, points):
+    """Parents the mesh to the armature with a fresh Armature modifier; points are the new world positions of its vertices."""
     mesh.parent = armature
     mesh.matrix_parent_inverse = Matrix.Identity(4)
     mesh.matrix_basis = Matrix.Identity(4)
@@ -92,6 +111,249 @@ def rebind(mesh, armature, place):
         if modifier.type == "ARMATURE":
             mesh.modifiers.remove(modifier)
     mesh.modifiers.new("Armature", "ARMATURE").object = armature
+
+
+def main_child(bone):
+    """The child a bone points at: its only child, or the one that continues the spine; None for an end bone."""
+    if len(bone.children) == 1:
+        return bone.children[0]
+    for name in SPINE_CHAIN:
+        if name in bone.children:
+            return bone.children[name]
+    return None
+
+
+def bone_segments(armature, keep=None):
+    """Bone name -> (head, head of the first bone down its main chain that is in keep, or None), in world space.
+
+    keep (default: all bones) skips bones the other skeleton lacks, so a segment spans the same body part on both
+    (the Funny pack's Spine1 runs through its Spine2 to the Neck, like the hero's Spine1)."""
+    segments = {}
+    for bone in armature.data.bones:
+        child = main_child(bone)
+        while child is not None and keep is not None and child.name not in keep:
+            child = main_child(child)
+        segments[bone.name] = (armature.matrix_world @ bone.head_local,
+                               armature.matrix_world @ child.head_local if child else None)
+    return segments
+
+
+def dominant_bones(mesh):
+    """For each vertex the name of the group with the largest weight (None without weights)."""
+    names = {g.index: g.name for g in mesh.vertex_groups}
+    result = []
+    for v in mesh.data.vertices:
+        best = max(v.groups, key=lambda g: g.weight, default=None)
+        result.append(names.get(best.group) if best and best.weight > 0.0 else None)
+    return result
+
+
+def cross_axes(direction):
+    """Two axes across a bone direction: front to back (world Y made square to it), and side to side."""
+    depth = Vector((0.0, 1.0, 0.0))
+    if abs(direction.dot(depth)) > 0.9:
+        depth = Vector((0.0, 0.0, 1.0))
+    depth = (depth - direction * direction.dot(depth)).normalized()
+    return depth, direction.cross(depth)
+
+
+def offset_from_segment(p, head, tail):
+    if tail is None:
+        return p - head
+    axis = tail - head
+    t = max(0.0, min(1.0, (p - head).dot(axis) / axis.length_squared))
+    return p - (head + t * axis)
+
+
+def percentile(values, fraction):
+    if len(values) < MIN_GIRTH_VERTICES:
+        return None
+    ordered = sorted(values)
+    return ordered[min(len(ordered) - 1, int(fraction * len(ordered)))]
+
+
+def body_extents(armature, meshes, keep=None):
+    """Bone name -> (plus, minus, width): how far the body's vertices that follow that bone most reach from the bone's
+    segment, along +depth and -depth (the spine lies at the back of the body, so the belly reaches further than the back)
+    and side to side; the EXTENT_PERCENTILE of the distances, None with too few vertices. An end bone gets its plain
+    distance three times. A percentile instead of the median, because the vertices of short bones lie mostly near the bone."""
+    segments = bone_segments(armature, keep)
+    offsets = {}
+    for mesh in meshes:
+        for v, bone in zip(mesh.data.vertices, dominant_bones(mesh)):
+            if bone in segments:
+                offsets.setdefault(bone, []).append(offset_from_segment(mesh.matrix_world @ v.co, *segments[bone]))
+    extents = {}
+    for bone, values in offsets.items():
+        head, tail = segments[bone]
+        if tail is None:
+            distance = percentile([o.length for o in values], EXTENT_PERCENTILE)
+            extents[bone] = (distance, distance, distance)
+            continue
+        depth, width = cross_axes((tail - head).normalized())
+        along = [o.dot(depth) for o in values]
+        extents[bone] = (percentile([a for a in along if a > 0.0], EXTENT_PERCENTILE),
+                         percentile([-a for a in along if a < 0.0], EXTENT_PERCENTILE),
+                         percentile([abs(o.dot(width)) for o in values], EXTENT_PERCENTILE))
+    return extents
+
+
+def girth_ratios(adult_extents, hero_extents):
+    """Bone name -> (plus, minus, width) ratios of the hero's body to the adult's, clamped to GIRTH_RANGE; None where
+    either body reaches less than MIN_EXTENT (too few or too central vertices to tell)."""
+    def ratio(hero, adult):
+        if hero is None or adult is None or hero < MIN_EXTENT or adult < MIN_EXTENT:
+            return None
+        return max(GIRTH_RANGE[0], min(GIRTH_RANGE[1], hero / adult))
+    return {bone: tuple(ratio(h, a) for h, a in zip(hero_extents[bone], extent))
+            for bone, extent in adult_extents.items() if bone in hero_extents}
+
+
+def hierarchy(armature):
+    """The bones, every parent before its children."""
+    order = []
+    stack = [b for b in armature.data.bones if b.parent is None]
+    while stack:
+        bone = stack.pop()
+        order.append(bone)
+        stack.extend(bone.children)
+    return order
+
+
+class BoneMap:
+    """Moves points that follow one bone from the adult's rest pose to the hero's: relative to the adult bone's head, in the
+    frame (along the bone, depth, width), scaled per axis (depth by side), turned onto the hero's bone, at the hero's head."""
+
+    def __init__(self, adult_head, hero_head, turn, axes, scales):
+        self.adult_head, self.hero_head, self.turn, self.axes, self.scales = adult_head, hero_head, turn, axes, scales
+
+    def __call__(self, p):
+        along, depth, width = self.axes
+        stretch, plus, minus, side = self.scales
+        q = p - self.adult_head
+        d = q.dot(depth)
+        local = along * (q.dot(along) * stretch) + depth * (d * (plus if d > 0.0 else minus)) + width * (q.dot(width) * side)
+        return self.hero_head + self.turn @ local
+
+
+def girth_of(name, girths, adult_armature, index):
+    """One girth ratio of a bone, else of its nearest ancestor that has it, else down its main child chain, else 1."""
+    bone = adult_armature.data.bones[name]
+    for candidate in [bone] + list(bone.parent_recursive):
+        ratio = girths.get(candidate.name, (None, None, None))[index]
+        if ratio is not None:
+            return ratio
+    child = main_child(bone)
+    while child is not None:
+        ratio = girths.get(child.name, (None, None, None))[index]
+        if ratio is not None:
+            return ratio
+        child = main_child(child)
+    return 1.0
+
+
+def retarget_maps(adult_armature, hero_armature, girths):
+    """Bone name -> BoneMap from the adult's rest pose onto the hero's.
+
+    A bone with a main child is turned along the hero's bone, stretched to its length and scaled across by its girth ratios;
+    an end bone keeps its parent's turn and scales around its own head; a bone the hero lacks (the packs' hand prop bones,
+    the Funny pack's Spine2) follows its parent, and a root bone (the Funny pack has Root as a bone, the hero as the
+    armature object) stays where it is."""
+    hero_names = set(hero_armature.data.bones.keys())
+    adult = bone_segments(adult_armature, hero_names)
+    hero = bone_segments(hero_armature)
+    identity_axes = (Vector((0.0, 0.0, 1.0)), Vector((0.0, 1.0, 0.0)), Vector((-1.0, 0.0, 0.0)))
+    maps = {}
+    for bone in hierarchy(adult_armature):
+        parent = maps.get(bone.parent.name) if bone.parent else None
+        a_head, a_tail = adult[bone.name]
+        c_head, c_tail = hero.get(bone.name, (None, None))
+        if c_head is None:
+            maps[bone.name] = parent or BoneMap(Vector(), Vector(), Matrix.Identity(3), identity_axes, (1.0, 1.0, 1.0, 1.0))
+        elif a_tail is not None and c_tail is not None:
+            a_dir, c_dir = (a_tail - a_head), (c_tail - c_head)
+            stretch = c_dir.length / a_dir.length
+            a_dir.normalize()
+            c_dir.normalize()
+            ratios = tuple(girth_of(bone.name, girths, adult_armature, i) for i in range(3))
+            maps[bone.name] = BoneMap(a_head, c_head, a_dir.rotation_difference(c_dir).to_matrix(),
+                                      (a_dir,) + cross_axes(a_dir), (stretch,) + ratios)
+        elif parent is not None:
+            maps[bone.name] = BoneMap(a_head, c_head, parent.turn, parent.axes, parent.scales)
+        else:
+            girth = girth_of(bone.name, girths, adult_armature, 2)
+            maps[bone.name] = BoneMap(a_head, c_head, Matrix.Identity(3), identity_axes, (girth,) * 4)
+    return maps
+
+
+def skin_points(mesh, maps, root):
+    """The mesh's world positions moved by its own weights over the bone maps (linear blend skinning)."""
+    names = {g.index: g.name for g in mesh.vertex_groups}
+    points = []
+    for v in mesh.data.vertices:
+        p = mesh.matrix_world @ v.co
+        weights = [(names[g.group], g.weight) for g in v.groups if g.weight > 0.0 and names.get(g.group) in maps]
+        total = sum(w for _, w in weights)
+        if total <= 0.0:
+            points.append(maps[root](p))
+            continue
+        moved = Vector((0.0, 0.0, 0.0))
+        for name, w in weights:
+            moved += (w / total) * maps[name](p)
+        points.append(moved)
+    return points
+
+
+def body_tree(meshes):
+    verts, polys = [], []
+    for mesh in meshes:
+        base = len(verts)
+        verts.extend(mesh.matrix_world @ v.co for v in mesh.data.vertices)
+        polys.extend([base + i for i in p.vertices] for p in mesh.data.polygons)
+    return BVHTree.FromPolygons(verts, polys)
+
+
+def push_out(points, tree, margin):
+    """Moves the points that are inside the body, or closer to it than margin, out along the nearest face's normal."""
+    pushed = 0
+    result = []
+    for p in points:
+        location, normal, _index, _distance = tree.find_nearest(p)
+        if location is not None and (p - location).dot(normal) < margin:
+            p = location + normal * margin
+            pushed += 1
+        result.append(p)
+    return result, pushed
+
+
+def merge_missing_groups(mesh, adult_armature, hero_armature):
+    """Moves the weights of groups whose bone the hero lacks onto the nearest ancestor (in the adult skeleton) it has."""
+    bones = hero_armature.data.bones
+    for group in list(mesh.vertex_groups):
+        if group.name in bones:
+            continue
+        ancestor = adult_armature.data.bones.get(group.name)
+        while ancestor is not None and ancestor.name not in bones:
+            ancestor = ancestor.parent
+        if ancestor is None:
+            raise RuntimeError(f"{LOG_TAG} {mesh.name}: group {group.name} has no bone or ancestor on the hero")
+        target = ancestor.name
+        into = mesh.vertex_groups.get(target) or mesh.vertex_groups.new(name=target)
+        for v in mesh.data.vertices:
+            for g in v.groups:
+                if g.group == group.index and g.weight > 0.0:
+                    into.add([v.index], g.weight, "ADD")
+        mesh.vertex_groups.remove(group)
+
+
+def fit_clothing(mesh, armature, hero, girths, hero_tree):
+    """Moves the clothing from the adult's rest pose to the hero's (its own weights over the per-bone retarget), pushes it
+    out of the hero's body and rebinds it to the hero's armature."""
+    points = skin_points(mesh, retarget_maps(armature, hero, girths), HIPS_BONE)
+    points, pushed = push_out(points, hero_tree, CLOTH_MARGIN)
+    merge_missing_groups(mesh, armature, hero)
+    rebind(mesh, hero, points)
+    return pushed
 
 
 def weight_rigid(mesh, bone):
@@ -131,6 +393,8 @@ def main():
     hero, hero_meshes = import_hero(os.path.join(export_dir, manifest["hero"]))
     child = measure_head(hero, hero_meshes)
     log(f"Hero head bone {tuple(round(x, 4) for x in child[0])}, head box {tuple(round(x, 4) for x in child[2] - child[1])}")
+    hero_extents = body_extents(hero, hero_meshes)
+    hero_tree = body_tree(hero_meshes)
     for m in hero_meshes:
         m.hide_set(True)
 
@@ -139,7 +403,10 @@ def main():
         body, body_meshes, body_others = import_fbx(os.path.join(export_dir, pack["body"]))
         adult = measure_head(body, body_meshes)
         scale, offset = fit_head(child, adult, pack.get("tune", 1.0))
+        girths = girth_ratios(body_extents(body, body_meshes, set(hero.data.bones.keys())), hero_extents)
         delete([body] + body_meshes + body_others)
+        log(f"{pack['name']}: girth ratios (front, back, width) "
+            + ", ".join(f"{b} " + "/".join("-" if r is None else f"{r:.2f}" for r in g) for b, g in sorted(girths.items())))
         log(f"{pack['name']}: scale {scale:.3f} around the adult head bone, then offset {tuple(round(x, 4) for x in offset)} "
             f"from the hero's head bone")
 
@@ -147,14 +414,18 @@ def main():
             return child[0] + scale * (p - adult_head) + offset
 
         for part in pack["parts"]:
-            if part["kind"] != "hat":
+            if part["kind"] not in ("hat", "clothing"):
                 raise RuntimeError(f"{LOG_TAG} {part['name']}: unknown kind {part['kind']}")
             armature, meshes, others = import_fbx(os.path.join(export_dir, part["fbx"]))
             if len(meshes) != 1:
                 raise RuntimeError(f"{LOG_TAG} {part['name']}: expected one mesh, found {len(meshes)}")
             mesh = meshes[0]
-            rebind(mesh, hero, place)
-            weight_rigid(mesh, HEAD_BONE)
+            if part["kind"] == "hat":
+                rebind(mesh, hero, [place(mesh.matrix_world @ v.co) for v in mesh.data.vertices])
+                weight_rigid(mesh, HEAD_BONE)
+            else:
+                pushed = fit_clothing(mesh, armature, hero, girths, hero_tree)
+                log(f"{part['name']}: {len(mesh.data.vertices)} vertices, {pushed} pushed out of the body")
             delete([armature] + others)
             mesh.name = part["name"]
             path = os.path.join(fitted_dir, part["name"] + ".fbx")
@@ -168,8 +439,9 @@ def main():
     log("Done")
 
 
-try:
-    main()
-except Exception as error:
-    log(f"ERROR {error}")
-    raise
+if __name__ == "__main__":
+    try:
+        main()
+    except Exception as error:
+        log(f"ERROR {error}")
+        raise

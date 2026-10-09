@@ -1,7 +1,7 @@
-# Fits the adult hats of the Fab packs to the hero skeleton SKEL_Hero (editor must be closed):
-#   1. Scripts/ExportAdultParts.py (UE): hats, an adult body per pack and the hero to FBX in D:/Unreal/Assets/Blender/Export
-#   2. Scripts/Blender/FitToHero.py (Blender): scale, move and rebind each hat, to D:/Unreal/Assets/Blender/Fitted
-#   3. Scripts/ImportFittedParts.py (UE): import onto SKEL_Hero in /Game/Characters/Meshes/Child/Hats
+# Fits the adult hats and chosen clothing of the Fab packs to the hero skeleton SKEL_Hero (editor must be closed):
+#   1. Scripts/ExportAdultParts.py (UE): hats, clothing, an adult body per pack and the hero to FBX in D:/Unreal/Assets/Blender/Export
+#   2. Scripts/Blender/FitToHero.py (Blender): fit and rebind each part, to D:/Unreal/Assets/Blender/Fitted
+#   3. Scripts/ImportFittedParts.py (UE): import onto SKEL_Hero in /Game/Characters/Meshes/Child/Hats and .../Child/Clothing
 # Each step stops the run when it fails. The log tags are [AdultParts], [FitToHero] and [FittedParts].
 
 $ErrorActionPreference = "Stop"

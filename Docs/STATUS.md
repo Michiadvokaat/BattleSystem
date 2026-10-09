@@ -45,6 +45,6 @@ _Last updated: 2026-10-09_
 - Considered for melee, not built: re-check the range when the hit lands (a miss), and units on the line blocking a melee attack.
 - Balance: to be measured again on levels (`Combat.Batch 1000 level=<name>`); the old setup numbers are gone with the setups.
 - Character looks, later: per-bone scaling (own AnimGraph node + editor module), parts from other skeletons (retarget first), and "Allow CPU Access" on the source meshes for cooked builds. Mutable remains the alternative if this falls short.
-- Next, on an experiment branch: adult clothing on `SKEL_Hero` (rest-pose retarget per bone, girth per body part, Shrinkwrap against `SKM_Hero`; test pieces: a loose costume such as `SK_Costume_11_001`, a tight piece, one from the Funny pack).
+- Adult clothing on `SKEL_Hero` (experiment on `child-clothing-experiment`, tag `before-child-clothing`; checked by the user in the AnimPreview, not merged): `FitChildHats.ps1` also fits the pieces in `CLOTHING` of `ExportAdultParts.py` (per-bone rest-pose retarget with front/back/side girth ratios, push-out of the hero's body) into `Child/Clothing`. Test pieces: `SK_Costume_11_001`, `SK_Outwear_001`, `SK_Pants_001`, Funny `SK_Outerwear_Blue_001`. Open: the Funny hood comes out a bit big, a few spots at the hoodie's armpits; choose which clothing to fit (and slots/looks that use it), hiding the body under clothing if it pokes through, LODs (only LOD 0 is fitted); then merge.
 - Optional: link VFX/sound in `DA_CueTable`.
 - List the Fab packs used in `Content/ZZ_FAB/` in `Docs/Licenses/README.md`.
