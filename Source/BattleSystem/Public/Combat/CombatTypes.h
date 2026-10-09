@@ -47,6 +47,8 @@ enum class ECombatLookSlot : uint8
 	FacialHair,
 	/** Eyebrows, masks, a clown nose, piercings, earrings, a pacifier, a bandage. */
 	FaceAccessory,
+	/** On the body: a bracelet, a chain, a stethoscope, knee and elbow pads. */
+	Accessory,
 };
 
 /** Shape of an area attack. */
