@@ -5,6 +5,8 @@
 - Ik doe zelf het editor-/designerwerk (layouts, Blueprints, wiring, tuning via Project Settings).
   Jij doet code, scripts, diagnose en uitleg. Moet iets in de editor gebeuren, beschrijf dan
   stap voor stap wat ik moet doen.
+- "Screenshot bijgevoegd" (of "zie screenshot") betekent: de nieuwste afbeelding in `Docs/Screenshots/`
+  (lokaal, gitignored). Lees die zelf; screenshots komen niet mee in het bericht.
 
 ## Werkwijze bij nieuwe features
 1. Stel eerst gerichte vragen (meerkeuze, met een aanbevolen optie).

@@ -264,7 +264,7 @@ Code: `Source/BattleSystem/{Public,Private}/Combat/`. Layers: grid ← simulatio
 
 - `ACombatGameMode` uses `ACombatHUD`. At BeginPlay the HUD adds four Slate panels (control panel top left, unit list top right, LevelDesigner bottom left, spawn list bottom right). The control panel is at the top left of the game viewport, inside a full-screen box that lets clicks elsewhere through. It shows the mouse cursor and sets input to Game+UI, so the console still works.
 - Panel controls (built in code, English labels):
-  - Level: the name of the LevelDesigner level (`GetDesignLevel`), read only; it is chosen in the LevelDesigner. When play starts it is `UCombatSettings::DefaultLevel` (`EnsureDesignLevel`, a new empty level if that file is missing). There is no setup choice: `UCombatSetup` fights only come from the console (`Combat.Start/Simulate/Batch <setup>`) and the auto-start.
+  - Level: the name of the LevelDesigner level (`GetDesignLevel`), read only; it is chosen in the LevelDesigner. When play starts it is `UCombatSettings::DefaultLevel` (`EnsureDesignLevel`, a new empty level if that file is missing).
   - Seed field and a Random seed button.
   - Start / Restart (`PlayDesignLevel`: the LevelDesigner level as it is, saved or not), Stop, Pause/Resume, Walls (Up / Cutaway / Down, V) and Reset camera (F).
   - Waves (only for a fight with waves): `GetWaveText()` and a **Call wave** button (disabled when `CanCallWave()` is false).

@@ -9,7 +9,10 @@ pack's adult head (width and depth of the vertices above the Neck bone), and the
 forward on the child's head as on the adult one. All LODs; skin weights, UVs and materials stay.
 
 Every run starts again from a fresh copy (an existing copy is replaced), so the fit never adds up. The packs are local
-content, and so are the copies. TUNE_SCALE (per pack) multiplies the measured scale, for tuning by eye.
+content, and so are the copies. A headless run (no renderer) saves the copies without thumbnails; to get them, save the
+copies once from the running editor (Output Log, Python):
+    import unreal; [unreal.EditorAssetLibrary.save_asset(a, only_if_is_dirty=False) for a in unreal.EditorAssetLibrary.list_assets('/Game/Characters/Meshes/Child/Hats', recursive=False)]
+(the editor renders a thumbnail for every asset whose stored one is empty when it saves it). TUNE_SCALE (per pack) multiplies the measured scale, for tuning by eye.
 """
 
 import unreal
