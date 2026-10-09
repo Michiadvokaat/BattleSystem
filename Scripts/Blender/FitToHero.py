@@ -19,6 +19,10 @@ bones the hero lacks move to their nearest ancestor it has. Finally the vertices
 nearest point (transfer_weights), so the clothing bends like the skin under it instead of poking through at the joints; loose
 parts further away (hoods, hems) keep their own.
 
+Every part also gets the hide zones of the hero's body it covers ("hide_zones" in fitted.json, a bit mask over
+BODY_ZONES; covered_zones), and body_zones.json lists the hero's skin vertices with their zone for
+Scripts/CreateBodyZones.py, which writes the zones into the bodies' vertex colors.
+
 All measuring happens in Blender's world space after the FBX import, so the units and axes of the import cancel out.
 """
 
@@ -58,6 +62,23 @@ WEIGHT_FAR = 0.06
 # Clothing: at most this many bones per vertex, and smaller weights are dropped.
 MAX_INFLUENCES = 8
 MIN_WEIGHT = 0.01
+# Hide zones of the hero's body, in the bit order of ECombatBodyZone (CombatHideZones.h); the two must match.
+BODY_ZONES = ("Neck", "Collar", "Chest", "Waist", "Pelvis", "UpperArmL", "UpperArmR", "ForeArmL", "ForeArmR", "HandL", "HandR",
+              "ThighL", "ThighR", "ShinL", "ShinR", "FootL", "FootR", "Crown", "BackOfHead", "Ears")
+# The head is one bone, so its zones come from the shape, as fractions of the head (its vertices) from the Head bone:
+# the crown above HEAD_CROWN of the height to the top, the back of the head behind HEAD_BACK of the depth to the back,
+# the ears beyond HEAD_EARS of the half width (below the crown). The face never gets a zone.
+HEAD_CROWN = 0.55
+# The trunk (Chest, Waist, Pelvis by bone) is cut in bands by height, as fractions from the Hips to the Neck bone: Pelvis
+# below TRUNK_PELVIS (in the overlap of a top's hem and the pants' waist), Collar above TRUNK_COLLAR (the neck opening).
+TRUNK_PELVIS = 0.105
+TRUNK_COLLAR = 0.9
+HEAD_BACK = 0.25
+HEAD_EARS = 0.8
+# A clothing piece covers a zone when the rays out of at least COVER_FRACTION of the zone's skin vertices (along their
+# normals) hit it within COVER_DISTANCE (m).
+COVER_DISTANCE = 0.08
+COVER_FRACTION = 0.95
 
 
 def log(message):
@@ -461,6 +482,105 @@ def fit_clothing(mesh, armature, hero, girths, surface):
     return pushed, transfer_weights(mesh, surface)
 
 
+def bone_zone(bone):
+    """The hide zone of the skin that follows a bone most (index into BODY_ZONES), None for the head (by shape) and
+    unknown bones. Trunk zones are cut by height afterwards (body_zones)."""
+    side = "L" if bone.startswith("Left") else "R" if bone.startswith("Right") else ""
+    rest = bone[4:] if side == "L" else bone[5:] if side == "R" else bone
+    if not side:
+        name = {"Neck": "Neck", "Spine1": "Chest", "Spine2": "Chest", "Spine": "Waist", "Hips": "Pelvis"}.get(bone)
+    elif rest == "Shoulder":
+        name = "Chest"
+    elif rest.startswith("ForeArm"):
+        name = "ForeArm" + side
+    elif rest.startswith("Arm"):
+        name = "UpperArm" + side
+    elif rest.startswith("Hand"):
+        name = "Hand" + side
+    elif rest.startswith("UpLeg"):
+        name = "Thigh" + side
+    elif rest.startswith("Leg"):
+        name = "Shin" + side
+    elif rest.startswith(("Foot", "Toe")):
+        name = "Foot" + side
+    else:
+        name = None
+    return BODY_ZONES.index(name) if name else None
+
+
+def body_zones(armature, meshes):
+    """Per mesh, the hide zone of every vertex (index into BODY_ZONES, -1 for the face): by its main bone, on the trunk
+    by height (TRUNK_PELVIS, TRUNK_COLLAR), on the head by its place on the head (HEAD_CROWN, HEAD_BACK, HEAD_EARS; the
+    character faces -Y)."""
+    head = bone_world(armature, HEAD_BONE)
+    hips_z = bone_world(armature, HIPS_BONE).z
+    trunk_height = bone_world(armature, NECK_BONE).z - hips_z
+    trunk = {BODY_ZONES.index(name) for name in ("Collar", "Chest", "Waist", "Pelvis")}
+    pelvis, collar = BODY_ZONES.index("Pelvis"), BODY_ZONES.index("Collar")
+    mains = [dominant_bones(mesh) for mesh in meshes]
+    on_head = [mesh.matrix_world @ v.co for mesh, bones in zip(meshes, mains)
+               for v, bone in zip(mesh.data.vertices, bones) if bone == HEAD_BONE]
+    top = max(p.z for p in on_head)
+    back = max(p.y for p in on_head)
+    half_width = max(abs(p.x - head.x) for p in on_head)
+    crown, ears, back_of_head = BODY_ZONES.index("Crown"), BODY_ZONES.index("Ears"), BODY_ZONES.index("BackOfHead")
+    result = []
+    for mesh, bones in zip(meshes, mains):
+        zones = []
+        for v, bone in zip(mesh.data.vertices, bones):
+            if bone != HEAD_BONE:
+                zone = bone_zone(bone) if bone else None
+                if zone in trunk:
+                    height = ((mesh.matrix_world @ v.co).z - hips_z) / trunk_height
+                    zone = pelvis if height < TRUNK_PELVIS else collar if height > TRUNK_COLLAR else zone
+                    # Waist skin below the pelvis line, or chest skin, stays as it is; the hips' skin above it is waist.
+                    if zone == pelvis and height >= TRUNK_PELVIS:
+                        zone = BODY_ZONES.index("Waist")
+            else:
+                p = mesh.matrix_world @ v.co
+                if p.z > head.z + HEAD_CROWN * (top - head.z):
+                    zone = crown
+                elif abs(p.x - head.x) > HEAD_EARS * half_width:
+                    zone = ears
+                elif p.y > head.y + HEAD_BACK * (back - head.y):
+                    zone = back_of_head
+                else:
+                    zone = None
+            zones.append(-1 if zone is None else zone)
+        result.append(zones)
+    return result
+
+
+def zone_coverage(part, body_meshes, zones):
+    """Per zone (BODY_ZONES) the fraction of its skin vertices whose ray out of the skin, along the vertex normal, hits the
+    part within COVER_DISTANCE."""
+    tree = BVHTree.FromPolygons([part.matrix_world @ v.co for v in part.data.vertices],
+                                [list(p.vertices) for p in part.data.polygons])
+    hits, totals = [0] * len(BODY_ZONES), [0] * len(BODY_ZONES)
+    for mesh, mesh_zones in zip(body_meshes, zones):
+        to_world = mesh.matrix_world
+        turn = to_world.to_3x3()
+        for v, zone in zip(mesh.data.vertices, mesh_zones):
+            if zone < 0:
+                continue
+            totals[zone] += 1
+            normal = (turn @ v.normal).normalized()
+            location, *_ = tree.ray_cast(to_world @ v.co + normal * 0.001, normal, COVER_DISTANCE)
+            if location is not None:
+                hits[zone] += 1
+    return [hits[z] / totals[z] if totals[z] else 0.0 for z in range(len(BODY_ZONES))]
+
+
+def covered_zones(part, body_meshes, zones):
+    """The zones (bit mask over BODY_ZONES) the part covers: at least COVER_FRACTION of their skin (zone_coverage)."""
+    coverage = zone_coverage(part, body_meshes, zones)
+    return sum(1 << z for z, fraction in enumerate(coverage) if fraction >= COVER_FRACTION)
+
+
+def zone_names(mask):
+    return [name for z, name in enumerate(BODY_ZONES) if mask & (1 << z)]
+
+
 def weight_rigid(mesh, bone):
     mesh.vertex_groups.clear()
     group = mesh.vertex_groups.new(name=bone)
@@ -500,6 +620,7 @@ def main():
     log(f"Hero head bone {tuple(round(x, 4) for x in child[0])}, head box {tuple(round(x, 4) for x in child[2] - child[1])}")
     hero_extents = body_extents(hero, hero_meshes)
     hero_surface = BodySurface(hero_meshes)
+    hero_zones = body_zones(hero, hero_meshes)
     for m in hero_meshes:
         m.hide_set(True)
 
@@ -534,13 +655,22 @@ def main():
                     f"{skin} with the body's weights")
             delete([armature] + others)
             mesh.name = part["name"]
+            hide_zones = covered_zones(mesh, hero_meshes, hero_zones)
+            if hide_zones:
+                log(f"{part['name']}: hides {', '.join(zone_names(hide_zones))}")
             path = os.path.join(fitted_dir, part["name"] + ".fbx")
             export_fbx(path, hero, mesh)
             delete([mesh])
-            fitted.append({"name": part["name"], "fbx": part["name"] + ".fbx", "source": part["source"], "target": part["target"]})
+            fitted.append({"name": part["name"], "fbx": part["name"] + ".fbx", "source": part["source"], "target": part["target"],
+                           "hide_zones": hide_zones})
 
     with open(os.path.join(fitted_dir, "fitted.json"), "w", encoding="utf-8") as f:
         json.dump({"parts": fitted}, f, indent="\t")
+    # The hero's skin vertices with their zone, for Scripts/CreateBodyZones.py (Blender world space, m).
+    points = [[round(c, 5) for c in mesh.matrix_world @ v.co] + [zone]
+              for mesh, zones in zip(hero_meshes, hero_zones) for v, zone in zip(mesh.data.vertices, zones)]
+    with open(os.path.join(fitted_dir, "body_zones.json"), "w", encoding="utf-8") as f:
+        json.dump({"zones": list(BODY_ZONES), "points": points}, f)
     log(f"{len(fitted)} parts in {fitted_dir}")
     log("Done")
 

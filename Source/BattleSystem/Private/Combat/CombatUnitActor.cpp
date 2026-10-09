@@ -2,6 +2,7 @@
 
 #include "Combat/CombatUnitActor.h"
 #include "Combat/CombatAnimation.h"
+#include "Combat/CombatHideZones.h"
 #include "Combat/CombatMeshMergeCache.h"
 #include "Combat/CombatSubsystem.h"
 #include "Combat/CombatTags.h"
@@ -191,6 +192,12 @@ void ACombatUnitActor::InitLook(const FCombatLook& InLook, int32 Seed)
 			AddPartComponent(MergedParts[Index]);
 		}
 	}
+	MergedHideZones = 0;
+	for (const USkeletalMesh* Part : MergedParts)
+	{
+		MergedHideZones |= UCombatHideZonesLibrary::GetHideZones(Part);
+	}
+	ZoneMaterials = UCombatHideZonesLibrary::GetZoneMaterials(CharacterMesh);
 	CharacterMesh->SetRelativeRotation(Look.MeshRotation);
 	LookMeshScale = Look.GetMeshScale();
 	CharacterMesh->SetRelativeScale3D(LookMeshScale);
@@ -234,6 +241,7 @@ void ACombatUnitActor::InitLook(const FCombatLook& InLook, int32 Seed)
 			AddSwappableSlot(Override.Slot, nullptr);
 		}
 	}
+	UpdateHideZones();
 
 	for (const FCombatLookProp& Prop : Look.Props)
 	{
@@ -337,6 +345,24 @@ void ACombatUnitActor::RefreshSwappableSlot(int32 Index)
 		Component->SetLeaderPoseComponent(CharacterMesh, true);
 	}
 	Component->SetVisibility(Mesh != nullptr);
+	UpdateHideZones();
+}
+
+void ACombatUnitActor::UpdateHideZones()
+{
+	if (ZoneMaterials.IsEmpty())
+	{
+		return;
+	}
+	int32 Zones = MergedHideZones;
+	for (const USkeletalMeshComponent* Component : SwappableComponents)
+	{
+		if (Component->IsVisible())
+		{
+			Zones |= UCombatHideZonesLibrary::GetHideZones(Component->GetSkeletalMeshAsset());
+		}
+	}
+	UCombatHideZonesLibrary::ApplyHideZones(ZoneMaterials, Zones);
 }
 
 void ACombatUnitActor::SetHealth(float Fraction)

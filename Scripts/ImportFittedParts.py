@@ -4,7 +4,8 @@ Step 3 of Scripts/FitChildHats.ps1; run headless with the editor closed:
     UnrealEditor-Cmd.exe BattleSystem.uproject -run=pythonscript -script="<abs path>/Scripts/ImportFittedParts.py" -unattended -nullrhi -nosplash
 
 Reads FITTED_DIR/fitted.json. Each part replaces the asset at its target path (soft references to it, such as a look in
-DT_Units, keep working) and gets the materials of its source asset back by slot index, so no materials are imported.
+DT_Units, keep working), gets the materials of its source asset back by slot index, so no materials are imported, and gets
+the body zones it covers ("hide_zones", UCombatHideZones; the bodies hide them, see Scripts/CreateBodyZones.py).
 A headless run (no renderer) saves the parts without thumbnails; to get them, save them once from the running editor
 (Output Log, Python):
     import unreal; [unreal.EditorAssetLibrary.save_asset(a, only_if_is_dirty=False) for a in unreal.EditorAssetLibrary.list_assets('/Game/Characters/Meshes/Child/Hats', recursive=False)]
@@ -94,6 +95,7 @@ def main():
         if not on_skeleton(mesh, skeleton):
             raise RuntimeError(f"{LOG_TAG} {part['target']} did not land on {skeleton.get_path_name()}")
         copy_materials(unreal.load_asset(part["source"]), mesh)
+        unreal.CombatHideZonesLibrary.set_hide_zones(mesh, part.get("hide_zones", 0))
         if not unreal.EditorAssetLibrary.save_loaded_asset(mesh, only_if_is_dirty=False):
             raise RuntimeError(f"{LOG_TAG} Could not save {part['target']}")
     log(f"{len(parts)} parts on {skeleton.get_path_name()}")

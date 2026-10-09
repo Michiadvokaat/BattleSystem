@@ -1,8 +1,10 @@
 # Fits the adult hats and chosen clothing of the Fab packs to the hero skeleton SKEL_Hero (editor must be closed):
 #   1. Scripts/ExportAdultParts.py (UE): hats, clothing, an adult body per pack and the hero to FBX in D:/Unreal/Assets/Blender/Export
 #   2. Scripts/Blender/FitToHero.py (Blender): fit and rebind each part, to D:/Unreal/Assets/Blender/Fitted
-#   3. Scripts/ImportFittedParts.py (UE): import onto SKEL_Hero in /Game/Characters/Meshes/Child/Hats and .../Child/Clothing
-# Each step stops the run when it fails. The log tags are [AdultParts], [FitToHero] and [FittedParts].
+#   3. Scripts/ImportFittedParts.py (UE): import onto SKEL_Hero in /Game/Characters/Meshes/Child/Hats and .../Child/Clothing,
+#      with the body zones each part covers
+#   4. Scripts/CreateBodyZones.py (UE): zone codes and the masked zone material on the child bodies
+# Each step stops the run when it fails. The log tags are [AdultParts], [FitToHero], [FittedParts] and [BodyZones].
 
 $ErrorActionPreference = "Stop"
 $UE      = "C:\Program Files\Epic Games\UE_5.8\Engine\Binaries\Win64\UnrealEditor-Cmd.exe"
@@ -32,5 +34,6 @@ Invoke-UnrealScript "ExportAdultParts.py" "[AdultParts]" -WithRenderer
 if ($LASTEXITCODE -ne 0) { throw "FitToHero.py failed" }
 
 Invoke-UnrealScript "ImportFittedParts.py" "[FittedParts]"
+Invoke-UnrealScript "CreateBodyZones.py" "[BodyZones]"
 # The editor's own exit code says nothing about the scripts; their "Done" lines were checked above.
 exit 0
