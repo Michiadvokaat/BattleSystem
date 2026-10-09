@@ -1,4 +1,5 @@
-"""Exports the adult hats (SK_Hat_*) of the Fab packs, an adult body per pack and the hero mesh to FBX, for Blender.
+"""Exports the adult hats (SK_Hat_*) and chosen clothing of the Fab packs, an adult body per pack and the hero mesh to FBX,
+for Blender.
 
 Step 1 of Scripts/FitChildHats.ps1; run with the editor closed, in editor mode WITH a renderer (no -run=pythonscript, no
 -nullrhi): the FBX exporter of skeletal meshes needs a rendered mesh and asserts on "MeshObject" without one. A window opens
@@ -18,6 +19,7 @@ import unreal
 LOG_TAG = "[AdultParts]"
 EXPORT_DIR = "D:/Unreal/Assets/Blender/Export"
 TARGET_PATH = "/Game/Characters/Meshes/Child/Hats"
+CLOTHING_PATH = "/Game/Characters/Meshes/Child/Clothing"
 HERO_MESH = "/Game/Characters/Meshes/SKM_Hero.SKM_Hero"
 
 # (pack folder, name in the copy, an adult body of the pack to measure its head, scale multiplier)
@@ -25,6 +27,11 @@ PACKS = [
     ("/Game/ZZ_FAB/Creative_Characters/Skeleton_Meshes", "Creative", "/Game/ZZ_FAB/Creative_Characters/Skeleton_Meshes/SK_Body_001.SK_Body_001", 1.0),
     ("/Game/ZZ_FAB/Funny_Characters/Meshes", "Funny", "/Game/ZZ_FAB/Funny_Characters/Meshes/SK_Body_Blue_001.SK_Body_Blue_001", 1.0),
 ]
+# Clothing to fit (skinned, follows the body), per pack name -> mesh names in the pack folder. Experiment: a few test pieces.
+CLOTHING = {
+    "Creative": ["SK_Costume_11_001", "SK_Outwear_001", "SK_Pants_001"],
+    "Funny": ["SK_Outerwear_Blue_001"],
+}
 
 
 def log(message):
@@ -72,6 +79,12 @@ def main():
             export_fbx(unreal.load_asset(f"{folder}/{name}"), f"{EXPORT_DIR}/{pack_name}/{name}.fbx")
             parts.append({"kind": "hat", "name": target_name, "fbx": f"{pack_name}/{name}.fbx",
                           "source": f"{folder}/{name}", "target": f"{TARGET_PATH}/{target_name}"})
+        for name in CLOTHING.get(pack_name, []):
+            # SK_Outwear_001 -> SK_Creative_Outwear_001
+            target_name = f"SK_{pack_name}_{name[3:]}"
+            export_fbx(unreal.load_asset(f"{folder}/{name}"), f"{EXPORT_DIR}/{pack_name}/{name}.fbx")
+            parts.append({"kind": "clothing", "name": target_name, "fbx": f"{pack_name}/{name}.fbx",
+                          "source": f"{folder}/{name}", "target": f"{CLOTHING_PATH}/{target_name}"})
         packs.append({"name": pack_name, "body": f"{pack_name}/_Body.fbx", "tune": tune, "parts": parts})
         count += len(parts)
         log(f"{pack_name}: {len(parts)} parts")

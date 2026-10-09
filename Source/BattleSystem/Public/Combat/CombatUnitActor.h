@@ -203,6 +203,8 @@ private:
 	int32 AddSwappableSlot(ECombatLookSlot Slot, USkeletalMesh* BaseMesh);
 	/** Shows the slot's mesh: the first override whose tag is active, else the base mesh. */
 	void RefreshSwappableSlot(int32 Index);
+	/** Hides the body zones that the merged parts and the shown swappable meshes cover (UCombatHideZones). */
+	void UpdateHideZones();
 
 	/** The look shown (InitLook); empty Slots = the placeholder. */
 	UPROPERTY(Transient)
@@ -244,6 +246,12 @@ private:
 	TArray<TObjectPtr<USkeletalMesh>> SwappableBaseMeshes;
 
 	FGameplayTagContainer ActiveTags;
+
+	/** The body zones the merged parts cover, and the body materials that hide zones (dynamic instances on CharacterMesh). */
+	int32 MergedHideZones = 0;
+
+	UPROPERTY(Transient)
+	TArray<TObjectPtr<UMaterialInstanceDynamic>> ZoneMaterials;
 
 	/** Height of what is shown (BodyHeight or the look's mesh); the widgets and texts are placed by it. */
 	float VisualHeight = 0.f;
