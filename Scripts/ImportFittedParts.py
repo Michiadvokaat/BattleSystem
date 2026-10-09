@@ -1,6 +1,6 @@
 """Imports the parts fitted by Scripts/Blender/FitToHero.py onto the hero skeleton SKEL_Hero.
 
-Step 3 of Scripts/FitChildHats.ps1; run headless with the editor closed:
+Step 3 of Scripts/FitChildParts.ps1; run headless with the editor closed:
     UnrealEditor-Cmd.exe BattleSystem.uproject -run=pythonscript -script="<abs path>/Scripts/ImportFittedParts.py" -unattended -nullrhi -nosplash
 
 Reads FITTED_DIR/fitted.json. Each part replaces the asset at its target path (soft references to it, such as a look in

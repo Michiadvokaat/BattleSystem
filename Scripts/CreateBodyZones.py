@@ -1,6 +1,6 @@
 """Gives the child bodies their hide zones: a zone code per vertex, and a masked body material that hides zones.
 
-Step 4 of Scripts/FitChildHats.ps1; run headless with the editor closed:
+Step 4 of Scripts/FitChildParts.ps1; run headless with the editor closed:
     UnrealEditor-Cmd.exe BattleSystem.uproject -run=pythonscript -script="<abs path>/Scripts/CreateBodyZones.py" -unattended -nullrhi -nosplash
 
 Reads FITTED_DIR/body_zones.json, written by Scripts/Blender/FitToHero.py: the hero's skin vertices (Blender world space,

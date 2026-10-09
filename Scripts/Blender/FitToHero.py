@@ -1,6 +1,6 @@
 """Fits adult parts (FBX exported from UE) to the hero (child) skeleton SKEL_Hero, in Blender.
 
-Run headless (step 2 of Scripts/FitChildHats.ps1):
+Run headless (step 2 of Scripts/FitChildParts.ps1):
     blender.exe -b --factory-startup -P <abs path>/Scripts/Blender/FitToHero.py -- <export dir> <fitted dir>
 
 Reads <export dir>/manifest.json, written by Scripts/ExportAdultParts.py: the hero mesh, and per pack an adult body and its
@@ -76,9 +76,14 @@ TRUNK_COLLAR = 0.9
 HEAD_BACK = 0.25
 HEAD_EARS = 0.8
 # A clothing piece covers a zone when the rays out of at least COVER_FRACTION of the zone's skin vertices (along their
-# normals) hit it within COVER_DISTANCE (m).
+# normals) hit it within COVER_DISTANCE (m); for the limbs COVER_FRACTION_LIMBS, because the skin a sleeve or trouser leg
+# misses there is mostly out of sight (the inner thighs at the crotch), while a trunk or head zone hidden too early shows a
+# hole.
 COVER_DISTANCE = 0.08
 COVER_FRACTION = 0.95
+COVER_FRACTION_LIMBS = 0.9
+LIMB_ZONES = ("UpperArmL", "UpperArmR", "ForeArmL", "ForeArmR", "HandL", "HandR", "ThighL", "ThighR", "ShinL", "ShinR",
+              "FootL", "FootR")
 
 
 def log(message):
@@ -572,9 +577,11 @@ def zone_coverage(part, body_meshes, zones):
 
 
 def covered_zones(part, body_meshes, zones):
-    """The zones (bit mask over BODY_ZONES) the part covers: at least COVER_FRACTION of their skin (zone_coverage)."""
+    """The zones (bit mask over BODY_ZONES) the part covers: at least COVER_FRACTION of their skin (zone_coverage), of a
+    limb COVER_FRACTION_LIMBS."""
     coverage = zone_coverage(part, body_meshes, zones)
-    return sum(1 << z for z, fraction in enumerate(coverage) if fraction >= COVER_FRACTION)
+    return sum(1 << z for z, fraction in enumerate(coverage)
+               if fraction >= (COVER_FRACTION_LIMBS if BODY_ZONES[z] in LIMB_ZONES else COVER_FRACTION))
 
 
 def zone_names(mask):

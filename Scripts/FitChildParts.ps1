@@ -1,10 +1,15 @@
-# Fits the adult hats and chosen clothing of the Fab packs to the hero skeleton SKEL_Hero (editor must be closed):
-#   1. Scripts/ExportAdultParts.py (UE): hats, clothing, an adult body per pack and the hero to FBX in D:/Unreal/Assets/Blender/Export
+# Fits the adult hats and clothing of the Fab packs to the hero skeleton SKEL_Hero (editor must be closed):
+#   1. Scripts/ExportAdultParts.py (UE): the parts of the chosen categories, an adult body per pack and the hero to FBX in
+#      D:/Unreal/Assets/Blender/Export
 #   2. Scripts/Blender/FitToHero.py (Blender): fit and rebind each part, to D:/Unreal/Assets/Blender/Fitted
-#   3. Scripts/ImportFittedParts.py (UE): import onto SKEL_Hero in /Game/Characters/Meshes/Child/Hats and .../Child/Clothing,
+#   3. Scripts/ImportFittedParts.py (UE): import onto SKEL_Hero in /Game/Characters/Meshes/Child/<Hats|Outwear|Pants>,
 #      with the body zones each part covers
 #   4. Scripts/CreateBodyZones.py (UE): zone codes and the masked zone material on the child bodies
+# -Parts picks the categories (Hats, Outwear, Pants; default all), e.g. -Parts Outwear,Pants: the other categories' copies
+# are left alone (and keep their thumbnails).
 # Each step stops the run when it fails. The log tags are [AdultParts], [FitToHero], [FittedParts] and [BodyZones].
+
+param([string[]]$Parts = @())
 
 $ErrorActionPreference = "Stop"
 $UE      = "C:\Program Files\Epic Games\UE_5.8\Engine\Binaries\Win64\UnrealEditor-Cmd.exe"
@@ -16,10 +21,10 @@ $Export  = "D:/Unreal/Assets/Blender/Export"
 $Fitted  = "D:/Unreal/Assets/Blender/Fitted"
 
 # Commandlet mode, or editor mode with a renderer (-WithRenderer): the FBX export needs a rendered mesh (a window opens briefly).
-function Invoke-UnrealScript([string]$Script, [string]$Tag, [switch]$WithRenderer) {
+function Invoke-UnrealScript([string]$Script, [string]$Tag, [switch]$WithRenderer, [string]$Arguments = "") {
     $path = "$($Root -replace '\\', '/')/Scripts/$Script"
-    if ($WithRenderer) { & $UE $Project -unattended -nosplash -nosound -ExecCmds="py $path, QUIT_EDITOR" | Out-Null }
-    else { & $UE $Project -run=pythonscript -script="$path" -unattended -nullrhi -nosplash | Out-Null }
+    if ($WithRenderer) { & $UE $Project -unattended -nosplash -nosound -ExecCmds="py $path $Arguments, QUIT_EDITOR" | Out-Null }
+    else { & $UE $Project -run=pythonscript -script="$path $Arguments" -unattended -nullrhi -nosplash | Out-Null }
     $lines = Select-String -Path $Log -Pattern ([regex]::Escape($Tag)) | ForEach-Object { $_.Line }
     $lines | Write-Host
     if (-not ($lines -match "$([regex]::Escape($Tag)) Done")) { throw "$Script failed; see $Log" }
@@ -27,7 +32,7 @@ function Invoke-UnrealScript([string]$Script, [string]$Tag, [switch]$WithRendere
 
 if (Get-Process UnrealEditor -ErrorAction SilentlyContinue) { throw "Close the Unreal editor first." }
 
-Invoke-UnrealScript "ExportAdultParts.py" "[AdultParts]" -WithRenderer
+Invoke-UnrealScript "ExportAdultParts.py" "[AdultParts]" -WithRenderer -Arguments (($Parts -split ",") -join " ")
 
 & $Blender -b --factory-startup --python-exit-code 1 -P "$Root\Scripts\Blender\FitToHero.py" -- $Export $Fitted |
     Where-Object { $_ -match "\[FitToHero\]" } | Write-Host
