@@ -7,7 +7,7 @@ briefly. The arguments are the categories to export (CATEGORIES; none = all):
 
 A part's category comes from its name (category_of): SK_Hat_* are hats (copies SK_Hat_<Pack>_*), the others are copied as
 SK_<Pack>_*: tops (Outwear, Outerwear, Outfit), pants (Pants, Shorts), facewear (faces, glasses, facial hair, eyebrows and
-small face pieces; FACEWEAR) and shoes (Shoe, Socks). Of a pack with colour variants (COLOR_VARIANTS) only one colour of
+small face pieces; FACEWEAR), shoes (Shoe, Socks) and hair (SK_Hair_*, SK_Hairstyle_*). Of a pack with colour variants (COLOR_VARIANTS) only one colour of
 the listed categories is taken. For facewear the export also holds a neutral face of the pack and of the child
 (FACE_REFERENCES, CHILD_FACE), which FitToHero.py lines up to place the face parts.
 
@@ -32,6 +32,7 @@ CATEGORIES = {
     "Pants": ("/Game/Characters/Meshes/Child/Pants", "clothing"),
     "Facewear": ("/Game/Characters/Meshes/Child/Facewear", "face"),
     "Shoes": ("/Game/Characters/Meshes/Child/Shoes", "clothing"),
+    "Hair": ("/Game/Characters/Meshes/Child/Hair", "hair"),
 }
 FACEWEAR = r"emotion|Glasses|Mustache|Beard|Eyebrow|Clown_nose|Mask|Piercing|Earrings|Pacifier|Bandage"
 # The neutral faces FitToHero.py lines up: the child's, and per pack an adult one (none: the pack has no faces).
@@ -77,6 +78,8 @@ def export_fbx(mesh, path):
 def category_of(name):
     if name.startswith("SK_Hat_"):
         return "Hats"
+    if re.match(r"SK_Hair(style)?_", name):
+        return "Hair"
     if re.search(r"Outwear|Outerwear|Outfit", name):
         return "Outwear"
     if re.search(r"Pants|Shorts", name):

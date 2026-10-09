@@ -21,7 +21,9 @@ parts further away (hoods, hems) keep their own.
 
 Face parts ("kind": "face") are rigid on the Head bone like hats, but placed through a FaceFrame that lines the pack's neutral
 face up with the child's (or, for a pack without faces, its head with the child's), and what lies on the adult's skin is
-laid on the hero's (fit_face).
+laid on the hero's (fit_face). Hair ("kind": "hair", rigid on Head too) goes the same way through the frame of the heads,
+keeping its shape, and is inflated where the child's rounder skull pokes through; what lies deep inside the adult's head
+(a hair volume runs through the skull) stays hidden.
 
 Every part also gets the hide zones of the hero's body it covers ("hide_zones" in fitted.json, a bit mask over
 BODY_ZONES; covered_zones), and body_zones.json lists the hero's skin vertices with their zone for
@@ -37,6 +39,7 @@ import sys
 import bpy
 from mathutils import Matrix, Vector
 from mathutils.bvhtree import BVHTree
+from mathutils.kdtree import KDTree
 from mathutils.interpolate import poly_3d_calc
 
 LOG_TAG = "[FitToHero]"
@@ -72,6 +75,16 @@ MIN_WEIGHT = 0.01
 CONFORM_NEAR = 0.01
 CONFORM_FAR = 0.03
 FACE_MARGIN = 0.0015
+# Face parts and hair: what lies deeper than HIDDEN_DEPTH (m) inside the adult's head is hidden geometry (a hair volume runs
+# through the skull behind the face); it only follows the frame and is never laid on or pushed out of the hero's skin.
+HIDDEN_DEPTH = 0.005
+# Hair: the child's skull is rounder than the adult's, so after the frame it pokes through the hair in places. Where it does,
+# the push out of the skin is spread over everything within HAIR_INFLATE_RADIUS (m), fading with the distance, so the inner
+# and outer layers of the hair move together and it keeps its thickness and shape (inflate).
+HAIR_INFLATE_RADIUS = 0.03
+# Hair lies on the skull, but at least HAIR_MARGIN (m) out of it: a thin layer that lay on the adult's scalp would otherwise
+# land 1.5 mm above the child's, too close for its coarse faces (the skin shows through between them).
+HAIR_MARGIN = 0.004
 # Mustaches (names with UNDER_NOSE) are moved up or down so the top of their middle (within UNDER_NOSE_WIDTH m of the centre
 # line) sits UNDER_NOSE_GAP (m) below the hero's nose: the frames place them by the adult's face, whose nose and mouth sit
 # elsewhere relative to each other.
@@ -430,11 +443,15 @@ class BodySurface:
         return result
 
 
-def push_out(points, surface, margin):
-    """Moves the points that are inside the body, or closer to it than margin, out along the nearest face's normal."""
+def push_out(points, surface, margin, movable=None):
+    """Moves the points that are inside the body, or closer to it than margin, out along the nearest face's normal (only
+    those flagged in movable, when given)."""
     pushed = 0
     result = []
-    for p in points:
+    for i, p in enumerate(points):
+        if movable is not None and not movable[i]:
+            result.append(p)
+            continue
         location, normal, _index, _distance = surface.tree.find_nearest(p)
         if location is not None and (p - location).dot(normal) < margin:
             p = location + normal * margin
@@ -542,32 +559,70 @@ def nose_bottom(armature, meshes):
     return min(p.z for p in nose)
 
 
-def fit_face(mesh, frame, adult_surface, hero_surface, under_nose=None):
+def inflate(points, surface, margin, radius, movable):
+    """Moves the movable points out of the body smoothly: every one that is inside the skin (or closer than margin) needs a
+    push along the skin's normal; each movable point gets the largest of the pushes within radius, faded by the distance."""
+    pushes = []
+    for i, p in enumerate(points):
+        if not movable[i]:
+            continue
+        location, normal, _index, _distance = surface.tree.find_nearest(p)
+        if location is not None:
+            need = margin - (p - location).dot(normal)
+            if need > 0.0:
+                pushes.append((i, normal * need))
+    if not pushes:
+        return points, 0
+    tree = KDTree(len(pushes))
+    for k, (i, _push) in enumerate(pushes):
+        tree.insert(points[i], k)
+    tree.balance()
+    result = []
+    for i, p in enumerate(points):
+        if not movable[i]:
+            result.append(p)
+            continue
+        best = None
+        for _co, k, distance in tree.find_range(p, radius):
+            push = pushes[k][1] * (1.0 - distance / radius)
+            if best is None or push.length > best.length:
+                best = push
+        result.append(p + best if best is not None else p)
+    return result, len(pushes)
+
+
+def fit_face(mesh, frame, adult_surface, hero_surface, under_nose=None, hair=False):
     """Moves a face part through the frame (and, given under_nose, up or down so the top of its middle sits UNDER_NOSE_GAP
     below that height), lays what lies on the adult's skin onto the hero's (CONFORM_NEAR..CONFORM_FAR), keeps it
-    FACE_MARGIN out of the hero's skin and rebinds it rigidly to the Head bone. Returns how many vertices were laid on the
-    skin."""
+    FACE_MARGIN out of the hero's skin and rebinds it rigidly to the Head bone. Hair is not laid on the skin (it keeps the
+    frame's shape) but inflated where the skull pokes through, HAIR_MARGIN out of it. What lies deeper than HIDDEN_DEPTH
+    inside the adult's head only follows the frame. Returns how many vertices were laid on the skin."""
+    margin = HAIR_MARGIN if hair else FACE_MARGIN
     shift = Vector((0.0, 0.0, 0.0))
     if under_nose is not None:
         mapped = [frame(mesh.matrix_world @ v.co) for v in mesh.data.vertices]
         middle = [q for q in mapped if abs(q.x - frame.child_centre.x) < UNDER_NOSE_WIDTH] or mapped
         shift.z = under_nose - UNDER_NOSE_GAP - max(q.z for q in middle)
     points = []
+    movable = []
     laid = 0
     for v in mesh.data.vertices:
         p = mesh.matrix_world @ v.co
         q = frame(p) + shift
         location, normal, _index, _distance = adult_surface.tree.find_nearest(p)
         height = (p - location).dot(normal) if location is not None else CONFORM_FAR
+        movable.append(height > -HIDDEN_DEPTH)
         on_skin = max(0.0, min(1.0, (CONFORM_FAR - height) / (CONFORM_FAR - CONFORM_NEAR)))
-        if on_skin > 0.0:
+        if on_skin > 0.0 and movable[-1] and not hair:
             hero_location, hero_normal, _i, _d = hero_surface.tree.find_nearest(q)
             if hero_location is not None:
-                skin = hero_location + hero_normal * max(FACE_MARGIN, height * frame.mean_scale)
+                skin = hero_location + hero_normal * max(margin, height * frame.mean_scale)
                 q = q.lerp(skin, on_skin)
                 laid += on_skin >= 1.0
         points.append(q)
-    points, _pushed = push_out(points, hero_surface, FACE_MARGIN)
+    if hair:
+        points, _inside = inflate(points, hero_surface, margin, HAIR_INFLATE_RADIUS, movable)
+    points, _pushed = push_out(points, hero_surface, margin, movable)
     rebind(mesh, hero_surface.armature, points)
     weight_rigid(mesh, HEAD_BONE)
     return laid
@@ -731,6 +786,8 @@ def main():
         scale, offset = fit_head(child, adult, pack.get("tune", 1.0))
         girths = girth_ratios(body_extents(body, body_meshes, set(hero.data.bones.keys())), hero_extents)
         face_frame = None
+        # Hair lies on the skull: its frame lines the heads up (the skin above the neck).
+        head_frame = FaceFrame(adult[1], adult[2], child[1], child[2])
         if any(part["kind"] == "face" for part in pack["parts"]):
             # Lined up on the faces when the pack has a neutral face, else on the heads (the skin above the neck).
             if pack.get("face") and child_face:
@@ -739,7 +796,7 @@ def main():
                 delete([face_armature] + face_meshes + face_others)
                 frame_source = "the neutral faces"
             else:
-                face_frame = FaceFrame(adult[1], adult[2], child[1], child[2])
+                face_frame = head_frame
                 frame_source = "the heads"
             log(f"{pack['name']}: face parts scaled {tuple(round(x, 3) for x in face_frame.scale)} on {frame_source}")
         adult_surface = BodySurface(body_meshes, body)
@@ -752,7 +809,7 @@ def main():
             return child[0] + scale * (p - adult_head) + offset
 
         for part in pack["parts"]:
-            if part["kind"] not in ("hat", "clothing", "face"):
+            if part["kind"] not in ("hat", "clothing", "face", "hair"):
                 raise RuntimeError(f"{LOG_TAG} {part['name']}: unknown kind {part['kind']}")
             armature, meshes, others = import_fbx(os.path.join(export_dir, part["fbx"]))
             if len(meshes) != 1:
@@ -761,9 +818,10 @@ def main():
             if part["kind"] == "hat":
                 rebind(mesh, hero, [place(mesh.matrix_world @ v.co) for v in mesh.data.vertices])
                 weight_rigid(mesh, HEAD_BONE)
-            elif part["kind"] == "face":
+            elif part["kind"] in ("face", "hair"):
                 under_nose = hero_nose if UNDER_NOSE in part["name"] else None
-                laid = fit_face(mesh, face_frame, adult_surface, hero_surface, under_nose)
+                frame = face_frame if part["kind"] == "face" else head_frame
+                laid = fit_face(mesh, frame, adult_surface, hero_surface, under_nose, part["kind"] == "hair")
                 log(f"{part['name']}: {len(mesh.data.vertices)} vertices, {laid} laid on the skin"
                     + (" (under the nose)" if under_nose is not None else ""))
             else:
