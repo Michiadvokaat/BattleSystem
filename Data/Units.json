@@ -20,12 +20,59 @@
 		"ActorClass": "None",
 		"Look":
 		{
-			"Slots": [],
+			"Slots": [
+				{
+					"Slot": "Body",
+					"Options": [
+						"/Game/ZZ_FAB/Creative_Characters/Skeleton_Meshes/SK_Body_009.SK_Body_009"
+					],
+					"EmptyChance": 0,
+					"bSwappable": false
+				},
+				{
+					"Slot": "Shirt",
+					"Options": [
+						"/Game/ZZ_FAB/Creative_Characters/Skeleton_Meshes/SK_Costume_11_001.SK_Costume_11_001"
+					],
+					"EmptyChance": 0,
+					"bSwappable": false
+				},
+				{
+					"Slot": "Hat",
+					"Options": [
+						"/Game/ZZ_FAB/Creative_Characters/Skeleton_Meshes/SK_Costume_11_002.SK_Costume_11_002"
+					],
+					"EmptyChance": 0,
+					"bSwappable": false
+				},
+				{
+					"Slot": "Gloves",
+					"Options": [
+						"/Game/ZZ_FAB/Creative_Characters/Skeleton_Meshes/SK_Costume_11_003.SK_Costume_11_003"
+					],
+					"EmptyChance": 0,
+					"bSwappable": false
+				},
+				{
+					"Slot": "Face",
+					"Options": [
+						"/Game/ZZ_FAB/Creative_Characters/Skeleton_Meshes/SK_Male_emotion_angry_002.SK_Male_emotion_angry_002"
+					],
+					"EmptyChance": 0,
+					"bSwappable": false
+				},
+				{
+					"Slot": "Shoes",
+					"Options": [],
+					"EmptyChance": 0,
+					"bSwappable": false
+				}
+			],
 			"Props": [],
 			"Overrides": [],
-			"AnimSet": "None",
+			"AnimSet": "/Game/Characters/Animations/DA_AnimSet_Child.DA_AnimSet_Child",
 			"UniformScale": 1,
-			"WidthScale": 1,
+			"WidthScale": 0.6,
 			"HeightScale": 1,
 			"MeshRotation":
 			{
@@ -86,16 +133,14 @@
 				{
 					"Slot": "Shirt",
 					"Options": [
-						"/Game/Characters/Heroes/Ranger/SKM_Ranger_Shirt.SKM_Ranger_Shirt"
+						"/Game/Characters/Meshes/Child/Outwear/SK_Creative_Outfit_008.SK_Creative_Outfit_008"
 					],
 					"EmptyChance": 0,
 					"bSwappable": false
 				},
 				{
 					"Slot": "Pants",
-					"Options": [
-						"/Game/Characters/Heroes/Ranger/SKM_Ranger_Pants.SKM_Ranger_Pants"
-					],
+					"Options": [],
 					"EmptyChance": 0,
 					"bSwappable": false
 				},
@@ -427,10 +472,51 @@
 		"ActorClass": "None",
 		"Look":
 		{
-			"Slots": [],
+			"Slots": [
+				{
+					"Slot": "Body",
+					"Options": [
+						"/Game/Characters/Meshes/SKM_Hero.SKM_Hero"
+					],
+					"EmptyChance": 0,
+					"bSwappable": false
+				},
+				{
+					"Slot": "Hat",
+					"Options": [
+						"/Game/Characters/Meshes/Child/Hats/Blender/ChildHats.ChildHats"
+					],
+					"EmptyChance": 0,
+					"bSwappable": true
+				},
+				{
+					"Slot": "Pants",
+					"Options": [
+						"/Game/Characters/Meshes/Child/Female/SKM_Child_Female_Pants_05.SKM_Child_Female_Pants_05"
+					],
+					"EmptyChance": 0,
+					"bSwappable": false
+				},
+				{
+					"Slot": "Shirt",
+					"Options": [
+						"/Game/Characters/Meshes/Child/Female/SKM_Child_Female_Shirt_05.SKM_Child_Female_Shirt_05"
+					],
+					"EmptyChance": 0,
+					"bSwappable": false
+				},
+				{
+					"Slot": "Shoes",
+					"Options": [
+						"/Game/Characters/Meshes/Child/Female/SKM_Child_Female_Shoes_04.SKM_Child_Female_Shoes_04"
+					],
+					"EmptyChance": 0,
+					"bSwappable": false
+				}
+			],
 			"Props": [],
 			"Overrides": [],
-			"AnimSet": "None",
+			"AnimSet": "/Game/Characters/Animations/DA_AnimSet_Child.DA_AnimSet_Child",
 			"UniformScale": 1,
 			"WidthScale": 1,
 			"HeightScale": 1,
@@ -518,7 +604,7 @@
 				{
 					"Slot": "Hat",
 					"Options": [
-						"/Game/ZZ_FAB/Creative_Characters/Skeleton_Meshes/SK_Hat_014.SK_Hat_014"
+						"/Game/Characters/Meshes/Child/Hats/SK_Hat_Funny_079.SK_Hat_Funny_079"
 					],
 					"EmptyChance": 0,
 					"bSwappable": true
