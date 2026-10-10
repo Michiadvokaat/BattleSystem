@@ -11,12 +11,13 @@ Follow the working agreements in @Docs/Werkafspraken.md (language, feature workf
 - `Docs/STATUS.md`: current state and open work. Read it at the start of a session.
 - `Docs/Ontwerp-Gevecht.md`: the design for the autobattle combat system (phases 1–6, in Dutch). When a phase is done or a decision changes, update its "Status" line and the "Besluiten" table.
 - `Docs/Architecture.md`: the mechanics of each built system.
+- `Docs/Pipeline.md`: headless scripts that create or update binary assets.
 - `Docs/DEVLOG.md`: dated history. Search it; don't read it in full.
 - `Docs/Licenses/README.md`: licenses for all third-party content.
 
 ## Project
 
-Unreal Engine **5.8** C++ project (`BattleSystem.uproject`, single runtime module `BattleSystem`). Third-party asset packs from Fab go in `Content/ZZ_FAB/`. That folder and the other local content folders (`Characters`, `Environment`, `Meshes`, `Materials`, `Textures`) are gitignored (except `Materials/M_DesignGhost`), so repo content that references them only resolves when they exist locally.
+Unreal Engine **5.8** C++ project (`BattleSystem.uproject`, runtime module `BattleSystem` and editor-only module `BattleSystemEditor` for Content Browser tools). Third-party asset packs from Fab go in `Content/ZZ_FAB/`. That folder and the other local content folders (`Characters`, `Environment`, `Meshes`, `Materials`, `Textures`) are gitignored (except `Materials/M_DesignGhost`), so repo content that references them only resolves when they exist locally.
 
 ## Build & run
 
@@ -41,39 +42,11 @@ $P  = "D:\Unreal\UnrealProjects\BattleSystem\BattleSystem.uproject"
 # Fill the unit and skill tables (/Game/Data/DT_Units, DT_Skills) from Data/Units.json and Data/Skills.json (editor must be closed).
 # Append " export" inside -script="..." to write the tables back to the JSON files after editing them in the editor.
 & "$UE\Engine\Binaries\Win64\UnrealEditor-Cmd.exe" "$P" -run=pythonscript -script="D:/Unreal/UnrealProjects/BattleSystem/Scripts/ImportCombatData.py" -unattended -nullrhi -nosplash
-
-# (Re)create the cue table /Game/Data/DA_CueTable (editor must be closed)
-& "$UE\Engine\Binaries\Win64\UnrealEditor-Cmd.exe" "$P" -run=pythonscript -script="D:/Unreal/UnrealProjects/BattleSystem/Scripts/CreateCueTable.py" -unattended -nullrhi -nosplash
-
-# Create or update the LevelDesigner piece catalog from /Game/Environment/Catalogus (local content; editor must be closed)
-& "$UE\Engine\Binaries\Win64\UnrealEditor-Cmd.exe" "$P" -run=pythonscript -script="D:/Unreal/UnrealProjects/BattleSystem/Scripts/CreatePieceCatalog.py" -unattended -nullrhi -nosplash
-
-# Make taller/lower copies of catalog meshes (editor mode, not -run=pythonscript; editor must be closed), then rerun CreatePieceCatalog.py
-& "$UE\Engine\Binaries\Win64\UnrealEditor-Cmd.exe" "$P" -unattended -nullrhi -nosplash -nosound -ExecCmds="py D:/Unreal/UnrealProjects/BattleSystem/Scripts/MakeWallVariants.py, QUIT_EDITOR"
-
-# (Re)create the LevelDesigner unit ghost material /Game/Materials/M_DesignGhost (editor must be closed)
-& "$UE\Engine\Binaries\Win64\UnrealEditor-Cmd.exe" "$P" -run=pythonscript -script="D:/Unreal/UnrealProjects/BattleSystem/Scripts/CreateDesignGhostMaterial.py" -unattended -nullrhi -nosplash
-
-# Import Mixamo FBX animations from D:/Unreal/Assets/Animations (subfolders mirrored) and retarget them to SKEL_Hero
-# in /Game/Characters/Animations/Heroes; existing ones are skipped (local content; editor must be closed)
-& "$UE\Engine\Binaries\Win64\UnrealEditor-Cmd.exe" "$P" -run=pythonscript -script="D:/Unreal/UnrealProjects/BattleSystem/Scripts/ImportMixamoAnimations.py" -unattended -nullrhi -nosplash
-
-# Fit the hats, tops, pants, facewear, shoes, hair, gloves and accessories of the Creative/Funny Characters packs and the
-# City pack (per body type and gender) onto SKEL_Hero in /Game/Characters/Meshes/Child/<category>
-# (categories by name, see ExportAdultParts.py; -Parts picks them and -Packs the packs, default all; the rest is left alone): UE exports
-# FBX, Blender 5.1 scales, moves and rebinds them (Scripts/Blender/FitToHero.py), UE imports them (local content; editor must be closed;
-# an editor window opens briefly, because UE's FBX export of skeletal meshes needs a renderer).
-# Then Scripts/CreateBodyZones.py writes the hide zones into the child bodies (backup in D:/Unreal/Backups on the first run).
-# Headless saves have no thumbnails: afterwards save the hats once from the editor (the line is in ImportFittedParts.py's docstring).
-& "D:\Unreal\UnrealProjects\BattleSystem\Scripts\FitChildParts.ps1" -Parts Outwear,Pants -Packs City
-
-# Create the child animation set /Game/Characters/Animations/DA_AnimSet_Child (local content; editor must be closed)
-& "$UE\Engine\Binaries\Win64\UnrealEditor-Cmd.exe" "$P" -run=pythonscript -script="D:/Unreal/UnrealProjects/BattleSystem/Scripts/CreateCharacterAnimSet.py" -unattended -nullrhi -nosplash
 ```
 
-`Scripts/RestructureCatalog.py` was a one-off migration (catalog folders to `Group/Sub`, piece ids in `Levels/*.json`) and has already run; don't run it again.
+Asset-pipeline scripts (cue table, piece catalog, wall variants, ghost material, Mixamo import, fitting clothing parts onto SKEL_Hero, colour regions, animation set) are in `Docs/Pipeline.md`.
 
-Output goes to `Saved/Logs/BattleSystem.log`, which each run overwrites. Grep it for `LogCombat`, `Test Completed` or the script's log tag (`[CombatData]`, `[CombatCues]`, `[PieceCatalog]`, `[WallVariants]`, `[CombatAnimSet]`, `[AdultParts]`, `[FitToHero]`, `[FittedParts]`, `[BodyZones]`, `[DesignGhost]`, `[MixamoImport]`).
+Output goes to `Saved/Logs/BattleSystem.log`, which each run overwrites. Grep it for `LogCombat`, `Test Completed` or the script's log tag (`[CombatData]`; the pipeline tags are in `Docs/Pipeline.md`).
 
 Fights always come from a LevelDesigner level. Console commands (in PIE or headless): `Combat.Start [seed]`, `Combat.Simulate [seed]`, `Combat.Stop`, `Combat.Batch <count> [startseed] [csv]` (headless statistics; CSV to `Saved/CombatBatch/`), `Combat.SaveReplay`, `Combat.Replay <file>` (`Saved/Replays/`), the player commands `Combat.Move <unit> <x> <y>`, `Combat.Ability <unit> [index]` and `Combat.CallWave` (start the next wave of a level now), and `Combat.SetSlot <unit> <slot> [mesh]` (presentation debug: change a swappable part of a unit's look). Simulate and Batch accept `script=<name>` (a `UCombatCommandScript`). Start, Simulate and Batch accept `level=<name>` (a LevelDesigner level from `Levels/<name>.json`, name without `.json`, e.g. `Combat.Simulate 42 level=WallWindows`); without it they use `DefaultLevel` from Project Settings > Game > Combat. The console variable `Combat.Debug 1|2` draws targets, steer points and the distance map, and `Combat.ShowRanges 1` draws the range of area attacks (taunt). In PIE the fight controls (seed, start, pause, speed, debug, replay, batch) are on the in-game control panel (`ACombatHUD`); it always plays the level in the LevelDesigner (at the start of play `DefaultLevel`), and the camera moves like the editor viewport (RMB look + WASD, MMB pan, LMB+RMB pan sideways/up-down, wheel zoom, Alt+LMB orbit, F overview; `ACombatPlayerController`).
 
@@ -85,7 +58,9 @@ New UCLASS/USTRUCT types and header changes need a full build plus an editor res
 
 The mechanics of built systems are in `Docs/Architecture.md`; later phases are in the design doc. All combat code goes in `Source/BattleSystem/Public|Private/Combat/`. There are three layers with a strict dependency direction: **grid ← simulation ← presentation**.
 
-Unit and skill data (both layers: the functional part becomes simulation stats, the rest is presentation): `CombatUnitData`. Files per layer: grid `CombatGrid`, `CombatGridData`, `CombatNavigation`, `CombatDistanceMap`, `CombatPathfinding`, `CombatLevel`, `CombatPieces`; simulation `CombatSimulation`, `CombatEffects`, `CombatTypes`, `CombatTags`; glue `CombatSubsystem`, `CombatReplay`, `CombatBatch`, `CombatCommandScript`, `CombatSettings`; presentation `CombatGameMode`, `CombatUnitActor`, `CombatHideZones`, `CombatProjectileActor`, `CombatMeshMergeCache`, `CombatAnimation`, `CombatCueTable`, `CombatAnimPreview`, `CombatHUD`/`SCombat*`, `CombatPlayerController`, `CombatCamera`.
+Editor-only tools live in `Source/BattleSystemEditor/` (e.g. `CombatColorVariant`: the Content Browser action "Make Color Variant..." on skeletal meshes with colour regions from `CreateColorRegions.py`). Runtime code must not depend on this module.
+
+Unit and skill data (both layers: the functional part becomes simulation stats, the rest is presentation): `CombatUnitData`. Files per layer: grid `CombatGrid`, `CombatGridData`, `CombatNavigation`, `CombatDistanceMap`, `CombatPathfinding`, `CombatLevel`, `CombatPieces`; simulation `CombatSimulation`, `CombatEffects`, `CombatTypes`, `CombatTags`; glue `CombatSubsystem`, `CombatReplay`, `CombatBatch`, `CombatCommandScript`, `CombatSettings`; presentation `CombatGameMode`, `CombatUnitActor`, `CombatLookEditor`, `CombatHideZones`, `CombatProjectileActor`, `CombatMeshMergeCache`, `CombatAnimation`, `CombatCueTable`, `CombatAnimPreview`, `CombatHUD`/`SCombat*`, `CombatPlayerController`, `CombatCamera`.
 
 - **Grid**: `ACombatGrid`, one per level. `CellSize` defaults to 100 cm, the XY plane, and the origin is the actor location. Each cell has a walkable flag and a blocks-sight flag, and the borders between cells can hold edge walls (block walking and sight). The grid of a fight comes from its level (`FCombatLevel::ToGridData`); `ACombatGrid` only gives the origin and shows the level. The grid does not change during a fight. Routes run on a navigation layer (`CombatNavigation`): each cell split into 3x3 sub-cells, one nav grid per clearance class (unit radius, capped so every unit fits through a one-cell door). Units move along per-team, per-class multi-source Dijkstra distance maps (`FCombatDistanceMap`) towards their enemies. A separate A\* (`CombatPathfinding::FindPath`) uses 8 directions, no corner cutting, and deterministic tie-breaks. Movement and line checks stay on the cell grid.
 - **Simulation (the source of truth)**: `FCombatSimulation` is a plain C++ class with **no `UWorld`, actors, or timers**, so it can run headless. It runs a fixed 20 Hz `Step()`. Units are `FCombatUnit` structs in a `TArray`. Each step produces an event buffer (`ECombatEventType` in `CombatSimulation.h`), and a state checksum is computed after every step.
