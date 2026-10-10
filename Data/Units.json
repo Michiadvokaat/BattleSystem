@@ -27,7 +27,8 @@
 						"/Game/ZZ_FAB/Creative_Characters/Skeleton_Meshes/SK_Body_009.SK_Body_009"
 					],
 					"EmptyChance": 0,
-					"bSwappable": false
+					"bSwappable": false,
+					"Colors": []
 				},
 				{
 					"Slot": "Shirt",
@@ -35,7 +36,8 @@
 						"/Game/ZZ_FAB/Creative_Characters/Skeleton_Meshes/SK_Costume_11_001.SK_Costume_11_001"
 					],
 					"EmptyChance": 0,
-					"bSwappable": false
+					"bSwappable": false,
+					"Colors": []
 				},
 				{
 					"Slot": "Hat",
@@ -43,7 +45,8 @@
 						"/Game/ZZ_FAB/Creative_Characters/Skeleton_Meshes/SK_Costume_11_002.SK_Costume_11_002"
 					],
 					"EmptyChance": 0,
-					"bSwappable": false
+					"bSwappable": false,
+					"Colors": []
 				},
 				{
 					"Slot": "Gloves",
@@ -51,7 +54,8 @@
 						"/Game/ZZ_FAB/Creative_Characters/Skeleton_Meshes/SK_Costume_11_003.SK_Costume_11_003"
 					],
 					"EmptyChance": 0,
-					"bSwappable": false
+					"bSwappable": false,
+					"Colors": []
 				},
 				{
 					"Slot": "Face",
@@ -59,13 +63,15 @@
 						"/Game/ZZ_FAB/Creative_Characters/Skeleton_Meshes/SK_Male_emotion_angry_002.SK_Male_emotion_angry_002"
 					],
 					"EmptyChance": 0,
-					"bSwappable": false
+					"bSwappable": false,
+					"Colors": []
 				},
 				{
 					"Slot": "Shoes",
 					"Options": [],
 					"EmptyChance": 0,
-					"bSwappable": false
+					"bSwappable": false,
+					"Colors": []
 				}
 			],
 			"Props": [],
@@ -112,7 +118,8 @@
 						"/Game/Characters/Meshes/SKM_Hero.SKM_Hero"
 					],
 					"EmptyChance": 0,
-					"bSwappable": false
+					"bSwappable": false,
+					"Colors": []
 				},
 				{
 					"Slot": "Face",
@@ -120,7 +127,8 @@
 						"/Game/Characters/Heroes/Ranger/SKM_Ranger_Face.SKM_Ranger_Face"
 					],
 					"EmptyChance": 0,
-					"bSwappable": false
+					"bSwappable": false,
+					"Colors": []
 				},
 				{
 					"Slot": "Hair",
@@ -128,7 +136,8 @@
 						"/Game/Characters/Heroes/Ranger/SKM_Ranger_Hair.SKM_Ranger_Hair"
 					],
 					"EmptyChance": 0,
-					"bSwappable": false
+					"bSwappable": false,
+					"Colors": []
 				},
 				{
 					"Slot": "Shirt",
@@ -136,13 +145,26 @@
 						"/Game/Characters/Meshes/Child/Outwear/SK_Creative_Outfit_008.SK_Creative_Outfit_008"
 					],
 					"EmptyChance": 0,
-					"bSwappable": false
+					"bSwappable": false,
+					"Colors": []
 				},
 				{
 					"Slot": "Pants",
 					"Options": [],
 					"EmptyChance": 0,
-					"bSwappable": false
+					"bSwappable": false,
+					"Colors": [
+						{
+							"bOverride": true,
+							"Color":
+							{
+								"R": 1,
+								"G": 0.004692,
+								"B": 0.728623,
+								"A": 1
+							}
+						}
+					]
 				},
 				{
 					"Slot": "Shoes",
@@ -150,7 +172,8 @@
 						"/Game/Characters/Heroes/Ranger/SKM_Ranger_Shoes.SKM_Ranger_Shoes"
 					],
 					"EmptyChance": 0,
-					"bSwappable": false
+					"bSwappable": false,
+					"Colors": []
 				},
 				{
 					"Slot": "Hat",
@@ -158,7 +181,8 @@
 						"/Game/Characters/Meshes/Child/Hats/SK_Hat_Creative_028.SK_Hat_Creative_028"
 					],
 					"EmptyChance": 0,
-					"bSwappable": true
+					"bSwappable": true,
+					"Colors": []
 				}
 			],
 			"Props": [],
@@ -207,7 +231,8 @@
 						"/Game/Characters/Meshes/Child/Male/SKM_Child_Male_Body_04.SKM_Child_Male_Body_04"
 					],
 					"EmptyChance": 0,
-					"bSwappable": false
+					"bSwappable": false,
+					"Colors": []
 				},
 				{
 					"Slot": "Face",
@@ -219,7 +244,8 @@
 						"/Game/Characters/Meshes/Child/Male/SKM_Child_Male_Face_Evil.SKM_Child_Male_Face_Evil"
 					],
 					"EmptyChance": 0,
-					"bSwappable": false
+					"bSwappable": false,
+					"Colors": []
 				},
 				{
 					"Slot": "Hair",
@@ -235,7 +261,8 @@
 						"/Game/Characters/Meshes/Child/Male/SKM_Child_Male_Hairstyle_09.SKM_Child_Male_Hairstyle_09"
 					],
 					"EmptyChance": 0.1,
-					"bSwappable": false
+					"bSwappable": false,
+					"Colors": []
 				},
 				{
 					"Slot": "Shirt",
@@ -247,7 +274,8 @@
 						"/Game/Characters/Meshes/Child/Male/SKM_Child_Male_Shirt_05.SKM_Child_Male_Shirt_05"
 					],
 					"EmptyChance": 0,
-					"bSwappable": false
+					"bSwappable": false,
+					"Colors": []
 				},
 				{
 					"Slot": "Outwear",
@@ -259,7 +287,8 @@
 						"/Game/Characters/Meshes/Child/Male/SKM_Child_Male_Outwear_05.SKM_Child_Male_Outwear_05"
 					],
 					"EmptyChance": 0.6,
-					"bSwappable": false
+					"bSwappable": false,
+					"Colors": []
 				},
 				{
 					"Slot": "Pants",
@@ -273,7 +302,8 @@
 						"/Game/Characters/Meshes/Child/Male/SKM_Child_Male_Shorts_02.SKM_Child_Male_Shorts_02"
 					],
 					"EmptyChance": 0,
-					"bSwappable": false
+					"bSwappable": false,
+					"Colors": []
 				},
 				{
 					"Slot": "Shoes",
@@ -288,7 +318,8 @@
 						"/Game/Characters/Meshes/Child/Male/SKM_Child_Male_Shoes_08.SKM_Child_Male_Shoes_08"
 					],
 					"EmptyChance": 0,
-					"bSwappable": false
+					"bSwappable": false,
+					"Colors": []
 				},
 				{
 					"Slot": "Hat",
@@ -300,7 +331,8 @@
 						"/Game/Characters/Meshes/Child/Male/SKM_Child_Male_Hat_05.SKM_Child_Male_Hat_05"
 					],
 					"EmptyChance": 0.6,
-					"bSwappable": true
+					"bSwappable": true,
+					"Colors": []
 				},
 				{
 					"Slot": "Glasses",
@@ -309,7 +341,8 @@
 						"/Game/Characters/Meshes/Child/Male/SKM_Child_Male_Glasses_02.SKM_Child_Male_Glasses_02"
 					],
 					"EmptyChance": 0.8,
-					"bSwappable": true
+					"bSwappable": true,
+					"Colors": []
 				},
 				{
 					"Slot": "Backpack",
@@ -317,7 +350,8 @@
 						"/Game/Characters/Meshes/Child/Male/SKM_Child_Male_Backpack_01.SKM_Child_Male_Backpack_01"
 					],
 					"EmptyChance": 0.7,
-					"bSwappable": true
+					"bSwappable": true,
+					"Colors": []
 				}
 			],
 			"Props": [],
@@ -408,7 +442,8 @@
 						"/Game/Characters/Meshes/Child/Male/SKM_Child_Male_Body_02.SKM_Child_Male_Body_02"
 					],
 					"EmptyChance": 0,
-					"bSwappable": false
+					"bSwappable": false,
+					"Colors": []
 				},
 				{
 					"Slot": "Shirt",
@@ -416,7 +451,8 @@
 						"/Game/Characters/Meshes/Child/Male/SKM_Child_Male_Shirt_02.SKM_Child_Male_Shirt_02"
 					],
 					"EmptyChance": 0,
-					"bSwappable": false
+					"bSwappable": false,
+					"Colors": []
 				},
 				{
 					"Slot": "Pants",
@@ -424,7 +460,8 @@
 						"/Game/Characters/Meshes/Child/Male/SKM_Child_Male_Shorts_02.SKM_Child_Male_Shorts_02"
 					],
 					"EmptyChance": 0,
-					"bSwappable": false
+					"bSwappable": false,
+					"Colors": []
 				},
 				{
 					"Slot": "Shoes",
@@ -432,7 +469,8 @@
 						"/Game/Characters/Meshes/Child/Male/SKM_Child_Male_Shoes_06.SKM_Child_Male_Shoes_06"
 					],
 					"EmptyChance": 0,
-					"bSwappable": false
+					"bSwappable": false,
+					"Colors": []
 				}
 			],
 			"Props": [],
@@ -479,7 +517,8 @@
 						"/Game/Characters/Meshes/SKM_Hero.SKM_Hero"
 					],
 					"EmptyChance": 0,
-					"bSwappable": false
+					"bSwappable": false,
+					"Colors": []
 				},
 				{
 					"Slot": "Hat",
@@ -487,7 +526,8 @@
 						"/Game/Characters/Meshes/Child/Hats/Blender/ChildHats.ChildHats"
 					],
 					"EmptyChance": 0,
-					"bSwappable": true
+					"bSwappable": true,
+					"Colors": []
 				},
 				{
 					"Slot": "Pants",
@@ -495,7 +535,8 @@
 						"/Game/Characters/Meshes/Child/Female/SKM_Child_Female_Pants_05.SKM_Child_Female_Pants_05"
 					],
 					"EmptyChance": 0,
-					"bSwappable": false
+					"bSwappable": false,
+					"Colors": []
 				},
 				{
 					"Slot": "Shirt",
@@ -503,7 +544,8 @@
 						"/Game/Characters/Meshes/Child/Female/SKM_Child_Female_Shirt_05.SKM_Child_Female_Shirt_05"
 					],
 					"EmptyChance": 0,
-					"bSwappable": false
+					"bSwappable": false,
+					"Colors": []
 				},
 				{
 					"Slot": "Shoes",
@@ -511,7 +553,8 @@
 						"/Game/Characters/Meshes/Child/Female/SKM_Child_Female_Shoes_04.SKM_Child_Female_Shoes_04"
 					],
 					"EmptyChance": 0,
-					"bSwappable": false
+					"bSwappable": false,
+					"Colors": []
 				}
 			],
 			"Props": [],
@@ -556,80 +599,53 @@
 				{
 					"Slot": "Body",
 					"Options": [
-						"/Game/Characters/Meshes/Child/Female/SKM_Child_Female_Body_04.SKM_Child_Female_Body_04"
+						"/Game/Characters/Meshes/SKM_Hero.SKM_Hero"
 					],
 					"EmptyChance": 0,
-					"bSwappable": false
-				},
-				{
-					"Slot": "Face",
-					"Options": [
-						"/Game/Characters/Heroes/Barbarian/SKM_Tank_Face.SKM_Tank_Face"
-					],
-					"EmptyChance": 0,
-					"bSwappable": false
-				},
-				{
-					"Slot": "Hair",
-					"Options": [
-						"/Game/Characters/Heroes/Barbarian/SKM_Tank_Hair.SKM_Tank_Hair"
-					],
-					"EmptyChance": 0,
-					"bSwappable": false
+					"bSwappable": false,
+					"Colors": []
 				},
 				{
 					"Slot": "Outwear",
 					"Options": [
-						"/Game/Characters/Heroes/Barbarian/SKM_Tank_Jacket.SKM_Tank_Jacket"
+						"/Game/Characters/Meshes/Child/Costumes/SK_Creative_Costume_11_001.SK_Creative_Costume_11_001"
 					],
 					"EmptyChance": 0,
-					"bSwappable": false
-				},
-				{
-					"Slot": "Pants",
-					"Options": [
-						"/Game/Characters/Heroes/Barbarian/SKM_Tank_Pants.SKM_Tank_Pants"
-					],
-					"EmptyChance": 0,
-					"bSwappable": false
-				},
-				{
-					"Slot": "Shoes",
-					"Options": [
-						"/Game/Characters/Heroes/Barbarian/SKM_Tank_Shoes.SKM_Tank_Shoes"
-					],
-					"EmptyChance": 0,
-					"bSwappable": false
+					"bSwappable": false,
+					"Colors": []
 				},
 				{
 					"Slot": "Hat",
 					"Options": [
-						"/Game/Characters/Meshes/Child/Hats/SK_Hat_Funny_079.SK_Hat_Funny_079"
+						"/Game/Characters/Meshes/Child/Hats/SK_Hat_Creative_Costume_11_002.SK_Hat_Creative_Costume_11_002"
 					],
 					"EmptyChance": 0,
-					"bSwappable": true
+					"bSwappable": false,
+					"Colors": []
 				},
 				{
-					"Slot": "Glasses",
+					"Slot": "Accessory",
 					"Options": [
-						"/Game/Characters/Heroes/Barbarian/SKM_Tank_Glasses.SKM_Tank_Glasses"
+						"/Game/Characters/Meshes/Child/Accessories/SK_Creative_Costume_11_003.SK_Creative_Costume_11_003"
 					],
 					"EmptyChance": 0,
-					"bSwappable": true
+					"bSwappable": false,
+					"Colors": []
 				},
 				{
 					"Slot": "Body",
 					"Options": [],
 					"EmptyChance": 0,
-					"bSwappable": false
+					"bSwappable": false,
+					"Colors": []
 				}
 			],
 			"Props": [],
 			"Overrides": [],
 			"AnimSet": "/Game/Characters/Animations/DA_AnimSet_Child.DA_AnimSet_Child",
 			"UniformScale": 1,
-			"WidthScale": 1.3,
-			"HeightScale": 1.2,
+			"WidthScale": 1,
+			"HeightScale": 1,
 			"MeshRotation":
 			{
 				"Pitch": 0,
