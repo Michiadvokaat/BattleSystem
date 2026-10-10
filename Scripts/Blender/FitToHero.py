@@ -25,6 +25,9 @@ laid on the hero's (fit_face). Hair ("kind": "hair", rigid on Head too) goes the
 keeping its shape, and is inflated where the child's rounder skull pokes through; what lies deep inside the adult's head
 (a hair volume runs through the skull) stays hidden.
 
+Back parts ("kind": "back", wings worn like a backpack) are rigid on BACK_BONE: scaled as a whole by the trunk's ratio
+(fit_back) around the Neck bone, and moved back or forth so they keep the (scaled) gap to the skin they had on the adult.
+
 Every part also gets the hide zones of the hero's body it covers ("hide_zones" in fitted.json, a bit mask over
 BODY_ZONES; covered_zones), and body_zones.json lists the hero's skin vertices with their zone for
 Scripts/CreateBodyZones.py, which writes the zones into the bodies' vertex colors.
@@ -49,6 +52,10 @@ NECK_BONE = "Neck"
 ROOT_NAME = "Root"
 # The first bone under the root; clothing vertices without weights follow it.
 HIPS_BONE = "Hips"
+# Back parts (wings) hang rigidly on BACK_BONE (the hero's top spine bone; it has no Spine2), placed relative to the Neck
+# bone, which both skeletons have at the top of the back; the trunk's width is measured between the heads of SHOULDER_BONES.
+BACK_BONE = "Spine1"
+SHOULDER_BONES = ("LeftArm", "RightArm")
 # Children a bone with several children points at (the spine goes on through them).
 SPINE_CHAIN = ("Spine", "Spine1", "Spine2", "Neck", "Head")
 # The trunk, Hips up to the Neck: stretched as one piece, because the skeletons split it differently (the hero's Hips->Spine is
@@ -565,6 +572,40 @@ class FaceFrame:
         return (self.scale.x + self.scale.y + self.scale.z) / 3.0
 
 
+def fit_back(mesh, adult_armature, adult_surface, hero_surface):
+    """Moves a back part (wings) rigidly from the adult onto the hero: scaled around the Neck bone by the mean of the trunk's
+    height ratio (Hips to Neck) and width ratio (between the upper arms), then moved along the back (+Y; the character faces
+    -Y) so its nearest point keeps the scaled gap to the skin it had on the adult; rebound with weight 1 on BACK_BONE.
+    Returns (scale, shift in m)."""
+    hero = hero_surface.armature
+
+    def trunk(armature):
+        height = (bone_world(armature, NECK_BONE) - bone_world(armature, HIPS_BONE)).length
+        width = (bone_world(armature, SHOULDER_BONES[0]) - bone_world(armature, SHOULDER_BONES[1])).length
+        return height, width
+
+    (adult_height, adult_width), (hero_height, hero_width) = trunk(adult_armature), trunk(hero)
+    scale = 0.5 * (hero_height / adult_height + hero_width / adult_width)
+    adult_bone, hero_bone = bone_world(adult_armature, NECK_BONE), bone_world(hero, NECK_BONE)
+    source = [mesh.matrix_world @ v.co for v in mesh.data.vertices]
+    points = [hero_bone + scale * (p - adult_bone) for p in source]
+
+    def gap(surface, ps):
+        result = None
+        for p in ps:
+            location, normal, _index, _distance = surface.tree.find_nearest(p)
+            if location is not None:
+                height = (p - location).dot(normal)
+                result = height if result is None else min(result, height)
+        return result or 0.0
+
+    shift = scale * gap(adult_surface, source) - gap(hero_surface, points)
+    points = [p + Vector((0.0, shift, 0.0)) for p in points]
+    rebind(mesh, hero, points)
+    weight_rigid(mesh, BACK_BONE)
+    return scale, shift
+
+
 def mesh_box(meshes):
     points = [m.matrix_world @ v.co for m in meshes for v in m.data.vertices]
     return (Vector((min(p.x for p in points), min(p.y for p in points), min(p.z for p in points))),
@@ -864,7 +905,7 @@ def main():
             return child[0] + scale * (p - adult_head) + offset
 
         for part in pack["parts"]:
-            if part["kind"] not in ("hat", "clothing", "face", "hair"):
+            if part["kind"] not in ("hat", "clothing", "face", "hair", "back"):
                 raise RuntimeError(f"{LOG_TAG} {part['name']}: unknown kind {part['kind']}")
             armature, meshes, others = import_fbx(os.path.join(export_dir, part["fbx"]))
             if len(meshes) != 1:
@@ -879,6 +920,9 @@ def main():
                 laid = fit_face(mesh, frame, adult_surface, hero_surface, under_nose, part["kind"] == "hair")
                 log(f"{part['name']}: {len(mesh.data.vertices)} vertices, {laid} laid on the skin"
                     + (" (under the nose)" if under_nose is not None else ""))
+            elif part["kind"] == "back":
+                back_scale, shift = fit_back(mesh, armature, adult_surface, hero_surface)
+                log(f"{part['name']}: rigid on {BACK_BONE}, scale {back_scale:.3f}, moved {shift * 100:.1f} cm back")
             else:
                 pushed, skin = fit_clothing(mesh, armature, hero, girths, hero_surface)
                 log(f"{part['name']}: {len(mesh.data.vertices)} vertices, {pushed} pushed out of the body, "

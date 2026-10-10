@@ -6,13 +6,14 @@
 #      with the body zones each part covers
 #   4. Scripts/CreateBodyZones.py (UE): zone codes and the masked zone material on the child bodies
 #   5. Scripts/CreateColorRegions.py (UE): colour regions and a recolour material instance on every imported part
-# -Parts picks the categories (Hats, Outwear, Pants, Facewear, Shoes, Hair, Gloves, Accessories; default all) and -Packs
-# the packs by the start of their name (Creative, Funny, City, City_Teen, ...; default all), e.g. -Parts Outwear,Pants or
-# -Packs City: the other copies are left alone (and keep their thumbnails).
+# -Parts picks the categories (Hats, Outwear, Pants, Facewear, Shoes, Hair, Gloves, Accessories, Costumes; default all),
+# -Packs the packs by the start of their name (Creative, Funny, City, City_Teen, ...; default all) and -Names the parts whose
+# source name matches a regex (no spaces or commas), e.g. -Parts Outwear,Pants, -Packs City or -Names Costume: the other
+# copies are left alone (and keep their thumbnails).
 # Each step stops the run when it fails. The log tags are [AdultParts], [FitToHero], [FittedParts], [BodyZones] and
 # [ColorRegions].
 
-param([string[]]$Parts = @(), [string[]]$Packs = @())
+param([string[]]$Parts = @(), [string[]]$Packs = @(), [string]$Names = "")
 
 $ErrorActionPreference = "Stop"
 $UE      = "C:\Program Files\Epic Games\UE_5.8\Engine\Binaries\Win64\UnrealEditor-Cmd.exe"
@@ -35,7 +36,8 @@ function Invoke-UnrealScript([string]$Script, [string]$Tag, [switch]$WithRendere
 
 if (Get-Process UnrealEditor -ErrorAction SilentlyContinue) { throw "Close the Unreal editor first." }
 
-$exportArguments = @($Parts -split "," | Where-Object { $_ }) + @($Packs -split "," | Where-Object { $_ } | ForEach-Object { "pack=$_" })
+$exportArguments = @($Parts -split "," | Where-Object { $_ }) + @($Packs -split "," | Where-Object { $_ } | ForEach-Object { "pack=$_" }) +
+    @($Names | Where-Object { $_ } | ForEach-Object { "names=$_" })
 Invoke-UnrealScript "ExportAdultParts.py" "[AdultParts]" -WithRenderer -Arguments ($exportArguments -join " ")
 
 & $Blender -b --factory-startup --python-exit-code 1 -P "$Root\Scripts\Blender\FitToHero.py" -- $Export $Fitted |

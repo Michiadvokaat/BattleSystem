@@ -27,13 +27,15 @@ $P  = "D:\Unreal\UnrealProjects\BattleSystem\BattleSystem.uproject"
 # in /Game/Characters/Animations/Heroes; existing ones are skipped (local content)
 & "$UE\Engine\Binaries\Win64\UnrealEditor-Cmd.exe" "$P" -run=pythonscript -script="D:/Unreal/UnrealProjects/BattleSystem/Scripts/ImportMixamoAnimations.py" -unattended -nullrhi -nosplash
 
-# Fit the hats, tops, pants, facewear, shoes, hair, gloves and accessories of the Creative/Funny Characters packs and the
+# Fit the hats, tops, pants, facewear, shoes, hair, gloves, accessories and picked costumes of the Creative/Funny Characters packs and the
 # City pack (per body type and gender) onto SKEL_Hero in /Game/Characters/Meshes/Child/<category>
 # (categories by name, see ExportAdultParts.py; -Parts picks them and -Packs the packs, default all; the rest is left alone): UE exports
 # FBX, Blender 5.1 scales, moves and rebinds them (Scripts/Blender/FitToHero.py), UE imports them (local content;
 # an editor window opens briefly, because UE's FBX export of skeletal meshes needs a renderer).
 # Then Scripts/CreateBodyZones.py writes the hide zones into the child bodies (backup in D:/Unreal/Backups on the first run).
 # Headless saves have no thumbnails: afterwards save the hats once from the editor (the line is in ImportFittedParts.py's docstring).
+# -Names <regex> takes only the parts whose source name matches (no spaces or commas), e.g. the Creative costumes:
+#   -Parts Costumes,Hats,Accessories -Packs Creative -Names Costume
 & "D:\Unreal\UnrealProjects\BattleSystem\Scripts\FitChildParts.ps1" -Parts Outwear,Pants -Packs City
 
 # Colour regions and recolour material instances on all child parts (FitChildParts.ps1 does it for what it imports)
