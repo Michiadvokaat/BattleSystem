@@ -5,10 +5,12 @@
 #   3. Scripts/ImportFittedParts.py (UE): import onto SKEL_Hero in /Game/Characters/Meshes/Child/<category>,
 #      with the body zones each part covers
 #   4. Scripts/CreateBodyZones.py (UE): zone codes and the masked zone material on the child bodies
+#   5. Scripts/CreateColorRegions.py (UE): colour regions and a recolour material instance on every imported part
 # -Parts picks the categories (Hats, Outwear, Pants, Facewear, Shoes, Hair, Gloves, Accessories; default all) and -Packs
 # the packs by the start of their name (Creative, Funny, City, City_Teen, ...; default all), e.g. -Parts Outwear,Pants or
 # -Packs City: the other copies are left alone (and keep their thumbnails).
-# Each step stops the run when it fails. The log tags are [AdultParts], [FitToHero], [FittedParts] and [BodyZones].
+# Each step stops the run when it fails. The log tags are [AdultParts], [FitToHero], [FittedParts], [BodyZones] and
+# [ColorRegions].
 
 param([string[]]$Parts = @(), [string[]]$Packs = @())
 
@@ -42,5 +44,6 @@ if ($LASTEXITCODE -ne 0) { throw "FitToHero.py failed" }
 
 Invoke-UnrealScript "ImportFittedParts.py" "[FittedParts]"
 Invoke-UnrealScript "CreateBodyZones.py" "[BodyZones]"
+Invoke-UnrealScript "CreateColorRegions.py" "[ColorRegions]" -Arguments "fitted"
 # The editor's own exit code says nothing about the scripts; their "Done" lines were checked above.
 exit 0

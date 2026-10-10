@@ -111,6 +111,12 @@ public:
 	int32 GetTeam() const { return Team; }
 
 protected:
+	/**
+	 * Set while the look is built from a construction script (ACombatLookEditor): the components it adds are marked as
+	 * made by the construction script, so the engine removes them when it runs the script again.
+	 */
+	bool bBuildingInConstruction = false;
+
 	UFUNCTION(BlueprintImplementableEvent, Category = "Combat", meta = (DisplayName = "On Unit Attack"))
 	void ReceiveUnitAttack(FVector TargetLocation);
 
@@ -197,6 +203,8 @@ protected:
 
 private:
 	void SetBodyColor(const FLinearColor& Color);
+	/** Marks a component the look adds (see bBuildingInConstruction). */
+	void MarkLookComponent(UActorComponent* Component) const;
 
 	/** A part component on CharacterMesh that follows its pose (Leader Pose). */
 	USkeletalMeshComponent* AddPartComponent(USkeletalMesh* Mesh);

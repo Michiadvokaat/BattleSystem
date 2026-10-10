@@ -166,6 +166,21 @@ struct FCombatSkillRow : public FTableRowBase
 	BATTLESYSTEM_API FString GetDisplayName() const;
 };
 
+/** The colour of one colour region of a part (Scripts/CreateColorRegions.py finds up to four per part, largest first). */
+USTRUCT(BlueprintType)
+struct BATTLESYSTEM_API FCombatLookColor
+{
+	GENERATED_BODY()
+
+	/** Off: the region keeps the part's own colour. */
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Color")
+	bool bOverride = false;
+
+	/** The new colour; the region's light and dark shades follow it. */
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Color", meta = (EditCondition = "bOverride", HideAlphaChannel))
+	FLinearColor Color = FLinearColor::White;
+};
+
 /** One body part of a look (body, shirt, hat, ...). All meshes of a look must use the same skeleton. */
 USTRUCT(BlueprintType)
 struct FCombatLookSlot
@@ -190,6 +205,14 @@ struct FCombatLookSlot
 	 */
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Slot")
 	bool bSwappable = false;
+
+	/**
+	 * Colours of the part's colour regions, in order: 1 = its largest area (the main colour), up to 4. A region without an
+	 * entry, or with Override off, keeps its colour. Works on parts with colour regions (the fitted parts and the child pack's
+	 * clothing); the same colours go to whichever option is picked.
+	 */
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Slot")
+	TArray<FCombatLookColor> Colors;
 };
 
 /** A rigid prop (weapon, shield, ...) attached to a socket of the skeleton. Works with meshes from any pack. */

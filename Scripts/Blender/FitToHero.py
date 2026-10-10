@@ -62,6 +62,17 @@ MIN_EXTENT = 0.01
 GIRTH_RANGE = (0.3, 1.5)
 # Clothing: how far (m) every vertex stays outside the hero's body.
 CLOTH_MARGIN = 0.006
+# Clothing: after the vertices, the centres and edge midpoints of its faces are kept out of the body too (large faces of
+# coarse clothing cut through the body between their corners), spreading each push over CLOTH_INFLATE_RADIUS (m), for up
+# to CLOTH_FACE_ROUNDS rounds.
+CLOTH_INFLATE_RADIUS = 0.02
+CLOTH_FACE_ROUNDS = 6
+# Clothing: the skin pokes through where a ray from a skin vertex into the body meets the clothing within this depth (m).
+CLOTH_POKE_DEPTH = 0.03
+# Clothing: the faces of what follows these bones (hands, fingers, feet, toes; the part of the name after Left/Right) are not
+# kept out of the body (only the vertices): gloves and shoes are dense and lie on fingers and toes close together, where the
+# face tests push them through a neighbouring finger or toe and fold them.
+CLOTH_FACE_SKIP = ("Hand", "Foot", "Toe")
 # Clothing: vertices up to WEIGHT_NEAR (m) from the hero's body take the body's weights there, so they bend like the skin
 # under them; from WEIGHT_FAR on (hoods, hems, skirts) they keep their own; in between the two are blended.
 WEIGHT_NEAR = 0.02
@@ -408,10 +419,12 @@ class BodySurface:
 
     def __init__(self, meshes, armature=None):
         self.armature = armature
-        self.points, self.polys, self.weights = [], [], []
+        self.points, self.polys, self.weights, self.normals = [], [], [], []
         for mesh in meshes:
             base = len(self.points)
             self.points.extend(mesh.matrix_world @ v.co for v in mesh.data.vertices)
+            turn = mesh.matrix_world.to_3x3()
+            self.normals.extend((turn @ v.normal).normalized() for v in mesh.data.vertices)
             self.polys.extend([base + i for i in p.vertices] for p in mesh.data.polygons)
             self.weights.extend(vertex_weights(mesh))
         self.tree = BVHTree.FromPolygons(self.points, self.polys)
@@ -513,10 +526,21 @@ def transfer_weights(mesh, surface):
 
 def fit_clothing(mesh, armature, hero, girths, surface):
     """Moves the clothing from the adult's rest pose to the hero's (its own weights over the per-bone retarget), pushes it
-    out of the hero's body, rebinds it to the hero's armature and gives it the body's weights where it lies on the body.
+    out of the hero's body (its vertices, then, except on hands and feet (CLOTH_FACE_SKIP), also the middles of its faces
+    and edges and wherever the skin pokes through, see inflate and skin_pokes), rebinds it to the hero's armature and gives it the body's weights where it lies on the body.
     Returns (vertices pushed out, vertices with the body's weights)."""
     points = skin_points(mesh, retarget_maps(armature, hero, girths), HIPS_BONE)
     points, pushed = push_out(points, surface, CLOTH_MARGIN)
+    # Coarse clothing: the faces too must stay out of the body, not only their corners.
+    polys = [list(p.vertices) for p in mesh.data.polygons]
+    movable = [not (bone or "").removeprefix("Left").removeprefix("Right").startswith(CLOTH_FACE_SKIP)
+               for bone in dominant_bones(mesh)]
+    for _round in range(CLOTH_FACE_ROUNDS):
+        points, inside = inflate(points, surface, CLOTH_MARGIN, CLOTH_INFLATE_RADIUS, movable, polys)
+        pokes = skin_pokes(points, polys, surface, CLOTH_MARGIN, CLOTH_POKE_DEPTH, movable)
+        points = [p + pokes[i] if i in pokes else p for i, p in enumerate(points)]
+        if not inside and not pokes:
+            break
     merge_missing_groups(mesh, armature, hero)
     rebind(mesh, hero, points)
     return pushed, transfer_weights(mesh, surface)
@@ -559,23 +583,54 @@ def nose_bottom(armature, meshes):
     return min(p.z for p in nose)
 
 
-def inflate(points, surface, margin, radius, movable):
-    """Moves the movable points out of the body smoothly: every one that is inside the skin (or closer than margin) needs a
-    push along the skin's normal; each movable point gets the largest of the pushes within radius, faded by the distance."""
-    pushes = []
-    for i, p in enumerate(points):
-        if not movable[i]:
+def skin_pokes(points, polys, surface, margin, depth, movable):
+    """Where the skin pokes out through the clothing: a skin vertex with the clothing just under it (a ray into the body
+    hits the clothing within depth). Returns per clothing point the largest push (point index -> vector) that takes the
+    face that was hit margin out of the skin, all its corners; this finds ridges between the corners of large faces.
+    A ray that leaves the body before it meets the clothing went through a thin limb (fingers, feet) and met the clothing
+    on the other side; pushing that along this normal would fold the clothing through the limb, so it is skipped. Only the
+    movable points are pushed."""
+    tree = BVHTree.FromPolygons(points, polys)
+    pushes = {}
+    for p, n in zip(surface.points, surface.normals):
+        location, _normal, index, distance = tree.ray_cast(p + n * 0.0005, -n, depth)
+        if location is None:
             continue
+        exit_location, _n, _i, exit_distance = surface.tree.ray_cast(p - n * 0.0005, -n, distance)
+        if exit_location is not None and exit_distance + 0.001 < distance:
+            continue
+        push = n * (distance + margin)
+        for corner in polys[index]:
+            if not movable[corner]:
+                continue
+            if corner not in pushes or push.length > pushes[corner].length:
+                pushes[corner] = push
+    return pushes
+
+
+def inflate(points, surface, margin, radius, movable, polys=None):
+    """Moves the movable points out of the body smoothly: every one that is inside the skin (or closer than margin) needs a
+    push along the skin's normal; each movable point gets the largest of the pushes within radius, faded by the distance.
+    With polys (lists of point indices) the centres and edge midpoints of the faces are tested too, so the skin cannot poke
+    through the middle of a large face whose corners are all outside it."""
+    samples = [points[i] for i in range(len(points)) if movable[i]]
+    for poly in polys or ():
+        if all(movable[i] for i in poly):
+            corners = [points[i] for i in poly]
+            samples.append(sum(corners, Vector()) / len(corners))
+            samples.extend((corners[k] + corners[(k + 1) % len(corners)]) * 0.5 for k in range(len(corners)))
+    pushes = []
+    for p in samples:
         location, normal, _index, _distance = surface.tree.find_nearest(p)
         if location is not None:
             need = margin - (p - location).dot(normal)
             if need > 0.0:
-                pushes.append((i, normal * need))
+                pushes.append((p, normal * need))
     if not pushes:
         return points, 0
     tree = KDTree(len(pushes))
-    for k, (i, _push) in enumerate(pushes):
-        tree.insert(points[i], k)
+    for k, (p, _push) in enumerate(pushes):
+        tree.insert(p, k)
     tree.balance()
     result = []
     for i, p in enumerate(points):

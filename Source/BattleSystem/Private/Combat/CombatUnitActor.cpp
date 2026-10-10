@@ -157,12 +157,68 @@ void ACombatUnitActor::InitUnit(int32 InUnitId, int32 InTeam, float InRadius, co
 	StatusWidget->SetRelativeLocation(FVector(0.0, 0.0, BodyHeight * 0.5));
 }
 
+namespace
+{
+	/** The colour regions of a recolour material (Scripts/CreateColorRegions.py): UseN (0/1) and ColorN, N = 0..3. */
+	constexpr int32 ColorRegionCount = 4;
+
+	bool IsRecolorMaterial(const UMaterialInterface* Material)
+	{
+		float Unused = 0.f;
+		return Material && Material->GetScalarParameterValue(FHashedMaterialParameterInfo(TEXT("Use0")), Unused);
+	}
+
+	/**
+	 * Gives the part's colour regions the look's colours on the component that shows it (its own, or the merged mesh where
+	 * each part keeps its own material instance as a section). Regions without a colour keep theirs.
+	 */
+	void ApplyPartColors(UMeshComponent* Component, const USkeletalMesh* Part, const TArray<FCombatLookColor>& Colors)
+	{
+		if (!Component || !Part || Colors.IsEmpty())
+		{
+			return;
+		}
+		for (const FSkeletalMaterial& PartMaterial : Part->GetMaterials())
+		{
+			if (!IsRecolorMaterial(PartMaterial.MaterialInterface))
+			{
+				continue;
+			}
+			for (int32 Index = 0; Index < Component->GetNumMaterials(); ++Index)
+			{
+				UMaterialInterface* Shown = Component->GetMaterial(Index);
+				const UMaterialInstanceDynamic* Dynamic = Cast<UMaterialInstanceDynamic>(Shown);
+				if (Shown != PartMaterial.MaterialInterface && !(Dynamic && Dynamic->Parent == PartMaterial.MaterialInterface))
+				{
+					continue;
+				}
+				UMaterialInstanceDynamic* Colored = Component->CreateAndSetMaterialInstanceDynamic(Index);
+				for (int32 Region = 0; Region < ColorRegionCount; ++Region)
+				{
+					const bool bOverride = Colors.IsValidIndex(Region) && Colors[Region].bOverride;
+					Colored->SetScalarParameterValue(*FString::Printf(TEXT("Use%d"), Region), bOverride ? 1.f : 0.f);
+					if (bOverride)
+					{
+						Colored->SetVectorParameterValue(*FString::Printf(TEXT("Color%d"), Region), Colors[Region].Color);
+					}
+				}
+			}
+		}
+	}
+}
+
 void ACombatUnitActor::InitLook(const FCombatLook& InLook, int32 Seed)
 {
 	if (!InLook.HasParts())
 	{
 		return;
 	}
+	// A look built again (ACombatLookEditor's construction script) starts clean: the old part components are gone, and
+	// the colour and zone material instances belong to the old parts.
+	SwappableSlots.Reset();
+	SwappableComponents.Reset();
+	SwappableBaseMeshes.Reset();
+	CharacterMesh->EmptyOverrideMaterials();
 
 	const TArray<USkeletalMesh*> Picks = InLook.PickMeshes(Seed);
 	TArray<USkeletalMesh*> MergedParts;
@@ -185,11 +241,17 @@ void ACombatUnitActor::InitLook(const FCombatLook& InLook, int32 Seed)
 	UCombatMeshMergeCache* MergeCache = GetWorld()->GetSubsystem<UCombatMeshMergeCache>();
 	USkeletalMesh* MergedMesh = MergeCache ? MergeCache->GetMergedMesh(MergedParts) : nullptr;
 	CharacterMesh->SetSkeletalMesh(MergedMesh ? MergedMesh : MergedParts[0]);
-	if (!MergedMesh)
+	// The component that shows each merged part: the merged mesh, or without it a component per part.
+	TArray<UMeshComponent*> PartComponents = { CharacterMesh };
+	for (int32 Index = 1; Index < MergedParts.Num(); ++Index)
 	{
-		for (int32 Index = 1; Index < MergedParts.Num(); ++Index)
+		PartComponents.Add(MergedMesh ? static_cast<UMeshComponent*>(CharacterMesh) : AddPartComponent(MergedParts[Index]));
+	}
+	for (int32 Index = 0, Merged = 0; Index < Picks.Num(); ++Index)
+	{
+		if (Picks[Index] && !InLook.Slots[Index].bSwappable)
 		{
-			AddPartComponent(MergedParts[Index]);
+			ApplyPartColors(PartComponents[Merged++], Picks[Index], InLook.Slots[Index].Colors);
 		}
 	}
 	MergedHideZones = 0;
@@ -251,6 +313,7 @@ void ACombatUnitActor::InitLook(const FCombatLook& InLook, int32 Seed)
 			continue;
 		}
 		UStaticMeshComponent* PropComponent = NewObject<UStaticMeshComponent>(this);
+		MarkLookComponent(PropComponent);
 		PropComponent->SetupAttachment(CharacterMesh, Prop.Socket);
 		PropComponent->SetStaticMesh(PropMesh);
 		PropComponent->SetRelativeTransform(Prop.Offset);
@@ -307,6 +370,7 @@ USkeletalMeshComponent* ACombatUnitActor::AddPartComponent(USkeletalMesh* Mesh)
 {
 	// Attached without offset: it gets the body's rotation and scale, and its pose from the body.
 	USkeletalMeshComponent* Part = NewObject<USkeletalMeshComponent>(this);
+	MarkLookComponent(Part);
 	Part->SetupAttachment(CharacterMesh);
 	Part->SetSkeletalMesh(Mesh);
 	Part->SetLeaderPoseComponent(CharacterMesh);
@@ -340,12 +404,28 @@ void ACombatUnitActor::RefreshSwappableSlot(int32 Index)
 	USkeletalMeshComponent* Component = SwappableComponents[Index];
 	if (Component->GetSkeletalMeshAsset() != Mesh)
 	{
+		// The coloured material instances belong to the old mesh's slots.
+		Component->EmptyOverrideMaterials();
 		Component->SetSkeletalMesh(Mesh);
 		// A new mesh needs the leader's pose again.
 		Component->SetLeaderPoseComponent(CharacterMesh, true);
+		const FCombatLookSlot* LookSlot = Look.Slots.FindByPredicate(
+			[this, Index](const FCombatLookSlot& Slot) { return Slot.Slot == SwappableSlots[Index]; });
+		if (LookSlot)
+		{
+			ApplyPartColors(Component, Mesh, LookSlot->Colors);
+		}
 	}
 	Component->SetVisibility(Mesh != nullptr);
 	UpdateHideZones();
+}
+
+void ACombatUnitActor::MarkLookComponent(UActorComponent* Component) const
+{
+	if (bBuildingInConstruction)
+	{
+		Component->CreationMethod = EComponentCreationMethod::UserConstructionScript;
+	}
 }
 
 void ACombatUnitActor::UpdateHideZones()
