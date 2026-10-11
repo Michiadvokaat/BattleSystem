@@ -21,36 +21,6 @@ enum class ECombatSkillType : uint8
 	Taunt,
 };
 
-/** A body part of a unit look. Presentation only. Python: CombatLookSlotType (FCombatLookSlot is CombatLookSlot). */
-UENUM(BlueprintType, meta = (ScriptName = "CombatLookSlotType"))
-enum class ECombatLookSlot : uint8
-{
-	/** The body (skin, head). */
-	Body,
-	/** Face (expression). */
-	Face,
-	Hair,
-	/** Hat or helmet. */
-	Hat,
-	Glasses,
-	/** Shirt or top. */
-	Shirt,
-	/** Jacket or coat. */
-	Outwear,
-	/** Pants, shorts or skirt. */
-	Pants,
-	Shoes,
-	Gloves,
-	/** Backpack or bag. */
-	Backpack,
-	/** Mustache or beard. */
-	FacialHair,
-	/** Eyebrows, masks, a clown nose, piercings, earrings, a pacifier, a bandage. */
-	FaceAccessory,
-	/** On the body: a bracelet, a chain, a stethoscope, knee and elbow pads. */
-	Accessory,
-};
-
 /** Shape of an area attack. */
 UENUM(BlueprintType)
 enum class ECombatAreaShape : uint8

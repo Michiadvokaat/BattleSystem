@@ -3,7 +3,8 @@
 Headless editor-Python scripts that create or update binary assets. All of them need the editor closed. Most work on local
 content (gitignored folders, see `CLAUDE.md`), so they only run where that content exists. Each script logs with its own
 tag; grep `Saved/Logs/BattleSystem.log` for it (`[CombatCues]`, `[PieceCatalog]`, `[WallVariants]`, `[CombatAnimSet]`,
-`[AdultParts]`, `[FitToHero]`, `[FittedParts]`, `[BodyZones]`, `[ColorRegions]`, `[DesignGhost]`, `[MixamoImport]`).
+`[DesignGhost]`, `[MixamoImport]`; the plugin's fitting pipeline: `[AdultParts]`, `[FitToHero]`, `[FittedParts]`,
+`[BodyZones]`, `[ColorRegions]`, `[LocalizeDeps]`).
 
 The unit and skill tables (`ImportCombatData.py`) are in `CLAUDE.md`, because they are part of the normal code workflow.
 
@@ -27,22 +28,25 @@ $P  = "D:\Unreal\UnrealProjects\BattleSystem\BattleSystem.uproject"
 # in /Game/Characters/Animations/Heroes; existing ones are skipped (local content)
 & "$UE\Engine\Binaries\Win64\UnrealEditor-Cmd.exe" "$P" -run=pythonscript -script="D:/Unreal/UnrealProjects/BattleSystem/Scripts/ImportMixamoAnimations.py" -unattended -nullrhi -nosplash
 
-# Fit the hats, tops, pants, facewear, shoes, hair, gloves, accessories and picked costumes of the Creative/Funny Characters packs and the
-# City pack (per body type and gender) onto the bodies of a target: -Target Child (default) onto SKM_Hero (SKEL_Hero) in
-# /Game/Characters/Meshes/Child/<category>, -Target Adult onto SKM_Adult_Male and SKM_Adult_Female (SKEL_Adult_Skeleton) in
-# /Game/Characters/Meshes/Adult/<category> with the suffix _M / _F (every part on both)
+# Fitting clothing parts is the ModularCharacter3D plugin's pipeline (Plugins/ModularCharacter3D/Scripts; its README.md):
+# the hats, tops, pants, facewear, shoes, hair, gloves, accessories and picked costumes of the Creative/Funny Characters packs
+# and the City pack (per body type and gender) onto the bodies of a target: -Target Child (default) onto SKM_Hero (SKEL_Hero)
+# in /ModularCharacter3D/Child/<category>, -Target Adult onto SKM_Adult_Male and SKM_Adult_Female (SKEL_Adult_Skeleton) in
+# /ModularCharacter3D/Adult/<category> with the suffix _M / _F (every part on both)
 # (categories by name, see ExportAdultParts.py; -Parts picks them and -Packs the packs, default all; the rest is left alone): UE exports
-# FBX, Blender 5.1 scales, moves and rebinds them (Scripts/Blender/FitToHero.py), UE imports them (local content;
-# an editor window opens briefly, because UE's FBX export of skeletal meshes needs a renderer).
-# Then Scripts/CreateBodyZones.py writes the hide zones into the target's bodies (a backup of each body in D:/Unreal/Backups the first time).
+# FBX, Blender 5.1 scales, moves and rebinds them (Blender/FitToHero.py), UE imports them (an editor window opens briefly,
+# because UE's FBX export of skeletal meshes needs a renderer), CreateBodyZones.py writes the hide zones into the target's
+# bodies (a backup of each body the first time), CreateColorRegions.py gives the parts colour regions and
+# LocalizeDependencies.py copies the pack materials they use into /ModularCharacter3D/Source.
+# Paths and programs: the plugin's Scripts/Pipeline.json (this project uses the defaults: packs in /Game/ZZ_FAB).
 # Headless saves have no thumbnails: afterwards save the parts once from the editor (the line is in ImportFittedParts.py's docstring).
 # -Names <regex> takes only the parts whose source name matches (no spaces or commas), e.g. the Creative costumes:
 #   -Parts Costumes,Hats,Accessories -Packs Creative -Names Costume
-& "D:\Unreal\UnrealProjects\BattleSystem\Scripts\FitParts.ps1" -Parts Outwear,Pants -Packs City
-& "D:\Unreal\UnrealProjects\BattleSystem\Scripts\FitParts.ps1" -Target Adult
+& "D:\Unreal\UnrealProjects\BattleSystem\Plugins\ModularCharacter3D\Scripts\FitParts.ps1" -Parts Outwear,Pants -Packs City
+& "D:\Unreal\UnrealProjects\BattleSystem\Plugins\ModularCharacter3D\Scripts\FitParts.ps1" -Target Adult
 
 # Colour regions and recolour material instances on all child and adult parts (FitParts.ps1 does it for what it imports)
-& "$UE\Engine\Binaries\Win64\UnrealEditor-Cmd.exe" "$P" -run=pythonscript -script="D:/Unreal/UnrealProjects/BattleSystem/Scripts/CreateColorRegions.py" -unattended -nullrhi -nosplash
+& "$UE\Engine\Binaries\Win64\UnrealEditor-Cmd.exe" "$P" -run=pythonscript -script="D:/Unreal/UnrealProjects/BattleSystem/Plugins/ModularCharacter3D/Scripts/CreateColorRegions.py" -unattended -nullrhi -nosplash
 
 # Create the child animation set /Game/Characters/Animations/DA_AnimSet_Child (local content)
 & "$UE\Engine\Binaries\Win64\UnrealEditor-Cmd.exe" "$P" -run=pythonscript -script="D:/Unreal/UnrealProjects/BattleSystem/Scripts/CreateCharacterAnimSet.py" -unattended -nullrhi -nosplash

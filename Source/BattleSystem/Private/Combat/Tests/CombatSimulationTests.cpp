@@ -1955,7 +1955,7 @@ bool FCombatLookPicksTest::RunTest(const FString& Parameters)
 	FCombatLook Look;
 	auto AddSlot = [&Look](const TArray<USkeletalMesh*>& Options, float EmptyChance)
 	{
-		FCombatLookSlot& Slot = Look.Slots.AddDefaulted_GetRef();
+		FModularLookSlot& Slot = Look.Slots.AddDefaulted_GetRef();
 		for (USkeletalMesh* Option : Options)
 		{
 			Slot.Options.Add(Option);

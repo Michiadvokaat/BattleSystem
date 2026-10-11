@@ -5,6 +5,7 @@
 #include "Combat/CombatSubsystem.h"
 #include "Combat/CombatUnitData.h"
 #include "Components/SkeletalMeshComponent.h"
+#include "ModularCharacterComponent.h"
 #include "Components/StaticMeshComponent.h"
 #include "Components/WidgetComponent.h"
 #include "Engine/DataTable.h"

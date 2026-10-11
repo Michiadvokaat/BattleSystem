@@ -8,9 +8,9 @@ public class BattleSystem : ModuleRules
 	{
 		PCHUsage = PCHUsageMode.UseExplicitOrSharedPCHs;
 	
-		PublicDependencyModuleNames.AddRange(new string[] { "Core", "CoreUObject", "Engine", "InputCore", "EnhancedInput", "GameplayTags", "DeveloperSettings" });
+		PublicDependencyModuleNames.AddRange(new string[] { "Core", "CoreUObject", "Engine", "InputCore", "EnhancedInput", "GameplayTags", "DeveloperSettings", "ModularCharacter3D" });
 
-		PrivateDependencyModuleNames.AddRange(new string[] { "AssetRegistry", "Slate", "SlateCore", "Niagara", "Json", "JsonUtilities", "UMG", "SkeletalMerging", "GeometryCore", "GeometryFramework", "GeometryScriptingCore", "AppFramework" });
+		PrivateDependencyModuleNames.AddRange(new string[] { "AssetRegistry", "Slate", "SlateCore", "Niagara", "Json", "JsonUtilities", "UMG", "GeometryCore", "GeometryFramework", "GeometryScriptingCore", "AppFramework" });
 
 		if (Target.bBuildEditor)
 		{

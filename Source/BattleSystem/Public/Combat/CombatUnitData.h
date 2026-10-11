@@ -7,6 +7,7 @@
 #include "GameplayTagContainer.h"
 #include "Combat/CombatEffects.h"
 #include "Combat/CombatTypes.h"
+#include "ModularCharacterLook.h"
 #include "CombatUnitData.generated.h"
 
 class ACombatProjectileActor;
@@ -166,144 +167,19 @@ struct FCombatSkillRow : public FTableRowBase
 	BATTLESYSTEM_API FString GetDisplayName() const;
 };
 
-/** The colour of one colour region of a part (Scripts/CreateColorRegions.py finds up to four per part, largest first). */
-USTRUCT(BlueprintType)
-struct BATTLESYSTEM_API FCombatLookColor
-{
-	GENERATED_BODY()
-
-	/** Off: the region keeps the part's own colour. */
-	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Color")
-	bool bOverride = false;
-
-	/** The new colour; the region's light and dark shades follow it. */
-	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Color", meta = (EditCondition = "bOverride", HideAlphaChannel))
-	FLinearColor Color = FLinearColor::White;
-};
-
-/** One body part of a look (body, shirt, hat, ...). All meshes of a look must use the same skeleton. */
-USTRUCT(BlueprintType)
-struct FCombatLookSlot
-{
-	GENERATED_BODY()
-
-	/** What this part is. Overrides and SetSlotMesh find the slot by it. */
-	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Slot")
-	ECombatLookSlot Slot = ECombatLookSlot::Body;
-
-	/** Meshes to choose from when the unit spawns. One mesh = always that one. */
-	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Slot")
-	TArray<TSoftObjectPtr<USkeletalMesh>> Options;
-
-	/** Chance (0..1) that the slot stays empty, for example 0.5 for a hat on half of the units. */
-	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Slot", meta = (ClampMin = 0, ClampMax = 1))
-	float EmptyChance = 0.f;
-
-	/**
-	 * Off: merged into the one body mesh (cheapest, fixed for the unit's life).
-	 * On: its own mesh component that follows the body (Leader Pose), so it can change during play.
-	 */
-	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Slot")
-	bool bSwappable = false;
-
-	/**
-	 * Colours of the part's colour regions, in order: 1 = its largest area (the main colour), up to 4. A region without an
-	 * entry, or with Override off, keeps its colour. Works on parts with colour regions (the fitted parts and the child pack's
-	 * clothing); the same colours go to whichever option is picked.
-	 */
-	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Slot")
-	TArray<FCombatLookColor> Colors;
-};
-
-/** A rigid prop (weapon, shield, ...) attached to a socket of the skeleton. Works with meshes from any pack. */
-USTRUCT(BlueprintType)
-struct FCombatLookProp
-{
-	GENERATED_BODY()
-
-	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Prop")
-	TSoftObjectPtr<UStaticMesh> Mesh;
-
-	/** Socket or bone of the skeleton. Empty = the mesh root (the feet). */
-	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Prop")
-	FName Socket;
-
-	/** Offset relative to the socket. */
-	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Prop")
-	FTransform Offset;
-};
-
-/** While the unit has a tag, a swappable slot shows another mesh (or nothing). Presentation only. */
-USTRUCT(BlueprintType)
-struct FCombatLookOverride
-{
-	GENERATED_BODY()
-
-	/** An effect tag (Effect.Slow) or a tag an effect grants (Status.Taunted); parent tags match their children. */
-	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Override")
-	FGameplayTag WhileTag;
-
-	/** A slot with bSwappable on. A slot the look does not have gets its own component. */
-	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Override")
-	ECombatLookSlot Slot = ECombatLookSlot::Hat;
-
-	/** Mesh shown while the tag is active. Empty = hide the slot. */
-	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Override")
-	TSoftObjectPtr<USkeletalMesh> Mesh;
-};
-
 /**
- * The look of a unit: modular skeletal mesh parts, body shape, props and tag overrides.
- * Pure presentation: the simulation never reads it, so changing a look never changes a fight.
- * Meshes are soft references (local content), loaded when a unit actor builds the look.
+ * The look of a unit: the modular character (FModularCharacterLook: parts, colours, props, scale, tag overrides; built by
+ * UModularCharacterComponent) plus its animations. Pure presentation: the simulation never reads it, so changing a look
+ * never changes a fight. The overrides switch on the unit's effect tags (Effect.Slow) and the tags they grant (Status.Taunted).
  */
 USTRUCT(BlueprintType)
-struct BATTLESYSTEM_API FCombatLook
+struct BATTLESYSTEM_API FCombatLook : public FModularCharacterLook
 {
 	GENERATED_BODY()
-
-	/** Empty = the placeholder shape (cylinder or cube). */
-	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Look")
-	TArray<FCombatLookSlot> Slots;
-
-	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Look")
-	TArray<FCombatLookProp> Props;
-
-	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Look")
-	TArray<FCombatLookOverride> Overrides;
 
 	/** Animations for this look's skeleton (AnimBP, locomotion, montages). Empty = the reference pose. */
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Look")
 	TSoftObjectPtr<UCombatAnimSet> AnimSet;
-
-	/** Size of the whole figure. */
-	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Look", meta = (ClampMin = 0.05))
-	float UniformScale = 1.f;
-
-	/** Extra scale across (X and Y): above 1 is wider. */
-	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Look", meta = (ClampMin = 0.05))
-	float WidthScale = 1.f;
-
-	/** Extra scale upwards (Z): above 1 is taller. */
-	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Look", meta = (ClampMin = 0.05))
-	float HeightScale = 1.f;
-
-	/** Rotation of the meshes relative to the unit, which faces +X. Most packs face +Y, hence -90. */
-	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Look")
-	FRotator MeshRotation = FRotator(0.0, -90.0, 0.0);
-
-	/** Has parts to show (else the unit keeps the placeholder). */
-	bool HasParts() const { return !Slots.IsEmpty(); }
-
-	/** Combined scale of the mesh component. */
-	FVector GetMeshScale() const;
-
-	/**
-	 * Chooses a mesh per slot, the same for the same seed (the subsystem passes a hash of the fight seed and the
-	 * unit ID, so a replay looks the same), and loads it. Result is parallel to Slots; nullptr = empty slot.
-	 * Uses its own random stream, never the simulation's.
-	 */
-	TArray<USkeletalMesh*> PickMeshes(int32 Seed) const;
 };
 
 /**

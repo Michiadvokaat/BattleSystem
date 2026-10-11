@@ -50,3 +50,6 @@ Docs/Screenshots/
 /Content/Maps/School-Experiment.umap
 /Docs/Stappen.txt
 /Docs/Heroes.xlsx
+
+# The ModularCharacter3D plugin is its own local git repository (D:/Unreal/Repos/ModularCharacter3D.git)
+Plugins/ModularCharacter3D/

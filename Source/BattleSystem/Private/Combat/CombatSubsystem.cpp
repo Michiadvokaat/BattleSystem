@@ -2751,13 +2751,13 @@ namespace CombatConsole
 		}
 
 		const FString SlotName = Args[1].StartsWith(TEXT("Slot."), ESearchCase::IgnoreCase) ? Args[1].RightChop(5) : Args[1];
-		const int64 SlotValue = StaticEnum<ECombatLookSlot>()->GetValueByNameString(SlotName);
+		const int64 SlotValue = StaticEnum<EModularLookSlot>()->GetValueByNameString(SlotName);
 		if (SlotValue == INDEX_NONE)
 		{
 			UE_LOG(LogCombat, Error, TEXT("Unknown slot %s (Body, Face, Hair, Hat, Glasses, Shirt, Outwear, Pants, Shoes, Gloves, Backpack)."), *SlotName);
 			return;
 		}
-		const ECombatLookSlot Slot = static_cast<ECombatLookSlot>(SlotValue);
+		const EModularLookSlot Slot = static_cast<EModularLookSlot>(SlotValue);
 
 		USkeletalMesh* Mesh = nullptr;
 		if (Args.Num() > 2)

@@ -18,6 +18,7 @@ class USkeletalMeshComponent;
 class UMaterialInstanceDynamic;
 class UWidgetComponent;
 class UMaterialInterface;
+class UModularCharacterComponent;
 class UStaticMesh;
 class UStaticMeshComponent;
 
@@ -26,7 +27,8 @@ class UStaticMeshComponent;
  * simulation (interpolated position, events) and contains no gameplay logic.
  * Placeholder look: a cylinder (melee) or cube (ranged) in the team color with a "nose" that shows the facing,
  * a health bar above it and its active effects as short labels on its center (both screen-space widgets).
- * With a look (FCombatLook, InitLook) it shows a modular character instead of the placeholder shape.
+ * With a look (FCombatLook, InitLook) it shows a modular character (UModularCharacterComponent) instead of the placeholder
+ * shape.
  */
 /** One status label shown on a unit, for example "T" in magenta while taunted. */
 struct FCombatStatusDisplay
@@ -65,7 +67,7 @@ public:
 	 * slot cannot change. An active override of the slot stays visible until its tag ends. False if not possible.
 	 */
 	UFUNCTION(BlueprintCallable, Category = "Combat|Look")
-	bool SetSlotMesh(ECombatLookSlot Slot, USkeletalMesh* Mesh);
+	bool SetSlotMesh(EModularLookSlot Slot, USkeletalMesh* Mesh);
 
 	/**
 	 * Called every frame: the velocity (world cm/s; the AnimBP gets it relative to the figure's facing) for locomotion,
@@ -137,7 +139,7 @@ protected:
 
 	/** The modular look's body: the merged parts. Swappable slots and props are attached to it. Hidden without a look. */
 	UPROPERTY(VisibleAnywhere, Category = "Combat")
-	TObjectPtr<USkeletalMeshComponent> CharacterMesh;
+	TObjectPtr<UModularCharacterComponent> CharacterMesh;
 
 	UPROPERTY(VisibleAnywhere, Category = "Combat")
 	TObjectPtr<UWidgetComponent> HealthBarWidget;
@@ -203,20 +205,6 @@ protected:
 
 private:
 	void SetBodyColor(const FLinearColor& Color);
-	/** Marks a component the look adds (see bBuildingInConstruction). */
-	void MarkLookComponent(UActorComponent* Component) const;
-
-	/** A part component on CharacterMesh that follows its pose (Leader Pose). */
-	USkeletalMeshComponent* AddPartComponent(USkeletalMesh* Mesh);
-	int32 AddSwappableSlot(ECombatLookSlot Slot, USkeletalMesh* BaseMesh);
-	/** Shows the slot's mesh: the first override whose tag is active, else the base mesh. */
-	void RefreshSwappableSlot(int32 Index);
-	/** Hides the body zones that the merged parts and the shown swappable meshes cover (UCombatHideZones). */
-	void UpdateHideZones();
-
-	/** The look shown (InitLook); empty Slots = the placeholder. */
-	UPROPERTY(Transient)
-	FCombatLook Look;
 
 	/** The look's AnimSet and the body's anim instance; null without animations. */
 	UPROPERTY(Transient)
@@ -243,23 +231,6 @@ private:
 	FRandomStream IdleStream;
 	/** The first facing is taken at once, also for an animated figure (previews get only one update). */
 	bool bHasFacing = false;
-
-	/** Swappable slots, parallel arrays: tag, component and the mesh shown when no override is active. */
-	TArray<ECombatLookSlot> SwappableSlots;
-
-	UPROPERTY(Transient)
-	TArray<TObjectPtr<USkeletalMeshComponent>> SwappableComponents;
-
-	UPROPERTY(Transient)
-	TArray<TObjectPtr<USkeletalMesh>> SwappableBaseMeshes;
-
-	FGameplayTagContainer ActiveTags;
-
-	/** The body zones the merged parts cover, and the body materials that hide zones (dynamic instances on CharacterMesh). */
-	int32 MergedHideZones = 0;
-
-	UPROPERTY(Transient)
-	TArray<TObjectPtr<UMaterialInstanceDynamic>> ZoneMaterials;
 
 	/** Height of what is shown (BodyHeight or the look's mesh); the widgets and texts are placed by it. */
 	float VisualHeight = 0.f;

@@ -88,28 +88,6 @@ UClass* FCombatUnitRow::LoadActorClass() const
 	return Class ? Class : ACombatUnitActor::StaticClass();
 }
 
-FVector FCombatLook::GetMeshScale() const
-{
-	return FVector(UniformScale * WidthScale, UniformScale * WidthScale, UniformScale * HeightScale);
-}
-
-TArray<USkeletalMesh*> FCombatLook::PickMeshes(int32 Seed) const
-{
-	// One draw for the empty chance and one for the option per slot, in slot order, so adding options to one slot
-	// does not change the picks of the slots before it.
-	FRandomStream Stream(Seed);
-	TArray<USkeletalMesh*> Picks;
-	Picks.Reserve(Slots.Num());
-	for (const FCombatLookSlot& Slot : Slots)
-	{
-		const float EmptyRoll = Stream.GetFraction();
-		const int32 OptionRoll = Stream.RandHelper(FMath::Max(Slot.Options.Num(), 1));
-		const bool bEmpty = Slot.Options.IsEmpty() || EmptyRoll < Slot.EmptyChance;
-		Picks.Add(bEmpty ? nullptr : Slot.Options[OptionRoll].LoadSynchronous());
-	}
-	return Picks;
-}
-
 FCombatUnitStats FCombatUnitType::ToSimStats(int32 TickRate) const
 {
 	FCombatUnitStats Stats;
