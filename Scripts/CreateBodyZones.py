@@ -1,36 +1,46 @@
-"""Gives the child bodies their hide zones: a zone code per vertex, and a masked body material that hides zones.
+"""Gives the child and adult bodies their hide zones: a zone code per vertex, and a masked body material that hides zones.
 
-Step 4 of Scripts/FitChildParts.ps1; run headless with the editor closed:
-    UnrealEditor-Cmd.exe BattleSystem.uproject -run=pythonscript -script="<abs path>/Scripts/CreateBodyZones.py" -unattended -nullrhi -nosplash
+Step 4 of Scripts/FitParts.ps1; run headless with the editor closed, with the target (TARGETS; default Child):
+    UnrealEditor-Cmd.exe BattleSystem.uproject -run=pythonscript -script="<abs path>/Scripts/CreateBodyZones.py [Child|Adult]" -unattended -nullrhi -nosplash
 
-Reads FITTED_DIR/body_zones.json, written by Scripts/Blender/FitToHero.py: the hero's skin vertices (Blender world space,
-m) with their zone (index into ECombatBodyZone, -1 for the face). Matches them to the vertices of SKM_Hero (trying the
-axis signs of the FBX round trip), then for every body in BODIES:
+Each fitting body of the target (Hero; AdultMale and AdultFemale) has FITTED_DIR/body_zones_<body>.json, written by
+Scripts/Blender/FitToHero.py: its skin vertices (Blender world space, m) with their zone (index into ECombatBodyZone, -1 for
+the face). Matches them to the vertices of that body's mesh (trying the axis signs of the FBX round trip), then for every
+body that takes its zones (TARGETS):
 - writes the zone + 1 into UV channel ZONE_UV_SET (u; 0 = never hidden). A UV channel instead of vertex colors, because
   floats keep the codes exact (vertex colors go through an sRGB conversion);
 - gives it <its material>_BodyZones in MATERIAL_PATH: a copy of its material, masked, whose opacity mask hides the zones
   flagged in the vector parameters HideZones0.. (four zones each; set by ACombatUnitActor from the clothing it wears). The
   hide flag is computed per vertex and interpolated (VertexInterpolator), so the cut runs through the triangles between a
   hidden and a shown zone instead of reading wrong codes there.
-The bodies share one topology; one whose vertices do not line up with SKM_Hero's gets its zones by nearest position.
-The first run copies the bodies to BACKUP_DIR; later runs keep that backup. The materials are made again every run.
+The bodies of a group share one topology; one whose vertices do not line up with the group's first gets its zones by nearest
+position. A body is copied to BACKUP_DIR the first time; later runs keep that backup. The zone materials are made again
+every run; the bodies of all targets share them, so every body that had one gets it back (only the target's bodies get new
+zone codes).
 """
 
 import json
 import math
 import os
 import shutil
+import sys
 
 import unreal
 
 LOG_TAG = "[BodyZones]"
 FITTED_DIR = "D:/Unreal/Assets/Blender/Fitted"
 BACKUP_DIR = "D:/Unreal/Backups/BattleSystem_2026-10-09_BodyZones"
-HERO_MESH = "/Game/Characters/Meshes/SKM_Hero"
-BODIES = [HERO_MESH] + [f"/Game/Characters/Meshes/Child/{g}/SKM_Child_{g}_Body_0{i}" for g in ("Male", "Female") for i in range(1, 5)]
+# Target -> fitting body (the name in its body_zones file) -> the bodies that take its zones, its own mesh first.
+TARGETS = {
+    "Child": {"Hero": ["/Game/Characters/Meshes/Child/SKM_Hero"] + [
+        f"/Game/Characters/Meshes/Child/{g}/SKM_Child_{g}_Body_0{i}" for g in ("Male", "Female") for i in range(1, 5)]},
+    "Adult": {"AdultMale": ["/Game/Characters/Meshes/Adult/SKM_Adult_Male"],
+              "AdultFemale": ["/Game/Characters/Meshes/Adult/SKM_Adult_Female"]},
+}
+ALL_BODIES = [body for groups in TARGETS.values() for bodies in groups.values() for body in bodies]
 MATERIAL_PATH = "/Game/Characters/Materials"
 ZONE_UV_SET = 1
-# Vertices of a body that lie further than this (cm) from SKM_Hero's on average do not share its vertex order.
+# Vertices of a body that lie further than this (cm) from its group's first on average do not share its vertex order.
 SAME_ORDER_DISTANCE = 3.0
 GRID = 3.0
 # Body materials by name, for bodies that already carry a zone material (a rerun).
@@ -90,7 +100,7 @@ class Nearest:
         return None, -1
 
 
-def match_zones(points, vertices):
+def match_zones(points, vertices, mesh_path):
     """Zones of the vertices (UE cm) from the Blender points: the axis signs with the smallest mean distance win."""
     best = None
     for sx in (1, -1):
@@ -103,7 +113,7 @@ def match_zones(points, vertices):
     mean, sx, sy, nearest = best
     log(f"Blender to UE: x * {sx * 100}, y * {sy * 100}, z * 100 (mean distance {mean:.2f} cm)")
     if mean > 1.0:
-        raise RuntimeError(f"{LOG_TAG} The Blender points do not line up with {HERO_MESH} ({mean:.2f} cm)")
+        raise RuntimeError(f"{LOG_TAG} The Blender points do not line up with {mesh_path} ({mean:.2f} cm)")
     return [nearest.find(v)[1] for v in vertices], nearest
 
 
@@ -192,13 +202,17 @@ def zone_material(base, parameter_count):
     return material
 
 
-def restore_base_materials():
-    """The base material of every body (name -> path). A body that already has a zone material (a rerun) gets its base
-    material back first, found by the zone material's name (<base>_BodyZones) in BASE_MATERIALS, so the zone materials
-    can be deleted and made again without anything still using them."""
+def restore_base_materials(bodies):
+    """The base material of every body (name -> path), and the bodies that had a zone material. A body that already has a
+    zone material (a rerun) gets its base material back first, found by the zone material's name (<base>_BodyZones) in
+    BASE_MATERIALS, so the zone materials can be deleted and made again without anything still using them."""
     bases = {}
-    for body in BODIES:
+    zoned = []
+    for body in bodies:
         mesh = unreal.load_asset(body)
+        if any(slot.get_editor_property("material_interface").get_name().endswith("_BodyZones")
+               for slot in mesh.get_editor_property("materials")):
+            zoned.append(body)
         slots = []
         for slot in mesh.get_editor_property("materials"):
             name = slot.get_editor_property("material_interface").get_name()
@@ -213,65 +227,87 @@ def restore_base_materials():
                for s, o in zip(slots, mesh.get_editor_property("materials"))):
             mesh.set_editor_property("materials", slots)
             unreal.EditorAssetLibrary.save_loaded_asset(mesh, only_if_is_dirty=False)
-    return bases
+    return bases, zoned
+
+
+def set_zone_materials(mesh, materials):
+    """Gives every slot the zone material of its base material and saves the mesh; returns the materials' names."""
+    slots = []
+    for slot in mesh.get_editor_property("materials"):
+        name = slot.get_editor_property("material_interface").get_name()
+        name = name[:-len("_BodyZones")] if name.endswith("_BodyZones") else name
+        slot.set_editor_property("material_interface", materials[name])
+        slots.append(slot)
+    mesh.set_editor_property("materials", slots)
+    if not unreal.EditorAssetLibrary.save_loaded_asset(mesh, only_if_is_dirty=False):
+        raise RuntimeError(f"{LOG_TAG} Could not save {mesh.get_path_name()}")
+    return ", ".join(sorted({s.get_editor_property("material_interface").get_name() for s in slots}))
 
 
 def main():
+    target = sys.argv[1] if len(sys.argv) > 1 and sys.argv[1] else "Child"
+    if target not in TARGETS:
+        raise RuntimeError(f"{LOG_TAG} Unknown target {target}; known: {list(TARGETS)}")
+    groups = TARGETS[target]
     content = unreal.Paths.convert_relative_path_to_full(unreal.Paths.project_content_dir())
-    if not os.path.isdir(BACKUP_DIR):
-        for body in BODIES:
-            source = os.path.join(content, body[len("/Game/"):] + ".uasset")
-            target = os.path.join(BACKUP_DIR, body[len("/Game/"):] + ".uasset")
-            os.makedirs(os.path.dirname(target), exist_ok=True)
-            shutil.copy2(source, target)
-        log(f"Backup of {len(BODIES)} bodies in {BACKUP_DIR}")
+    backed_up = 0
+    for body in [b for bodies in groups.values() for b in bodies]:
+        source = os.path.join(content, body[len("/Game/"):] + ".uasset")
+        backup = os.path.join(BACKUP_DIR, body[len("/Game/"):] + ".uasset")
+        if not os.path.isfile(backup):
+            os.makedirs(os.path.dirname(backup), exist_ok=True)
+            shutil.copy2(source, backup)
+            backed_up += 1
+    if backed_up:
+        log(f"Backup of {backed_up} bodies in {BACKUP_DIR}")
 
-    with open(f"{FITTED_DIR}/body_zones.json", encoding="utf-8") as f:
-        data = json.load(f)
-    parameter_count = (len(data["zones"]) + 3) // 4
+    data = {}
+    for name in groups:
+        with open(f"{FITTED_DIR}/body_zones_{name}.json", encoding="utf-8") as f:
+            data[name] = json.load(f)
+    parameter_count = (len(next(iter(data.values()))["zones"]) + 3) // 4
 
-    hero = unreal.load_asset(HERO_MESH)
-    hero_positions = positions(read_mesh(hero))
-    hero_zones, nearest = match_zones(data["points"], hero_positions)
-    counts = {name: hero_zones.count(i) for i, name in enumerate(data["zones"])}
-    log(f"{HERO_MESH}: {len(hero_zones)} vertices, zones {counts}, face {hero_zones.count(-1)}")
-
-    bases = restore_base_materials()
+    bases, zoned = restore_base_materials(ALL_BODIES)
     unreal.SystemLibrary.collect_garbage()
     materials = {name: zone_material(unreal.load_asset(path), parameter_count) for name, path in bases.items()}
 
-    for body in BODIES:
-        mesh = unreal.load_asset(body)
-        dyn = read_mesh(mesh)
-        vertices = positions(dyn)
-        if body == HERO_MESH:
-            zones = hero_zones
-        elif len(vertices) == len(hero_positions) and sum(
-                math.dist(a, b) for a, b in zip(vertices, hero_positions)) / len(vertices) < SAME_ORDER_DISTANCE:
-            zones = hero_zones
-        else:
-            found = [nearest.find(v) for v in vertices]
-            zones = [zone for _, zone in found]
-            log(f"{body}: vertices do not line up with {HERO_MESH}; zones by nearest position "
-                f"(mean {sum(d for d, _ in found) / len(found):.2f} cm, max {max(d for d, _ in found):.2f} cm)")
-        write_zone_uvs(dyn, zones)
-        write = unreal.GeometryScriptMeshWriteLOD()
-        write.set_editor_property("lod_index", 0)
-        options = unreal.GeometryScriptCopyMeshToAssetOptions()
-        options.set_editor_property("replace_materials", False)
-        _dyn, outcome = unreal.GeometryScript_AssetUtils.copy_mesh_to_skeletal_mesh(dyn, mesh, options, write)
-        if outcome != unreal.GeometryScriptOutcomePins.SUCCESS:
-            raise RuntimeError(f"{LOG_TAG} Could not write {body}")
-        slots = []
-        for slot in mesh.get_editor_property("materials"):
-            name = slot.get_editor_property("material_interface").get_name()
-            name = name[:-len("_BodyZones")] if name.endswith("_BodyZones") else name
-            slot.set_editor_property("material_interface", materials[name])
-            slots.append(slot)
-        mesh.set_editor_property("materials", slots)
-        if not unreal.EditorAssetLibrary.save_loaded_asset(mesh, only_if_is_dirty=False):
-            raise RuntimeError(f"{LOG_TAG} Could not save {body}")
-        log(f"{body}: zones in UV {ZONE_UV_SET}, material {materials[name].get_name()}")
+    for name, bodies in groups.items():
+        reference = bodies[0]
+        if data[name]["mesh"] != reference:
+            raise RuntimeError(f"{LOG_TAG} body_zones_{name}.json is for {data[name]['mesh']}, not {reference}")
+        reference_positions = positions(read_mesh(unreal.load_asset(reference)))
+        reference_zones, nearest = match_zones(data[name]["points"], reference_positions, reference)
+        counts = {zone: reference_zones.count(i) for i, zone in enumerate(data[name]["zones"])}
+        log(f"{reference}: {len(reference_zones)} vertices, zones {counts}, face {reference_zones.count(-1)}")
+        for body in bodies:
+            mesh = unreal.load_asset(body)
+            dyn = read_mesh(mesh)
+            vertices = positions(dyn)
+            if body == reference:
+                zones = reference_zones
+            elif len(vertices) == len(reference_positions) and sum(
+                    math.dist(a, b) for a, b in zip(vertices, reference_positions)) / len(vertices) < SAME_ORDER_DISTANCE:
+                zones = reference_zones
+            else:
+                found = [nearest.find(v) for v in vertices]
+                zones = [zone for _, zone in found]
+                log(f"{body}: vertices do not line up with {reference}; zones by nearest position "
+                    f"(mean {sum(d for d, _ in found) / len(found):.2f} cm, max {max(d for d, _ in found):.2f} cm)")
+            write_zone_uvs(dyn, zones)
+            write = unreal.GeometryScriptMeshWriteLOD()
+            write.set_editor_property("lod_index", 0)
+            options = unreal.GeometryScriptCopyMeshToAssetOptions()
+            options.set_editor_property("replace_materials", False)
+            _dyn, outcome = unreal.GeometryScript_AssetUtils.copy_mesh_to_skeletal_mesh(dyn, mesh, options, write)
+            if outcome != unreal.GeometryScriptOutcomePins.SUCCESS:
+                raise RuntimeError(f"{LOG_TAG} Could not write {body}")
+            log(f"{body}: zones in UV {ZONE_UV_SET}, material {set_zone_materials(mesh, materials)}")
+
+    # The bodies of the other targets keep their zone codes and get the new zone materials back.
+    target_bodies = {b for bodies in groups.values() for b in bodies}
+    for body in zoned:
+        if body not in target_bodies:
+            log(f"{body}: material {set_zone_materials(unreal.load_asset(body), materials)}")
     log("Done")
 
 

@@ -115,7 +115,7 @@
 				{
 					"Slot": "Body",
 					"Options": [
-						"/Game/Characters/Meshes/SKM_Hero.SKM_Hero"
+						"/Game/Characters/Meshes/Child/SKM_Hero.SKM_Hero"
 					],
 					"EmptyChance": 0,
 					"bSwappable": false,
@@ -514,7 +514,7 @@
 				{
 					"Slot": "Body",
 					"Options": [
-						"/Game/Characters/Meshes/SKM_Hero.SKM_Hero"
+						"/Game/Characters/Meshes/Child/SKM_Hero.SKM_Hero"
 					],
 					"EmptyChance": 0,
 					"bSwappable": false,
@@ -599,7 +599,7 @@
 				{
 					"Slot": "Body",
 					"Options": [
-						"/Game/Characters/Meshes/SKM_Hero.SKM_Hero"
+						"/Game/Characters/Meshes/Child/SKM_Hero.SKM_Hero"
 					],
 					"EmptyChance": 0,
 					"bSwappable": false,

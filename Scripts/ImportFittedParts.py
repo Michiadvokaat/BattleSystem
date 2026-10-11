@@ -1,11 +1,12 @@
-"""Imports the parts fitted by Scripts/Blender/FitToHero.py onto the hero skeleton SKEL_Hero.
+"""Imports the parts fitted by Scripts/Blender/FitToHero.py onto the skeleton of their target body (SKEL_Hero or
+SKEL_Adult_Skeleton).
 
-Step 3 of Scripts/FitChildParts.ps1; run headless with the editor closed:
+Step 3 of Scripts/FitParts.ps1; run headless with the editor closed:
     UnrealEditor-Cmd.exe BattleSystem.uproject -run=pythonscript -script="<abs path>/Scripts/ImportFittedParts.py" -unattended -nullrhi -nosplash
 
-Reads FITTED_DIR/fitted.json. Each part replaces the asset at its target path (soft references to it, such as a look in
-DT_Units, keep working), gets the materials of its source asset back by slot index, so no materials are imported, and gets
-the body zones it covers ("hide_zones", UCombatHideZones; the bodies hide them, see Scripts/CreateBodyZones.py).
+Reads FITTED_DIR/fitted.json. Each part goes onto the skeleton of its "body", replaces the asset at its target path (soft
+references to it, such as a look in DT_Units, keep working), gets the materials of its source asset back by slot index,
+so no materials are imported, and gets the body zones it covers ("hide_zones", UCombatHideZones; the bodies hide them, see Scripts/CreateBodyZones.py).
 A headless run (no renderer) saves the parts without thumbnails; to get them, save them once from the running editor
 (Output Log, Python):
     import unreal; [unreal.EditorAssetLibrary.save_asset(a, only_if_is_dirty=False) for a in unreal.EditorAssetLibrary.list_assets('/Game/Characters/Meshes/Child/Hats', recursive=False)]
@@ -17,7 +18,6 @@ import unreal
 
 LOG_TAG = "[FittedParts]"
 FITTED_DIR = "D:/Unreal/Assets/Blender/Fitted"
-HERO_MESH = "/Game/Characters/Meshes/SKM_Hero.SKM_Hero"
 
 
 def log(message):
@@ -62,13 +62,14 @@ def copy_materials(source, target):
     target.set_editor_property("materials", source_slots)
 
 
-def delete_stale(targets, skeleton):
-    """Deletes the targets that are not skeletal meshes on the skeleton, then collects garbage.
+def delete_stale(targets):
+    """Deletes the targets (asset path -> skeleton) that are not skeletal meshes on their skeleton, then collects garbage.
 
-    A copy on another skeleton cannot be reimported onto SKEL_Hero, and an import into a deleted asset that is still in memory
-    reimports it (keeping its old skeleton), so the deleting happens first, with no references left for the collection."""
+    A copy on another skeleton cannot be reimported onto its skeleton, and an import into a deleted asset that is still in
+    memory reimports it (keeping its old skeleton), so the deleting happens first, with no references left for the collection."""
     lib = unreal.EditorAssetLibrary
-    stale = [t for t in targets if lib.does_asset_exist(t) and not on_skeleton(unreal.load_asset(t), skeleton)]
+    stale = [t for t, skeleton in targets.items()
+             if lib.does_asset_exist(t) and not on_skeleton(unreal.load_asset(t), skeleton)]
     for target in stale:
         if not lib.delete_asset(target):
             raise RuntimeError(f"{LOG_TAG} Could not delete {target}")
@@ -84,12 +85,15 @@ def on_skeleton(asset, skeleton):
 def main():
     # The classic FBX importer, so FbxImportUI's settings apply (UE 5.8 imports FBX through Interchange by default).
     unreal.SystemLibrary.execute_console_command(None, "Interchange.FeatureFlags.Import.FBX 0")
-    skeleton = unreal.load_asset(HERO_MESH).get_editor_property("skeleton")
     with open(f"{FITTED_DIR}/fitted.json", encoding="utf-8") as f:
         parts = json.load(f)["parts"]
+    skeletons = {body: unreal.load_asset(body).get_editor_property("skeleton") for body in sorted({p["body"] for p in parts})}
+    for body, skeleton in skeletons.items():
+        log(f"{body}: skeleton {skeleton.get_path_name()}")
 
-    delete_stale([part["target"] for part in parts], skeleton)
+    delete_stale({part["target"]: skeletons[part["body"]] for part in parts})
     for part in parts:
+        skeleton = skeletons[part["body"]]
         folder, name = part["target"].rsplit("/", 1)
         mesh = import_part(f"{FITTED_DIR}/{part['fbx']}", folder, name, skeleton)
         if not on_skeleton(mesh, skeleton):
@@ -98,7 +102,7 @@ def main():
         unreal.CombatHideZonesLibrary.set_hide_zones(mesh, part.get("hide_zones", 0))
         if not unreal.EditorAssetLibrary.save_loaded_asset(mesh, only_if_is_dirty=False):
             raise RuntimeError(f"{LOG_TAG} Could not save {part['target']}")
-    log(f"{len(parts)} parts on {skeleton.get_path_name()}")
+    log(f"{len(parts)} parts on {', '.join(sorted(s.get_path_name() for s in skeletons.values()))}")
     log("Done")
 
 

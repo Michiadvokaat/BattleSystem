@@ -1,10 +1,11 @@
-# Fits the adult hats and clothing of the Fab packs to the hero skeleton SKEL_Hero (editor must be closed):
-#   1. Scripts/ExportAdultParts.py (UE): the parts of the chosen categories, an adult body per pack and the hero to FBX in
-#      D:/Unreal/Assets/Blender/Export
-#   2. Scripts/Blender/FitToHero.py (Blender): fit and rebind each part, to D:/Unreal/Assets/Blender/Fitted
-#   3. Scripts/ImportFittedParts.py (UE): import onto SKEL_Hero in /Game/Characters/Meshes/Child/<category>,
-#      with the body zones each part covers
-#   4. Scripts/CreateBodyZones.py (UE): zone codes and the masked zone material on the child bodies
+# Fits the adult hats and clothing of the Fab packs onto the bodies of a target (editor must be closed): -Target Child (default)
+# fits them onto the hero SKM_Hero (SKEL_Hero) into /Game/Characters/Meshes/Child/<category>, -Target Adult onto
+# SKM_Adult_Male and SKM_Adult_Female (SKEL_Adult_Skeleton) into /Game/Characters/Meshes/Adult/<category>, suffix _M / _F.
+#   1. Scripts/ExportAdultParts.py (UE): the parts of the chosen categories, an adult body per pack and the target bodies to
+#      FBX in D:/Unreal/Assets/Blender/Export
+#   2. Scripts/Blender/FitToHero.py (Blender): fit and rebind each part onto each target body, to D:/Unreal/Assets/Blender/Fitted
+#   3. Scripts/ImportFittedParts.py (UE): import onto the target bodies' skeleton, with the body zones each part covers
+#   4. Scripts/CreateBodyZones.py (UE): zone codes and the masked zone material on the target's bodies
 #   5. Scripts/CreateColorRegions.py (UE): colour regions and a recolour material instance on every imported part
 # -Parts picks the categories (Hats, Outwear, Pants, Facewear, Shoes, Hair, Gloves, Accessories, Costumes; default all),
 # -Packs the packs by the start of their name (Creative, Funny, City, City_Teen, ...; default all) and -Names the parts whose
@@ -13,7 +14,8 @@
 # Each step stops the run when it fails. The log tags are [AdultParts], [FitToHero], [FittedParts], [BodyZones] and
 # [ColorRegions].
 
-param([string[]]$Parts = @(), [string[]]$Packs = @(), [string]$Names = "")
+param([ValidateSet("Child", "Adult")][string]$Target = "Child", [string[]]$Parts = @(), [string[]]$Packs = @(),
+    [string]$Names = "")
 
 $ErrorActionPreference = "Stop"
 $UE      = "C:\Program Files\Epic Games\UE_5.8\Engine\Binaries\Win64\UnrealEditor-Cmd.exe"
@@ -36,7 +38,7 @@ function Invoke-UnrealScript([string]$Script, [string]$Tag, [switch]$WithRendere
 
 if (Get-Process UnrealEditor -ErrorAction SilentlyContinue) { throw "Close the Unreal editor first." }
 
-$exportArguments = @($Parts -split "," | Where-Object { $_ }) + @($Packs -split "," | Where-Object { $_ } | ForEach-Object { "pack=$_" }) +
+$exportArguments = @("target=$Target") + @($Parts -split "," | Where-Object { $_ }) + @($Packs -split "," | Where-Object { $_ } | ForEach-Object { "pack=$_" }) +
     @($Names | Where-Object { $_ } | ForEach-Object { "names=$_" })
 Invoke-UnrealScript "ExportAdultParts.py" "[AdultParts]" -WithRenderer -Arguments ($exportArguments -join " ")
 
@@ -45,7 +47,7 @@ Invoke-UnrealScript "ExportAdultParts.py" "[AdultParts]" -WithRenderer -Argument
 if ($LASTEXITCODE -ne 0) { throw "FitToHero.py failed" }
 
 Invoke-UnrealScript "ImportFittedParts.py" "[FittedParts]"
-Invoke-UnrealScript "CreateBodyZones.py" "[BodyZones]"
+Invoke-UnrealScript "CreateBodyZones.py" "[BodyZones]" -Arguments $Target
 Invoke-UnrealScript "CreateColorRegions.py" "[ColorRegions]" -Arguments "fitted"
 # The editor's own exit code says nothing about the scripts; their "Done" lines were checked above.
 exit 0

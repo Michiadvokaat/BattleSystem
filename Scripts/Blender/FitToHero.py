@@ -1,11 +1,13 @@
-"""Fits adult parts (FBX exported from UE) to the hero (child) skeleton SKEL_Hero, in Blender.
+"""Fits adult parts (FBX exported from UE) onto target bodies, the hero (child, SKEL_Hero) or the two adults
+(SKEL_Adult_Skeleton), in Blender.
 
-Run headless (step 2 of Scripts/FitChildParts.ps1):
+Run headless (step 2 of Scripts/FitParts.ps1):
     blender.exe -b --factory-startup -P <abs path>/Scripts/Blender/FitToHero.py -- <export dir> <fitted dir>
 
-Reads <export dir>/manifest.json, written by Scripts/ExportAdultParts.py: the hero mesh, and per pack an adult body and its
-parts. Every part is imported, rebound to the hero's armature and written to <fitted dir>/<name>.fbx; the list of written
-files goes to <fitted dir>/fitted.json for Scripts/ImportFittedParts.py.
+Reads <export dir>/manifest.json, written by Scripts/ExportAdultParts.py: the target bodies (each with its neutral face), and
+per pack an adult body and its parts. Every part is imported, fitted onto each target body ("the hero" below; Target),
+rebound to its armature and written to <fitted dir>/<name>.fbx; the list of written files goes to <fitted dir>/fitted.json
+for Scripts/ImportFittedParts.py.
 
 Hats ("kind": "hat") are rigid: all vertices get weight 1 on the Head bone. They are scaled around the adult head bone by the
 ratio of the hero's head to the pack's adult head (width and depth of the vertices above the Neck bone), times the pack's
@@ -20,16 +22,16 @@ nearest point (transfer_weights), so the clothing bends like the skin under it i
 parts further away (hoods, hems) keep their own.
 
 Face parts ("kind": "face") are rigid on the Head bone like hats, but placed through a FaceFrame that lines the pack's neutral
-face up with the child's (or, for a pack without faces, its head with the child's), and what lies on the adult's skin is
+face up with the hero's (or, for a pack without faces, its head with the hero's), and what lies on the adult's skin is
 laid on the hero's (fit_face). Hair ("kind": "hair", rigid on Head too) goes the same way through the frame of the heads,
-keeping its shape, and is inflated where the child's rounder skull pokes through; what lies deep inside the adult's head
-(a hair volume runs through the skull) stays hidden.
+keeping its shape, and is inflated where the hero's skull pokes through (the child's is rounder); what lies deep inside
+the adult's head (a hair volume runs through the skull) stays hidden.
 
 Back parts ("kind": "back", wings worn like a backpack) are rigid on BACK_BONE: scaled as a whole by the trunk's ratio
 (fit_back) around the Neck bone, and moved back or forth so they keep the (scaled) gap to the skin they had on the adult.
 
 Every part also gets the hide zones of the hero's body it covers ("hide_zones" in fitted.json, a bit mask over
-BODY_ZONES; covered_zones), and body_zones.json lists the hero's skin vertices with their zone for
+BODY_ZONES; covered_zones), and body_zones_<target>.json lists each target's skin vertices with their zone for
 Scripts/CreateBodyZones.py, which writes the zones into the bodies' vertex colors.
 
 All measuring happens in Blender's world space after the FBX import, so the units and axes of the import cancel out.
@@ -832,23 +834,107 @@ def weight_rigid(mesh, bone):
 
 
 def export_fbx(path, armature, mesh):
+    # The armature goes out under the root bone's name, like a hand export from Blender; another object holding that name (a
+    # pack's or a part's armature) gives it up first.
+    holder = bpy.data.objects.get(ROOT_NAME)
+    if holder is not None and holder != armature:
+        holder.name = ROOT_NAME + "_Source"
+    own_name = armature.name
+    armature.name = ROOT_NAME
     bpy.ops.object.select_all(action="DESELECT")
     armature.select_set(True)
     mesh.select_set(True)
     bpy.context.view_layer.objects.active = armature
     bpy.ops.export_scene.fbx(filepath=path, use_selection=True, object_types={"ARMATURE", "MESH"}, add_leaf_bones=False,
                              bake_anim=False, use_armature_deform_only=False, mesh_smooth_type="FACE")
+    armature.name = own_name
 
 
-def import_hero(path):
-    armature, meshes, others = import_fbx(path)
-    # Same shape as an export of the hero from Blender by hand: the armature on top, named after the root bone.
-    world = armature.matrix_world.copy()
-    armature.parent = None
-    armature.matrix_world = world
-    delete(others)
-    armature.name = ROOT_NAME
-    return armature, meshes
+def duplicate(mesh):
+    """A copy of the mesh object with its own mesh data (and the same parent and modifiers), to fit onto one target body."""
+    copy = mesh.copy()
+    copy.data = mesh.data.copy()
+    for collection in mesh.users_collection:
+        collection.objects.link(copy)
+    return copy
+
+
+class Target:
+    """A body every part is fitted onto (the "hero" of the functions above), with what the fitting measures on it."""
+
+    def __init__(self, entry, export_dir):
+        self.name = entry["name"]
+        self.mesh_path = entry["mesh"]
+        armature, meshes, others = import_fbx(os.path.join(export_dir, entry["body"]))
+        # On top, like a hand export from Blender; export_fbx names it after the root bone while it writes a part.
+        world = armature.matrix_world.copy()
+        armature.parent = None
+        armature.matrix_world = world
+        delete(others)
+        armature.name = f"Target_{self.name}"
+        self.armature, self.meshes = armature, meshes
+        self.head = measure_head(armature, meshes)
+        log(f"{self.name}: head bone {tuple(round(x, 4) for x in self.head[0])}, "
+            f"head box {tuple(round(x, 4) for x in self.head[2] - self.head[1])}")
+        self.extents = body_extents(armature, meshes)
+        self.surface = BodySurface(meshes, armature)
+        self.zones = body_zones(armature, meshes)
+        self.nose = nose_bottom(armature, meshes)
+        for m in meshes:
+            m.hide_set(True)
+        self.face = None
+        if entry.get("face"):
+            face_armature, face_meshes, face_others = import_fbx(os.path.join(export_dir, entry["face"]))
+            self.face = mesh_box(face_meshes)
+            delete([face_armature] + face_meshes + face_others)
+
+
+class PackFit:
+    """How a pack's adult body maps onto one target: the head (hats), the girths (clothing) and the frames (face parts, hair)."""
+
+    def __init__(self, pack, target, body, body_meshes, adult, pack_face):
+        self.scale, self.offset = fit_head(target.head, adult, pack.get("tune", 1.0))
+        self.girths = girth_ratios(body_extents(body, body_meshes, set(target.armature.data.bones.keys())), target.extents)
+        self.adult_head, self.target_head = adult[0], target.head[0]
+        # Hair lies on the skull: its frame lines the heads up (the skin above the neck).
+        self.head_frame = FaceFrame(adult[1], adult[2], target.head[1], target.head[2])
+        self.face_frame = None
+        name = f"{pack['name']} on {target.name}"
+        if any(part["kind"] == "face" for part in pack["parts"]):
+            # Lined up on the faces when the pack and the target have a neutral face, else on the heads.
+            if pack_face and target.face:
+                self.face_frame = FaceFrame(*pack_face, *target.face)
+                frame_source = "the neutral faces"
+            else:
+                self.face_frame = self.head_frame
+                frame_source = "the heads"
+            log(f"{name}: face parts scaled {tuple(round(x, 3) for x in self.face_frame.scale)} on {frame_source}")
+        log(f"{name}: girth ratios (front, back, width) "
+            + ", ".join(f"{b} " + "/".join("-" if r is None else f"{r:.2f}" for r in g) for b, g in sorted(self.girths.items())))
+        log(f"{name}: scale {self.scale:.3f} around the adult head bone, then offset "
+            f"{tuple(round(x, 4) for x in self.offset)} from the target's head bone")
+
+    def place(self, p):
+        return self.target_head + self.scale * (p - self.adult_head) + self.offset
+
+
+def fit_part(mesh, part, name, adult_armature, adult_surface, target, fit):
+    """Fits one copy of a part onto the target and rebinds it to the target's armature."""
+    if part["kind"] == "hat":
+        rebind(mesh, target.armature, [fit.place(mesh.matrix_world @ v.co) for v in mesh.data.vertices])
+        weight_rigid(mesh, HEAD_BONE)
+    elif part["kind"] in ("face", "hair"):
+        under_nose = target.nose if UNDER_NOSE in part["source"].rsplit("/", 1)[-1] else None
+        frame = fit.face_frame if part["kind"] == "face" else fit.head_frame
+        laid = fit_face(mesh, frame, adult_surface, target.surface, under_nose, part["kind"] == "hair")
+        log(f"{name}: {len(mesh.data.vertices)} vertices, {laid} laid on the skin"
+            + (" (under the nose)" if under_nose is not None else ""))
+    elif part["kind"] == "back":
+        back_scale, shift = fit_back(mesh, adult_armature, adult_surface, target.surface)
+        log(f"{name}: rigid on {BACK_BONE}, scale {back_scale:.3f}, moved {shift * 100:.1f} cm back")
+    else:
+        pushed, skin = fit_clothing(mesh, adult_armature, target.armature, fit.girths, target.surface)
+        log(f"{name}: {len(mesh.data.vertices)} vertices, {pushed} pushed out of the body, {skin} with the body's weights")
 
 
 def main():
@@ -859,93 +945,50 @@ def main():
     os.makedirs(fitted_dir, exist_ok=True)
 
     bpy.ops.wm.read_factory_settings(use_empty=True)
-    hero, hero_meshes = import_hero(os.path.join(export_dir, manifest["hero"]))
-    child = measure_head(hero, hero_meshes)
-    log(f"Hero head bone {tuple(round(x, 4) for x in child[0])}, head box {tuple(round(x, 4) for x in child[2] - child[1])}")
-    hero_extents = body_extents(hero, hero_meshes)
-    hero_surface = BodySurface(hero_meshes, hero)
-    hero_zones = body_zones(hero, hero_meshes)
-    hero_nose = nose_bottom(hero, hero_meshes)
-    for m in hero_meshes:
-        m.hide_set(True)
-
-    child_face = None
-    if manifest.get("child_face"):
-        face_armature, face_meshes, face_others = import_fbx(os.path.join(export_dir, manifest["child_face"]))
-        child_face = mesh_box(face_meshes)
-        delete([face_armature] + face_meshes + face_others)
+    targets = [Target(entry, export_dir) for entry in manifest["targets"]]
 
     fitted = []
     for pack in manifest["packs"]:
         body, body_meshes, body_others = import_fbx(os.path.join(export_dir, pack["body"]))
         adult = measure_head(body, body_meshes)
-        scale, offset = fit_head(child, adult, pack.get("tune", 1.0))
-        girths = girth_ratios(body_extents(body, body_meshes, set(hero.data.bones.keys())), hero_extents)
-        face_frame = None
-        # Hair lies on the skull: its frame lines the heads up (the skin above the neck).
-        head_frame = FaceFrame(adult[1], adult[2], child[1], child[2])
-        if any(part["kind"] == "face" for part in pack["parts"]):
-            # Lined up on the faces when the pack has a neutral face, else on the heads (the skin above the neck).
-            if pack.get("face") and child_face:
-                face_armature, face_meshes, face_others = import_fbx(os.path.join(export_dir, pack["face"]))
-                face_frame = FaceFrame(*mesh_box(face_meshes), *child_face)
-                delete([face_armature] + face_meshes + face_others)
-                frame_source = "the neutral faces"
-            else:
-                face_frame = head_frame
-                frame_source = "the heads"
-            log(f"{pack['name']}: face parts scaled {tuple(round(x, 3) for x in face_frame.scale)} on {frame_source}")
         adult_surface = BodySurface(body_meshes, body)
-        log(f"{pack['name']}: girth ratios (front, back, width) "
-            + ", ".join(f"{b} " + "/".join("-" if r is None else f"{r:.2f}" for r in g) for b, g in sorted(girths.items())))
-        log(f"{pack['name']}: scale {scale:.3f} around the adult head bone, then offset {tuple(round(x, 4) for x in offset)} "
-            f"from the hero's head bone")
-
-        def place(p, adult_head=adult[0], scale=scale, offset=offset):
-            return child[0] + scale * (p - adult_head) + offset
+        pack_face = None
+        if pack.get("face") and any(part["kind"] == "face" for part in pack["parts"]):
+            face_armature, face_meshes, face_others = import_fbx(os.path.join(export_dir, pack["face"]))
+            pack_face = mesh_box(face_meshes)
+            delete([face_armature] + face_meshes + face_others)
+        fits = {target.name: PackFit(pack, target, body, body_meshes, adult, pack_face) for target in targets}
 
         for part in pack["parts"]:
             if part["kind"] not in ("hat", "clothing", "face", "hair", "back"):
-                raise RuntimeError(f"{LOG_TAG} {part['name']}: unknown kind {part['kind']}")
+                raise RuntimeError(f"{LOG_TAG} {part['source']}: unknown kind {part['kind']}")
             armature, meshes, others = import_fbx(os.path.join(export_dir, part["fbx"]))
             if len(meshes) != 1:
-                raise RuntimeError(f"{LOG_TAG} {part['name']}: expected one mesh, found {len(meshes)}")
-            mesh = meshes[0]
-            if part["kind"] == "hat":
-                rebind(mesh, hero, [place(mesh.matrix_world @ v.co) for v in mesh.data.vertices])
-                weight_rigid(mesh, HEAD_BONE)
-            elif part["kind"] in ("face", "hair"):
-                under_nose = hero_nose if UNDER_NOSE in part["name"] else None
-                frame = face_frame if part["kind"] == "face" else head_frame
-                laid = fit_face(mesh, frame, adult_surface, hero_surface, under_nose, part["kind"] == "hair")
-                log(f"{part['name']}: {len(mesh.data.vertices)} vertices, {laid} laid on the skin"
-                    + (" (under the nose)" if under_nose is not None else ""))
-            elif part["kind"] == "back":
-                back_scale, shift = fit_back(mesh, armature, adult_surface, hero_surface)
-                log(f"{part['name']}: rigid on {BACK_BONE}, scale {back_scale:.3f}, moved {shift * 100:.1f} cm back")
-            else:
-                pushed, skin = fit_clothing(mesh, armature, hero, girths, hero_surface)
-                log(f"{part['name']}: {len(mesh.data.vertices)} vertices, {pushed} pushed out of the body, "
-                    f"{skin} with the body's weights")
-            delete([armature] + others)
-            mesh.name = part["name"]
-            hide_zones = covered_zones(mesh, hero_meshes, hero_zones)
-            if hide_zones:
-                log(f"{part['name']}: hides {', '.join(zone_names(hide_zones))}")
-            path = os.path.join(fitted_dir, part["name"] + ".fbx")
-            export_fbx(path, hero, mesh)
-            delete([mesh])
-            fitted.append({"name": part["name"], "fbx": part["name"] + ".fbx", "source": part["source"], "target": part["target"],
-                           "hide_zones": hide_zones})
+                raise RuntimeError(f"{LOG_TAG} {part['source']}: expected one mesh, found {len(meshes)}")
+            for target in targets:
+                path = part["targets"][target.name]
+                name = path.rsplit("/", 1)[-1]
+                mesh = duplicate(meshes[0])
+                fit_part(mesh, part, name, armature, adult_surface, target, fits[target.name])
+                mesh.name = name
+                hide_zones = covered_zones(mesh, target.meshes, target.zones)
+                if hide_zones:
+                    log(f"{name}: hides {', '.join(zone_names(hide_zones))}")
+                export_fbx(os.path.join(fitted_dir, name + ".fbx"), target.armature, mesh)
+                delete([mesh])
+                fitted.append({"name": name, "fbx": name + ".fbx", "source": part["source"], "target": path,
+                               "body": target.mesh_path, "hide_zones": hide_zones})
+            delete([armature] + meshes + others)
         delete([body] + body_meshes + body_others)
 
     with open(os.path.join(fitted_dir, "fitted.json"), "w", encoding="utf-8") as f:
         json.dump({"parts": fitted}, f, indent="\t")
-    # The hero's skin vertices with their zone, for Scripts/CreateBodyZones.py (Blender world space, m).
-    points = [[round(c, 5) for c in mesh.matrix_world @ v.co] + [zone]
-              for mesh, zones in zip(hero_meshes, hero_zones) for v, zone in zip(mesh.data.vertices, zones)]
-    with open(os.path.join(fitted_dir, "body_zones.json"), "w", encoding="utf-8") as f:
-        json.dump({"zones": list(BODY_ZONES), "points": points}, f)
+    # Per target its skin vertices with their zone, for Scripts/CreateBodyZones.py (Blender world space, m).
+    for target in targets:
+        points = [[round(c, 5) for c in mesh.matrix_world @ v.co] + [zone]
+                  for mesh, zones in zip(target.meshes, target.zones) for v, zone in zip(mesh.data.vertices, zones)]
+        with open(os.path.join(fitted_dir, f"body_zones_{target.name}.json"), "w", encoding="utf-8") as f:
+            json.dump({"mesh": target.mesh_path, "zones": list(BODY_ZONES), "points": points}, f)
     log(f"{len(fitted)} parts in {fitted_dir}")
     log("Done")
 

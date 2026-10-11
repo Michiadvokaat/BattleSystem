@@ -1,6 +1,7 @@
-"""Gives the child's parts colour regions that a look can recolour (FCombatLookSlot::Colors, applied by ACombatUnitActor).
+"""Gives the parts of the child and the adults colour regions that a look can recolour (FCombatLookSlot::Colors, applied by
+ACombatUnitActor).
 
-Step 5 of Scripts/FitChildParts.ps1 (the fitted parts only, argument "fitted"); run headless with the editor closed. Without
+Step 5 of Scripts/FitParts.ps1 (the fitted parts only, argument "fitted"); run headless with the editor closed. Without
 arguments it does every part in PART_FOLDERS; asset paths as arguments do just those:
     UnrealEditor-Cmd.exe BattleSystem.uproject -run=pythonscript -script="<abs path>/Scripts/CreateColorRegions.py [fitted]" -unattended -nullrhi -nosplash
 
@@ -30,7 +31,9 @@ import unreal
 LOG_TAG = "[ColorRegions]"
 FITTED_JSON = "D:/Unreal/Assets/Blender/Fitted/fitted.json"
 PART_FOLDERS = ["/Game/Characters/Meshes/Child/" + f for f in
-                ("Hats", "Outwear", "Pants", "Facewear", "Shoes", "Hair", "Gloves", "Accessories", "Male", "Female")]
+                ("Hats", "Outwear", "Pants", "Facewear", "Shoes", "Hair", "Gloves", "Accessories", "Male", "Female")] + [
+                "/Game/Characters/Meshes/Adult/" + f for f in
+                ("Hats", "Outwear", "Pants", "Facewear", "Shoes", "Hair", "Gloves", "Accessories", "Costumes")]
 RECOLOR_PATH = "/Game/Characters/Materials"
 # The pack materials whose texture is a colour palette -> the name of their recolour material.
 PALETTES = {

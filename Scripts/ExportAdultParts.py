@@ -1,24 +1,30 @@
-"""Exports the adult hats, clothing and other parts of the Fab packs, an adult body per pack and the hero mesh to FBX, for
+"""Exports the adult hats, clothing and other parts of the Fab packs, an adult body per pack and the target bodies to FBX, for
 Blender.
 
-Step 1 of Scripts/FitChildParts.ps1; run with the editor closed, in editor mode WITH a renderer (no -run=pythonscript, no
+Step 1 of Scripts/FitParts.ps1; run with the editor closed, in editor mode WITH a renderer (no -run=pythonscript, no
 -nullrhi): the FBX exporter of skeletal meshes needs a rendered mesh and asserts on "MeshObject" without one. A window opens
-briefly. The arguments are the categories to export (CATEGORIES; none = all), pack=<prefix> to take only the packs whose
+briefly. The arguments are target=<Child|Adult> (TARGETS; default Child), the categories to export (CATEGORIES; none = all), pack=<prefix> to take only the packs whose
 name starts with it (none = all packs) and names=<regex> to take only the parts whose source name matches it (no spaces or
 commas: the arguments are split on spaces and ExecCmds on commas):
-    UnrealEditor-Cmd.exe BattleSystem.uproject -unattended -nosplash -nosound -ExecCmds="py <abs path>/Scripts/ExportAdultParts.py Outwear Pants pack=City, QUIT_EDITOR"
+    UnrealEditor-Cmd.exe BattleSystem.uproject -unattended -nosplash -nosound -ExecCmds="py <abs path>/Scripts/ExportAdultParts.py target=Adult Outwear Pants pack=City, QUIT_EDITOR"
 
 A pack is a folder of parts made for one adult body (PACKS): the Creative and Funny packs, and the City pack once per body
 type and gender (CITY_GROUPS: Adult, Plus-Size, Senior and Teen as female and male, Pumped male), each measured on its own
 body. A part's category comes from its name through the pack's rules (FAB_RULES, CITY_RULES; the first match wins): hats,
 tops, pants, facewear (faces, glasses, facial hair, eyebrows, small face pieces), shoes, hair, for the City pack gloves
 and body accessories, and a picked list of the Creative costumes (whole suits, their hats, shoulder pads, a bow tie and wings
-that FitToHero.py fits rigidly on the back, kind "back"). Copies are named SK_Hat_<Pack>_* (Fab hats, also the costume hats), SK_<Pack>_* (other Fab parts) or SK_City_<Type>_<Gender>_*.
+that FitToHero.py fits rigidly on the back, kind "back"). Copies are named SK_Hat_<Pack>_* (Fab hats, also the costume hats), SK_<Pack>_* (other Fab parts) or SK_City_<Type>_<Gender>_*,
+plus the target body's suffix.
 Of a pack with colour variants (COLOR_VARIANTS) only one colour of the listed categories is taken. For facewear the export
-also holds a neutral face of the pack and of the child (the pack's "face", CHILD_FACE), which FitToHero.py lines up to place
-the face parts.
+also holds a neutral face of the pack and of each target body (the pack's "face", the target's "face"), which FitToHero.py
+lines up to place the face parts.
 
-Writes EXPORT_DIR/<pack>/*.fbx, EXPORT_DIR/SKM_Hero.fbx and EXPORT_DIR/manifest.json, which Scripts/Blender/FitToHero.py
+A target is one or more bodies that every part is fitted onto (TARGETS): Child is the hero SKM_Hero (the child bodies share
+its shape), into /Game/Characters/Meshes/Child/<category>; Adult is SKM_Adult_Male and SKM_Adult_Female (copies of the City
+pack's adult Body_01 on SKEL_Adult_Skeleton), into /Game/Characters/Meshes/Adult/<category> with the suffix _M or _F, so
+every part is fitted twice.
+
+Writes EXPORT_DIR/<pack>/*.fbx, EXPORT_DIR/_Target_<body>.fbx and EXPORT_DIR/manifest.json, which Scripts/Blender/FitToHero.py
 reads. Only LOD 0 is exported (Blender's FBX import does not keep LOD groups). The FBX files are local, outside the repo.
 """
 
@@ -32,17 +38,17 @@ import unreal
 
 LOG_TAG = "[AdultParts]"
 EXPORT_DIR = "D:/Unreal/Assets/Blender/Export"
-# Category -> (folder of the copies, kind for FitToHero.py: rigid hats, skinned clothing, face parts or hair)
+# Category -> kind for FitToHero.py (rigid hats, skinned clothing, face parts or hair); the copies go to <target root>/<category>.
 CATEGORIES = {
-    "Hats": ("/Game/Characters/Meshes/Child/Hats", "hat"),
-    "Outwear": ("/Game/Characters/Meshes/Child/Outwear", "clothing"),
-    "Pants": ("/Game/Characters/Meshes/Child/Pants", "clothing"),
-    "Facewear": ("/Game/Characters/Meshes/Child/Facewear", "face"),
-    "Shoes": ("/Game/Characters/Meshes/Child/Shoes", "clothing"),
-    "Hair": ("/Game/Characters/Meshes/Child/Hair", "hair"),
-    "Gloves": ("/Game/Characters/Meshes/Child/Gloves", "clothing"),
-    "Accessories": ("/Game/Characters/Meshes/Child/Accessories", "clothing"),
-    "Costumes": ("/Game/Characters/Meshes/Child/Costumes", "clothing"),
+    "Hats": "hat",
+    "Outwear": "clothing",
+    "Pants": "clothing",
+    "Facewear": "face",
+    "Shoes": "clothing",
+    "Hair": "hair",
+    "Gloves": "clothing",
+    "Accessories": "clothing",
+    "Costumes": "clothing",
 }
 FACEWEAR = r"emotion|Glasses|Mustache|Beard|Eyebrow|Clown_nose|Mask|Piercing|Earrings|Pacifier|Bandage"
 # (category, name pattern[, kind]): the first that matches a part's name wins; no match = not exported (bodies, ...). A kind
@@ -73,9 +79,24 @@ CITY_RULES = [
     ("Pants", r"Pants|Shorts|Skirt"),
     ("Outwear", r"Outwear|Otwear|Putwear|Shirt|Jacket|Dress|Overall|Suit|Apron|Costume|Swimsuit|Vest"),
 ]
-# The neutral face of the child that FitToHero.py lines the packs' faces up with.
-CHILD_FACE = "/Game/Characters/Meshes/Child/Male/SKM_Child_Male_Face_Neutral.SKM_Child_Male_Face_Neutral"
-HERO_MESH = "/Game/Characters/Meshes/SKM_Hero.SKM_Hero"
+CITY = "/Game/ZZ_FAB/City_Characters/Skeleton_Meshes"
+# Target -> its bodies: name (unique over all targets), body mesh, the neutral face FitToHero.py lines the packs' faces up
+# with, root folder of the copies and the suffix of their names.
+TARGETS = {
+    "Child": [
+        {"name": "Hero", "mesh": "/Game/Characters/Meshes/Child/SKM_Hero",
+         "face": "/Game/Characters/Meshes/Child/Male/SKM_Child_Male_Face_Neutral",
+         "root": "/Game/Characters/Meshes/Child", "suffix": ""},
+    ],
+    "Adult": [
+        {"name": "AdultMale", "mesh": "/Game/Characters/Meshes/Adult/SKM_Adult_Male",
+         "face": f"{CITY}/Adult/Mail/SKM_Adult_Male_Face_Neutral",
+         "root": "/Game/Characters/Meshes/Adult", "suffix": "_M"},
+        {"name": "AdultFemale", "mesh": "/Game/Characters/Meshes/Adult/SKM_Adult_Female",
+         "face": f"{CITY}/Adult/Femail/SKM_Adult_Female_Face_Neutral",
+         "root": "/Game/Characters/Meshes/Adult", "suffix": "_F"},
+    ],
+}
 
 
 def fab_copy_name(pack_name):
@@ -88,7 +109,6 @@ def fab_copy_name(pack_name):
     return copy_name
 
 
-CITY = "/Game/ZZ_FAB/City_Characters/Skeleton_Meshes"
 # (type folder, type in the names, gender folder, gender in the names)
 CITY_GROUPS = [
     ("Adult", "Adult", "Femail", "Female"), ("Adult", "Adult", "Mail", "Male"),
@@ -156,23 +176,35 @@ def wanted_colour(name, pack_name, category):
 
 def main():
     arguments = [a for a in sys.argv[1:] if a]
+    target_names = [a[len("target="):] for a in arguments if a.startswith("target=")] or ["Child"]
+    if len(target_names) != 1 or target_names[0] not in TARGETS:
+        raise RuntimeError(f"{LOG_TAG} Unknown target {target_names}; known: {list(TARGETS)}")
+    bodies = TARGETS[target_names[0]]
     prefixes = [a[len("pack="):] for a in arguments if a.startswith("pack=")]
     names = [a[len("names="):] for a in arguments if a.startswith("names=")]
-    categories = [a for a in arguments if not a.startswith(("pack=", "names="))] or list(CATEGORIES)
+    categories = [a for a in arguments if not a.startswith(("target=", "pack=", "names="))] or list(CATEGORIES)
     unknown = [c for c in categories if c not in CATEGORIES]
     if unknown:
         raise RuntimeError(f"{LOG_TAG} Unknown categories {unknown}; known: {list(CATEGORIES)}")
     packs_wanted = [p for p in PACKS if not prefixes or any(p["name"].startswith(x) for x in prefixes)]
     if not packs_wanted:
         raise RuntimeError(f"{LOG_TAG} No pack starts with {prefixes}; packs: {[p['name'] for p in PACKS]}")
-    log(f"Categories: {', '.join(categories)}; packs: {', '.join(p['name'] for p in packs_wanted)}"
+    log(f"Target {target_names[0]} ({', '.join(b['name'] for b in bodies)}); categories: {', '.join(categories)}; "
+        f"packs: {', '.join(p['name'] for p in packs_wanted)}"
         + (f"; names matching {', '.join(names)}" if names else ""))
     # Every run starts from an empty folder, so parts removed from a pack do not linger.
     if os.path.isdir(EXPORT_DIR):
         shutil.rmtree(EXPORT_DIR)
     os.makedirs(EXPORT_DIR)
 
-    export_fbx(unreal.load_asset(HERO_MESH), f"{EXPORT_DIR}/SKM_Hero.fbx")
+    targets = []
+    for body in bodies:
+        target = {"name": body["name"], "body": f"_Target_{body['name']}.fbx", "mesh": body["mesh"]}
+        export_fbx(unreal.load_asset(body["mesh"]), f"{EXPORT_DIR}/{target['body']}")
+        if "Facewear" in categories:
+            target["face"] = f"_TargetFace_{body['name']}.fbx"
+            export_fbx(unreal.load_asset(body["face"]), f"{EXPORT_DIR}/{target['face']}")
+        targets.append(target)
     registry = unreal.AssetRegistryHelpers.get_asset_registry()
     lib = unreal.EditorAssetLibrary
     packs = []
@@ -191,12 +223,12 @@ def main():
                 continue
             if names and not any(re.search(pattern, name) for pattern in names):
                 continue
-            target_folder, kind = CATEGORIES[category]
-            kind = kind_override or kind
-            target_name = source["copy_name"](name, category)
+            kind = kind_override or CATEGORIES[category]
+            copy_name = source["copy_name"](name, category)
             export_fbx(unreal.load_asset(f"{folder}/{name}"), f"{EXPORT_DIR}/{pack_name}/{name}.fbx")
-            parts.append({"kind": kind, "name": target_name, "fbx": f"{pack_name}/{name}.fbx",
-                          "source": f"{folder}/{name}", "target": f"{target_folder}/{target_name}"})
+            # Per target body the asset path of its copy.
+            parts.append({"kind": kind, "fbx": f"{pack_name}/{name}.fbx", "source": f"{folder}/{name}",
+                          "targets": {b["name"]: f"{b['root']}/{category}/{copy_name}{b['suffix']}" for b in bodies}})
         pack = {"name": pack_name, "body": f"{pack_name}/_Body.fbx", "tune": source["tune"], "parts": parts}
         if "Facewear" in categories and source["face"]:
             if lib.does_asset_exist(source["face"]):
@@ -208,10 +240,7 @@ def main():
         count += len(parts)
         log(f"{pack_name}: {len(parts)} parts")
 
-    manifest = {"hero": "SKM_Hero.fbx", "packs": packs}
-    if "Facewear" in categories:
-        export_fbx(unreal.load_asset(CHILD_FACE), f"{EXPORT_DIR}/_ChildFace.fbx")
-        manifest["child_face"] = "_ChildFace.fbx"
+    manifest = {"targets": targets, "packs": packs}
     with open(f"{EXPORT_DIR}/manifest.json", "w", encoding="utf-8") as f:
         json.dump(manifest, f, indent="\t")
     log(f"{count} parts in {EXPORT_DIR}")
